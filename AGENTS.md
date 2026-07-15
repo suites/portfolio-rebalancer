@@ -72,6 +72,9 @@
 
 ## Git 커밋 규칙
 
+- 파일 변경이 발생한 작업은 검증을 마친 뒤 작업 종료 전에 반드시 커밋하세요.
+- 각 작업의 변경은 해당 작업에 맞는 하나 이상의 Conventional Commit으로 정리하고, 커밋하지 않은 변경을 남긴 채 완료를 보고하지 마세요.
+- 읽기·설명·검토처럼 파일 변경이 없는 작업에는 빈 커밋을 만들지 마세요.
 - 모든 커밋 메시지는 Conventional Commits 형식을 사용하세요: `<type>(<optional-scope>): <description>`.
 - 대표적인 `type`은 `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `build`, `ci`입니다.
 - 제목은 변경 목적을 명확하고 간결하게 설명하고, 서로 무관한 변경을 하나의 커밋에 섞지 마세요.
