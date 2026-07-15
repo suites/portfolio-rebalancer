@@ -1,0 +1,25 @@
+{
+  "name": "@portfolio-rebalancer/broker-toss",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "sync:openapi": "node scripts/sync-openapi.mjs",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@portfolio-rebalancer/broker": "workspace:*",
+    "@portfolio-rebalancer/domain": "workspace:*",
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

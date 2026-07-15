@@ -1,138 +1,123 @@
 # Portfolio Rebalancer
 
-`portfolio-rebalancer`는 장기 자산배분을 정해진 규칙에 따라 점검하고 리밸런싱하는 개인용 자동 자산관리 프로젝트입니다.
+`portfolio-rebalancer`는 사람이 승인한 장기 목표 비중을 결정론적으로 점검하고, 불확실한 상황에서는 거래하지 않는 개인용 자산배분 시스템입니다. 시장 예측이나 종목 추천보다 계산 재현성, 장애 안전성, 주문 멱등성과 감사 가능성을 우선합니다.
 
-이 프로젝트의 목적은 시장을 예측하거나 단기 수익을 극대화하는 것이 아닙니다. 사람이 승인한 종목과 목표 비중을 일관되게 관리하고, 데이터 이상이나 주문 상태가 불확실할 때 거래하지 않는 안전한 실행기를 만드는 것이 목표입니다.
+> 현재 상태: 첫 번째 읽기 전용 수직 슬라이스가 구현되었습니다. 합성 포트폴리오 스냅샷을 순수 도메인 계산기로 평가하고, 검증된 서버 계약을 통해 반응형 Web GUI에 표시합니다. 토스증권 공식 OpenAPI 전체를 타입 안전한 전송 계층으로 동기화했지만, 실제 계좌 조회·상태 저장·paper 체결·실거래는 아직 연결하지 않았습니다. 실거래 쓰기 전송은 코드에서 하드 차단됩니다.
 
-> 현재 상태: 설계 단계. 최종 목표는 실제 계좌에서 매일 사용할 수 있는 운영 품질이며, 구현과 검증이 끝나기 전까지 주문 기능은 paper 모드로 고정합니다.
+## 지금 확인할 수 있는 것
 
-## 제품 목표
+- Next.js App Router 기반의 반응형 운영 화면
+- 합성 데이터·브로커 미연결을 명시한 Paper 안전 상태와 금액 숨김
+- 현재·목표·허용 범위와 서버 판정 상태를 함께 쓰는 비중 밴드
+- `bigint` 교차곱으로 1bp 미만 이탈까지 감지하는 부동소수점 없는 포트폴리오 비중 계산
+- Zod로 검증하는 서버-클라이언트 대시보드 계약
+- 토스증권 OpenAPI `1.2.4`의 30개 operation 타입과 호출 표면
+  - OAuth 토큰 1개
+  - 조회용 GET business operation 23개
+  - 계좌를 변경하는 operation 6개
+- OAuth 토큰 메모리 캐시와 동시 발급 single-flight
+- 고정된 공식 origin, 공통 10초 timeout과 안전한 네트워크·HTTP 오류
+- 401 토큰 무효화와 429 `Retry-After`·rate-limit group·request ID 메타데이터 추출
+- 계좌 변경 메서드의 네트워크 전송 하드 차단(`TOSS_LIVE_TRADING_DISABLED`)
+- 계좌·보유·시세·호가·종목·주문 조회를 분리한 capability 기반 중립 포트
+- Toss transport가 제공하는 read-only capability 18개와 write capability 미제공
 
-내부 구현은 주문 장애와 부분체결까지 보수적으로 처리하되, 사용자는 복잡한 상태 머신이나 데이터베이스를 직접 다루지 않아야 합니다. 초기 설정 이후 일상적인 사용은 계좌 점검, 거래 계획 확인, 실행 결과 확인의 세 흐름으로 단순화합니다.
+이 범위는 실제 주문 기능이 아닙니다. 토스증권에는 확인된 별도 sandbox/paper 서버가 없으므로 향후 paper 체결은 애플리케이션 내부에서 구현합니다.
+
+## 빠른 시작
+
+요구사항:
+
+- Node.js 22 이상
+- pnpm 10.28.0
+
+```bash
+pnpm install
+pnpm dev
+```
+
+브라우저에서 `http://127.0.0.1:3000`을 엽니다. 개발 서버와 production start는 모두 `127.0.0.1`에만 바인딩됩니다. 화면은 자격증명이나 실제 계좌 없이 합성 데이터로 동작하며 주문을 제출하지 않습니다.
+
+전체 검증은 다음 명령으로 실행합니다.
+
+```bash
+pnpm verify
+```
+
+`verify`는 포맷, 린트, 타입 검사, 테스트와 프로덕션 빌드를 순서대로 확인합니다. 개별 명령은 `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`입니다.
+
+V8 coverage 보고서는 다음 명령으로 생성합니다.
+
+```bash
+pnpm test:coverage
+```
+
+토스증권 공식 명세를 다시 고정하고 타입을 생성하려면 네트워크가 연결된 환경에서 실행합니다.
+
+```bash
+pnpm toss:sync
+```
+
+동기화 결과와 운영 주의사항은 [토스증권 API 연동 문서](docs/API_TOSS.md)를 참고하세요.
+
+## 구조
 
 ```text
-steady setup   # 안내에 따라 계좌와 목표 비중 설정
-steady check   # 현재 비중과 필요한 조치 확인, 주문 없음
-steady plan    # 변경 전 예상 매수·매도와 체결 후 비중 확인
-steady run     # 위험 검사 후 승인된 계획 실행
-steady status  # 마지막 실행, 차단 상태와 다음 행동 확인
+apps/
+└── web/                 Next.js Web GUI와 서버 전용 조합 계층
+packages/
+├── domain/              bigint 기반 값 객체와 순수 비중 계산
+├── broker/              증권사 중립 모델, capability와 좁은 포트
+├── broker-toss/         고정 OpenAPI, 생성 타입, OAuth와 Toss 전송 계층
+├── application/         유스케이스와 화면용 스냅샷 조합
+├── contracts/           서버 경계의 Zod 계약
+└── ui/                  primitive·semantic·component 토큰과 공통 컴포넌트
 ```
 
-오류가 발생하면 내부 코드만 출력하지 않고 원인, 자동으로 수행한 보호 조치, 사용자가 해야 할 일과 하지 말아야 할 일을 한국어로 설명해야 합니다. 잠금이나 불명확한 주문을 해소하기 위해 사용자가 SQLite를 직접 수정하게 해서는 안 됩니다.
+의존성은 도메인 안쪽을 향합니다. 브라우저는 토스증권 API나 비밀정보에 접근하지 않고, 서버가 애플리케이션 서비스로 만든 검증된 계약만 받습니다. 다른 증권사는 `packages/broker`의 capability와 포트를 구현하는 별도 어댑터로 추가합니다. 자세한 결정은 [아키텍처 결정 기록](docs/adr/0001-typescript-hexagonal-monorepo.md)에 있습니다.
 
-## 핵심 원칙
+## 안전 원칙
 
-- 종목 선정과 리밸런싱을 분리합니다.
-- 종목과 목표 비중은 설정으로 관리하고 프로그램이 임의로 바꾸지 않습니다.
-- 매일 평가할 수 있지만 허용 범위를 벗어난 경우에만 거래합니다.
-- 신규 입금과 배당금으로 부족 자산을 먼저 채우고 불필요한 매도를 줄입니다.
-- 주문 결과를 추측하지 않습니다. 불확실한 주문은 복구하기 전까지 신규 주문을 차단합니다.
-- 기본 실행 모드는 `paper`이며, 실거래는 별도의 명시적 승인과 제한 없이는 활성화할 수 없습니다.
+- 기본 실행 모드는 항상 `paper`입니다.
+- 금액과 수량 계산에 부동소수점을 사용하지 않습니다.
+- 외부 데이터는 관측 시각이 있는 불변 스냅샷으로 고정한 뒤 계산합니다.
+- API 오류, 데이터 누락과 상태 불명 주문에서는 fail closed 합니다.
+- `buying power`를 검증된 평가용 현금으로 간주하지 않습니다.
+- 설정 저장, 계획 생성과 주문 제출을 서로 다른 동작으로 유지합니다.
+- 브라우저에서 증권사 API를 직접 호출하거나 비밀정보를 전달하지 않습니다.
+- 실제 주문은 별도 설계 검토, 원장·멱등성·한도·복구와 명시적 승인 조건이 모두 구현되기 전까지 활성화하지 않습니다.
 
-## 기본 포트폴리오 철학
+향후 운영 인터페이스는 `setup`, `doctor`, `check`, `plan`, `run`, `status`, `explain`, `recover`로 내부 복잡성을 숨깁니다. 이 CLI와 실제 계좌 흐름은 아직 구현되지 않았으며 [구현 계획](docs/TODO.md)에서 추적합니다.
 
-안정적인 장기 자산 축적을 목표로 다음 역할을 구분합니다.
+## 디자인 기준
 
-- **Core**: 광범위하고 저비용인 시장 지수 상품
-- **Satellite**: AI 반도체처럼 추가 확신을 표현하는 제한된 비중의 테마 자산
-- **Safety**: 현금 또는 향후 지원할 안정자산
+생산 Web GUI는 `packages/ui`를 시각 구현의 기준으로 사용합니다.
 
-개별 종목은 코어를 대체하지 않습니다. 종목 후보는 사람이 분기 또는 반기 단위로 검토하고, 리밸런서에는 승인된 고정 목록만 전달합니다.
+- 행동·안전·접근성 계약: [Web GUI 설계](docs/WEB_UI.md)
+- 생산 토큰과 컴포넌트: `packages/ui/src`
+- 토큰 호환 진입점: `design/tokens.css`
+- 초기 상태·레이아웃 탐색물: `prototype/index.html`
 
-## 시스템 개요
-
-```mermaid
-flowchart LR
-    S[Scheduler] --> C[Market and Account Collector]
-    C --> V[Snapshot Validator]
-    V --> R[Rebalance Calculator]
-    R --> G[Risk Gates]
-    G --> P[Order Plan]
-    P --> E[Paper Order Executor]
-    E --> O[Order Reconciler]
-    O --> L[(State and Audit Store)]
-    L --> N[Discord Notifier]
-```
-
-자세한 요구사항과 안전 규칙은 [시스템 명세](docs/SPEC.md)를 참고하세요.
+프로토타입은 참고용이며 실제 금융 계산이나 주문 판단을 수행하지 않습니다. 현재 생산 화면도 합성 데이터만 사용합니다.
 
 ## 문서
 
 - [시스템 명세](docs/SPEC.md)
 - [구현 계획](docs/TODO.md)
 - [Web GUI 설계](docs/WEB_UI.md)
+- [토스증권 API 연동](docs/API_TOSS.md)
+- [아키텍처 결정 기록](docs/adr/0001-typescript-hexagonal-monorepo.md)
 - [에이전트 작업 지침](AGENTS.md)
-
-## UX 프로토타입
-
-현재 Web GUI의 시각·레이아웃 기준은 [`prototype/index.html`](prototype/index.html)입니다. 실제 계좌나 API를 연결하지 않고 합성 데이터로 정상, 계획 있음, 거래 차단과 실행 완료 상태를 확인할 수 있습니다.
-
-```bash
-python3 -m http.server 4173
-```
-
-서버를 실행한 뒤 `http://127.0.0.1:4173/prototype/`에서 확인합니다. 색상, 타이포그래피, 간격과 상태 의미는 [`design/tokens.css`](design/tokens.css)를 기준으로 사용합니다. 시스템 행동과 안전·접근성 계약은 [`docs/WEB_UI.md`](docs/WEB_UI.md)를 따릅니다.
-
-## 예상 설정 형태
-
-아래 값은 소프트웨어 구조를 설명하기 위한 예시이며 투자 권고가 아닙니다.
-
-```yaml
-portfolio:
-  base_currency: KRW
-  market_scope: KR
-
-buckets:
-  core:
-    target_weight: 0.75
-    tolerance:
-      type: percentage_point
-      value: 0.05
-    instruments:
-      - symbol: BROAD_MARKET_ETF
-        market: KR
-        weight_within_bucket: 1.0
-
-  ai_semiconductor:
-    target_weight: 0.15
-    max_weight: 0.20
-    instruments:
-      - symbol: SEMICONDUCTOR_ETF
-        market: KR
-        weight_within_bucket: 1.0
-
-  safety:
-    target_weight: 0.10
-    instruments:
-      - type: cash
-        currency: KRW
-
-rebalance:
-  evaluate: daily
-  normal_destination: band_edge
-  severe_drift:
-    type: percentage_point
-    value: 0.10
-  severe_destination: target
-  prefer_cash_flow: true
-
-execution:
-  mode: paper
-```
 
 ## 개발 단계
 
-1. 한국 시장 기준 순수 계산기와 설정 검증
-2. 저장된 스냅샷을 이용한 재현 테스트
+1. 순수 계산과 읽기 전용 합성 데이터 수직 슬라이스
+2. 설정 검증, 저장소와 감사 가능한 스냅샷
 3. 토스증권 조회 API를 연결한 shadow 모드
 4. 자체 모의 체결기를 사용하는 paper 모드
-5. 장애 복구와 주문 정합성 검증
-6. 별도 승인 후 제한된 소액 실거래 검토
-
-각 단계는 최종 기능을 줄이기 위한 것이 아니라 실제 데이터를 안전하게 검증하기 위한 승격 과정입니다. 최종 운영 버전은 주문 원장, 중복 방지, 부분체결, 장애 복구와 위험 한도를 모두 포함해야 합니다.
-
-실행 가능한 코드가 추가되기 전까지 이 저장소는 설계 문서를 프로젝트의 기준으로 사용합니다.
+5. 위험 차단, 주문 원장, 멱등성과 장애 복구
+6. 모든 승격 조건과 별도 검토를 통과한 뒤 제한적 실거래 검토
 
 ## 주의
 
-이 프로젝트는 투자 수익을 보장하지 않습니다. 리밸런싱은 수익 예측 기능이 아니라 목표 위험 수준을 유지하기 위한 통제 장치입니다. 세금, 계좌 유형, 환전, 상품 구조 및 개인의 재무 상황은 소프트웨어 외부에서 별도로 검토해야 합니다.
+이 프로젝트는 투자 수익을 보장하지 않습니다. 리밸런싱은 수익 예측 기능이 아니라 목표 위험 수준을 유지하기 위한 통제 장치입니다. 세금, 계좌 유형, 환전, 상품 구조와 개인 재무 상황은 소프트웨어 외부에서 별도로 검토해야 합니다.

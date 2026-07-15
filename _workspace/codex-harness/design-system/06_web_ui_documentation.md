@@ -1,20 +1,18 @@
 # Web GUI 디자인 시스템 기록
 
-## 구성
+## source of truth
 
-- App shell: `AppShell`, `GlobalSafetyBar`, 내비게이션
-- 상태: 정상, 확인 필요, 차단, 확인 중, 알 수 없음
-- 포트폴리오: 목표 범위 밴드, 정확한 수치 표, 보유자산 계층
-- 실행: 계획 검토, 위험 검사, 명시적 확인, 실행 영수증과 상태 타임라인
-- 복구: 진단 카드, 설명 패널, 킬 스위치와 안전한 해제 흐름
+1. 행동·안전·접근성: `docs/WEB_UI.md`
+2. 생산 토큰·컴포넌트: `packages/ui/src`
+3. 호환 토큰 경로: `design/tokens.css`
+4. 초기 탐색 참고: `prototype/`
 
-## 안전 및 접근성
+## 현재 화면 계약
 
-- 상태는 색상만으로 구분하지 않고 텍스트, 아이콘과 설명을 함께 쓴다.
-- WCAG 2.2 AA, 키보드, VoiceOver, 320px reflow와 확대 검증을 요구한다.
-- Live 모드와 위험 행동은 명확한 결과 문구와 재확인을 사용한다.
-- 브라우저는 계산과 주문 판단을 하지 않으며 서버가 확정한 상태를 표현한다.
+서버 전용 합성 스냅샷을 애플리케이션 서비스가 계산하고 Zod로 검증한 뒤 화면에 전달합니다. `VERIFIED` 데이터가 밴드를 벗어나면 attention 상태의 `REBALANCE_REQUIRED`이고, 주문 계획이 준비됐다는 뜻은 아닙니다. 화면 값은 0.01bp 단위까지 제공하지만 정확한 판정은 `bigint` 교차곱으로 만든 `bandStatus`를 사용합니다. `BLOCKED`와 `UNKNOWN`은 새 주문이 불가능한 별도 blocked 상태로 표현합니다.
 
-## 후속 구현 기준
+브라우저는 비중 판단, 증권사 호출과 secret 처리를 하지 않습니다. safety bar는 실주문 차단을 항상 표시합니다. 현재 action과 미구현 내비게이션은 이유와 `준비 중` 상태를 설명하며 비활성입니다.
 
-컴포넌트와 토큰의 세부 계약, 상태별 스토리와 검증 항목은 `docs/WEB_UI.md` 및 `docs/TODO.md`의 Web GUI 구현 트랙을 따른다.
+## 후속 기준
+
+Storybook 상태 문서, 접근 가능한 정확 수치 표, loading/empty/stale/unknown 공통 상태, 계획 검토와 복구 UI를 구현한 뒤 axe·키보드·VoiceOver·reflow 검증을 수행합니다.

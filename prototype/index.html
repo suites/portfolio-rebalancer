@@ -22,14 +22,25 @@
           <a class="nav-item active" href="#overview" aria-current="page">
             <span class="nav-icon" aria-hidden="true">⌂</span><span>홈</span>
           </a>
-          <a class="nav-item" href="#portfolio"><span class="nav-icon" aria-hidden="true">◫</span><span>포트폴리오</span></a>
-          <a class="nav-item" href="#rebalance"><span class="nav-icon" aria-hidden="true">⇄</span><span>리밸런싱</span><span class="nav-count">1</span></a>
-          <a class="nav-item" href="#history"><span class="nav-icon" aria-hidden="true">◷</span><span>주문·기록</span></a>
-          <a class="nav-item" href="#support"><span class="nav-icon" aria-hidden="true">?</span><span>문제 해결</span></a>
+          <a class="nav-item" href="#portfolio"
+            ><span class="nav-icon" aria-hidden="true">◫</span><span>포트폴리오</span></a
+          >
+          <a class="nav-item" href="#rebalance"
+            ><span class="nav-icon" aria-hidden="true">⇄</span><span>리밸런싱</span
+            ><span class="nav-count">1</span></a
+          >
+          <a class="nav-item" href="#history"
+            ><span class="nav-icon" aria-hidden="true">◷</span><span>주문·기록</span></a
+          >
+          <a class="nav-item" href="#support"
+            ><span class="nav-icon" aria-hidden="true">?</span><span>문제 해결</span></a
+          >
         </nav>
 
         <div class="sidebar-bottom">
-          <a class="nav-item" href="#settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>설정</span></a>
+          <a class="nav-item" href="#settings"
+            ><span class="nav-icon" aria-hidden="true">⚙</span><span>설정</span></a
+          >
           <div class="profile-card">
             <div class="avatar" aria-hidden="true">나</div>
             <div><strong>내 포트폴리오</strong><span>Paper 계좌</span></div>
@@ -38,8 +49,13 @@
       </aside>
 
       <div class="mobile-header">
-        <a class="brand compact" href="#"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span>Rebalancer</span></a>
-        <button class="icon-button" type="button" aria-label="메뉴 열기" id="menu-button">☰</button>
+        <a class="brand compact" href="#"
+          ><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span
+          ><span>Rebalancer</span></a
+        >
+        <button class="icon-button" type="button" aria-label="메뉴 열기" id="menu-button">
+          ☰
+        </button>
       </div>
 
       <div class="app-body">
@@ -50,7 +66,9 @@
             <span><span class="label">시장</span> 장중</span>
             <span><span class="label">데이터</span> 2분 전</span>
           </div>
-          <div class="safety-state normal" id="safety-state"><span class="state-dot"></span><span>시스템 정상</span></div>
+          <div class="safety-state normal" id="safety-state">
+            <span class="state-dot"></span><span>시스템 정상</span>
+          </div>
         </header>
 
         <main id="main-content" tabindex="-1">
@@ -60,7 +78,14 @@
                 <p class="eyebrow">2026년 7월 15일 수요일</p>
                 <h1 id="page-title">안녕하세요.<br />오늘의 자산 상태예요.</h1>
               </div>
-              <button class="ghost-button privacy-button" type="button" id="privacy-button" aria-pressed="false"><span aria-hidden="true">◉</span> 금액 숨기기</button>
+              <button
+                class="ghost-button privacy-button"
+                type="button"
+                id="privacy-button"
+                aria-pressed="false"
+              >
+                <span aria-hidden="true">◉</span> 금액 숨기기
+              </button>
             </section>
 
             <section class="scenario-control" aria-labelledby="scenario-title">
@@ -81,85 +106,196 @@
               <div class="status-copy">
                 <p class="status-kicker" id="status-kicker">리밸런싱 계획이 준비됐어요</p>
                 <h2 id="status-title">목표 비중을 벗어난 자산이 있어요</h2>
-                <p id="status-description">AI 반도체 비중이 허용 범위를 초과했습니다. 주문 전에 변경될 비중과 위험 검사 결과를 확인해 주세요.</p>
+                <p id="status-description">
+                  AI 반도체 비중이 허용 범위를 초과했습니다. 주문 전에 변경될 비중과 위험 검사
+                  결과를 확인해 주세요.
+                </p>
               </div>
               <button class="primary-button" type="button" id="status-action">계획 확인하기</button>
             </section>
 
             <section class="summary-grid" aria-label="포트폴리오 요약">
               <article class="summary-card featured">
-                <div class="card-label"><span>총 관리 자산</span><span class="trend positive">지난달보다 2.4% ↑</span></div>
+                <div class="card-label">
+                  <span>총 관리 자산</span><span class="trend positive">지난달보다 2.4% ↑</span>
+                </div>
                 <strong class="amount private-value" data-value="₩12,480,000">₩12,480,000</strong>
                 <p>2026년 7월 15일 15:30 KST 기준</p>
               </article>
               <article class="summary-card">
-                <div class="card-label"><span>운용 가능 현금</span><span class="help" title="검증된 관리 현금">?</span></div>
+                <div class="card-label">
+                  <span>운용 가능 현금</span><span class="help" title="검증된 관리 현금">?</span>
+                </div>
                 <strong class="amount private-value" data-value="₩1,248,000">₩1,248,000</strong>
                 <p>목표 현금 10.0%를 유지하고 있어요</p>
               </article>
               <article class="summary-card">
                 <div class="card-label"><span>오늘의 거래 한도</span><span>0% 사용</span></div>
                 <strong class="amount private-value" data-value="₩500,000">₩500,000</strong>
-                <div class="limit-track" aria-label="오늘의 거래 한도 0% 사용"><span style="width: 0%"></span></div>
+                <div class="limit-track" aria-label="오늘의 거래 한도 0% 사용">
+                  <span style="width: 0%"></span>
+                </div>
                 <p>아직 예약되거나 체결된 주문이 없어요</p>
               </article>
             </section>
 
             <div class="content-grid">
-              <section class="panel allocation-panel" id="portfolio" aria-labelledby="allocation-title">
+              <section
+                class="panel allocation-panel"
+                id="portfolio"
+                aria-labelledby="allocation-title"
+              >
                 <div class="panel-heading">
-                  <div><p class="eyebrow">포트폴리오</p><h2 id="allocation-title">현재 비중과 목표</h2></div>
+                  <div>
+                    <p class="eyebrow">포트폴리오</p>
+                    <h2 id="allocation-title">현재 비중과 목표</h2>
+                  </div>
                   <a href="#portfolio-detail">자세히 보기 <span aria-hidden="true">›</span></a>
                 </div>
 
                 <div class="allocation-list">
                   <article class="allocation-item">
-                    <div class="allocation-top"><div class="asset-name"><span class="asset-icon core">C</span><div><strong>코어 자산</strong><span>광범위 시장 ETF</span></div></div><div class="allocation-number"><strong>68.0%</strong><span>목표 75.0%</span></div></div>
-                    <div class="band" aria-label="코어 자산 현재 68%, 허용 범위 70%에서 80%, 목표 75%"><span class="allowed" style="left: 70%; width: 10%"></span><span class="target" style="left: 75%"></span><span class="current attention-point" style="left: 68%"></span></div>
-                    <div class="allocation-note attention-text"><span>목표보다 7.0%p 부족</span><span>허용 범위 70–80%</span></div>
+                    <div class="allocation-top">
+                      <div class="asset-name">
+                        <span class="asset-icon core">C</span>
+                        <div><strong>코어 자산</strong><span>광범위 시장 ETF</span></div>
+                      </div>
+                      <div class="allocation-number">
+                        <strong>68.0%</strong><span>목표 75.0%</span>
+                      </div>
+                    </div>
+                    <div
+                      class="band"
+                      aria-label="코어 자산 현재 68%, 허용 범위 70%에서 80%, 목표 75%"
+                    >
+                      <span class="allowed" style="left: 70%; width: 10%"></span
+                      ><span class="target" style="left: 75%"></span
+                      ><span class="current attention-point" style="left: 68%"></span>
+                    </div>
+                    <div class="allocation-note attention-text">
+                      <span>목표보다 7.0%p 부족</span><span>허용 범위 70–80%</span>
+                    </div>
                   </article>
                   <article class="allocation-item">
-                    <div class="allocation-top"><div class="asset-name"><span class="asset-icon satellite">A</span><div><strong>AI 반도체</strong><span>테마 ETF</span></div></div><div class="allocation-number"><strong>22.0%</strong><span>목표 15.0%</span></div></div>
-                    <div class="band" aria-label="AI 반도체 현재 22%, 허용 범위 11.25%에서 18.75%, 목표 15%"><span class="allowed" style="left: 45%; width: 30%"></span><span class="target" style="left: 60%"></span><span class="current blocked-point" style="left: 88%"></span></div>
-                    <div class="allocation-note blocked-text"><span>허용 상한보다 3.25%p 초과</span><span>허용 범위 11.25–18.75%</span></div>
+                    <div class="allocation-top">
+                      <div class="asset-name">
+                        <span class="asset-icon satellite">A</span>
+                        <div><strong>AI 반도체</strong><span>테마 ETF</span></div>
+                      </div>
+                      <div class="allocation-number">
+                        <strong>22.0%</strong><span>목표 15.0%</span>
+                      </div>
+                    </div>
+                    <div
+                      class="band"
+                      aria-label="AI 반도체 현재 22%, 허용 범위 11.25%에서 18.75%, 목표 15%"
+                    >
+                      <span class="allowed" style="left: 45%; width: 30%"></span
+                      ><span class="target" style="left: 60%"></span
+                      ><span class="current blocked-point" style="left: 88%"></span>
+                    </div>
+                    <div class="allocation-note blocked-text">
+                      <span>허용 상한보다 3.25%p 초과</span><span>허용 범위 11.25–18.75%</span>
+                    </div>
                   </article>
                   <article class="allocation-item">
-                    <div class="allocation-top"><div class="asset-name"><span class="asset-icon cash">₩</span><div><strong>현금</strong><span>운용 대기 자금</span></div></div><div class="allocation-number"><strong>10.0%</strong><span>목표 10.0%</span></div></div>
-                    <div class="band" aria-label="현금 현재 10%, 목표 10%"><span class="allowed" style="left: 38%; width: 25%"></span><span class="target" style="left: 50%"></span><span class="current normal-point" style="left: 50%"></span></div>
-                    <div class="allocation-note normal-text"><span>목표 범위 안이에요</span><span>허용 범위 7.5–12.5%</span></div>
+                    <div class="allocation-top">
+                      <div class="asset-name">
+                        <span class="asset-icon cash">₩</span>
+                        <div><strong>현금</strong><span>운용 대기 자금</span></div>
+                      </div>
+                      <div class="allocation-number">
+                        <strong>10.0%</strong><span>목표 10.0%</span>
+                      </div>
+                    </div>
+                    <div class="band" aria-label="현금 현재 10%, 목표 10%">
+                      <span class="allowed" style="left: 38%; width: 25%"></span
+                      ><span class="target" style="left: 50%"></span
+                      ><span class="current normal-point" style="left: 50%"></span>
+                    </div>
+                    <div class="allocation-note normal-text">
+                      <span>목표 범위 안이에요</span><span>허용 범위 7.5–12.5%</span>
+                    </div>
                   </article>
                 </div>
-                <div class="band-legend" aria-hidden="true"><span><i class="legend-allowed"></i>허용 범위</span><span><i class="legend-target"></i>목표</span><span><i class="legend-current"></i>현재</span></div>
+                <div class="band-legend" aria-hidden="true">
+                  <span><i class="legend-allowed"></i>허용 범위</span
+                  ><span><i class="legend-target"></i>목표</span
+                  ><span><i class="legend-current"></i>현재</span>
+                </div>
               </section>
 
               <aside class="right-column">
                 <section class="panel action-panel" id="rebalance" aria-labelledby="action-title">
-                  <div class="panel-heading compact"><div><p class="eyebrow">필요한 행동</p><h2 id="action-title">리밸런싱 계획 검토</h2></div><span class="plan-badge">1건</span></div>
-                  <p class="action-reason"><strong>AI 반도체의 비중을 줄이고</strong> 코어 자산을 채워 목표 범위로 돌아갑니다.</p>
+                  <div class="panel-heading compact">
+                    <div>
+                      <p class="eyebrow">필요한 행동</p>
+                      <h2 id="action-title">리밸런싱 계획 검토</h2>
+                    </div>
+                    <span class="plan-badge">1건</span>
+                  </div>
+                  <p class="action-reason">
+                    <strong>AI 반도체의 비중을 줄이고</strong> 코어 자산을 채워 목표 범위로
+                    돌아갑니다.
+                  </p>
                   <div class="before-after">
-                    <div><span>현재</span><strong>범위 밖</strong></div><span class="arrow" aria-hidden="true">→</span><div><span>실행 후 예상</span><strong class="normal-text">범위 안</strong></div>
+                    <div><span>현재</span><strong>범위 밖</strong></div>
+                    <span class="arrow" aria-hidden="true">→</span>
+                    <div><span>실행 후 예상</span><strong class="normal-text">범위 안</strong></div>
                   </div>
                   <dl class="plan-summary">
-                    <div><dt>예상 매도</dt><dd class="private-value" data-value="₩406,000">₩406,000</dd></div>
-                    <div><dt>예상 매수</dt><dd class="private-value" data-value="₩398,000">₩398,000</dd></div>
-                    <div><dt>예상 비용</dt><dd class="private-value" data-value="₩242">₩242</dd></div>
+                    <div>
+                      <dt>예상 매도</dt>
+                      <dd class="private-value" data-value="₩406,000">₩406,000</dd>
+                    </div>
+                    <div>
+                      <dt>예상 매수</dt>
+                      <dd class="private-value" data-value="₩398,000">₩398,000</dd>
+                    </div>
+                    <div>
+                      <dt>예상 비용</dt>
+                      <dd class="private-value" data-value="₩242">₩242</dd>
+                    </div>
                   </dl>
                   <button class="primary-button full" type="button">계획 자세히 확인</button>
-                  <p class="safe-note"><span aria-hidden="true">✓</span> 모든 위험 검사를 통과해야 실행할 수 있어요.</p>
+                  <p class="safe-note">
+                    <span aria-hidden="true">✓</span> 모든 위험 검사를 통과해야 실행할 수 있어요.
+                  </p>
                 </section>
 
                 <section class="panel activity-panel" id="history" aria-labelledby="activity-title">
-                  <div class="panel-heading compact"><h2 id="activity-title">최근 활동</h2><a href="#history-all">전체 보기</a></div>
+                  <div class="panel-heading compact">
+                    <h2 id="activity-title">최근 활동</h2>
+                    <a href="#history-all">전체 보기</a>
+                  </div>
                   <ol class="activity-list">
-                    <li><span class="activity-icon normal">✓</span><div><strong>계좌 점검 완료</strong><span>오늘 15:30 KST · 주문 없음</span></div></li>
-                    <li><span class="activity-icon pending">↗</span><div><strong>리밸런싱 계획 생성</strong><span>오늘 15:31 KST · 검토 대기</span></div></li>
-                    <li><span class="activity-icon muted">◷</span><div><strong>정기 점검 완료</strong><span>어제 09:00 KST · 변경 없음</span></div></li>
+                    <li>
+                      <span class="activity-icon normal">✓</span>
+                      <div>
+                        <strong>계좌 점검 완료</strong><span>오늘 15:30 KST · 주문 없음</span>
+                      </div>
+                    </li>
+                    <li>
+                      <span class="activity-icon pending">↗</span>
+                      <div>
+                        <strong>리밸런싱 계획 생성</strong><span>오늘 15:31 KST · 검토 대기</span>
+                      </div>
+                    </li>
+                    <li>
+                      <span class="activity-icon muted">◷</span>
+                      <div>
+                        <strong>정기 점검 완료</strong><span>어제 09:00 KST · 변경 없음</span>
+                      </div>
+                    </li>
                   </ol>
                 </section>
               </aside>
             </div>
 
-            <footer class="page-footer"><span>마지막 동기화: 오늘 15:32 KST</span><button type="button" class="text-button">지금 새로고침</button></footer>
+            <footer class="page-footer">
+              <span>마지막 동기화: 오늘 15:32 KST</span
+              ><button type="button" class="text-button">지금 새로고침</button>
+            </footer>
           </div>
         </main>
       </div>

@@ -5,7 +5,8 @@ const scenarios = {
     icon: "✓",
     kicker: "오늘의 점검을 마쳤어요",
     title: "지금은 거래할 필요가 없어요",
-    description: "모든 자산이 허용 범위 안에 있고 데이터와 계좌 상태도 정상입니다. 다음 점검은 내일 오전 9시예요.",
+    description:
+      "모든 자산이 허용 범위 안에 있고 데이터와 계좌 상태도 정상입니다. 다음 점검은 내일 오전 9시예요.",
     action: "점검 결과 보기",
   },
   plan: {
@@ -14,7 +15,8 @@ const scenarios = {
     icon: "↗",
     kicker: "리밸런싱 계획이 준비됐어요",
     title: "목표 비중을 벗어난 자산이 있어요",
-    description: "AI 반도체 비중이 허용 범위를 초과했습니다. 주문 전에 변경될 비중과 위험 검사 결과를 확인해 주세요.",
+    description:
+      "AI 반도체 비중이 허용 범위를 초과했습니다. 주문 전에 변경될 비중과 위험 검사 결과를 확인해 주세요.",
     action: "계획 확인하기",
   },
   blocked: {
@@ -23,7 +25,8 @@ const scenarios = {
     icon: "!",
     kicker: "안전을 위해 거래를 멈췄어요",
     title: "가격 데이터가 오래되어 실행할 수 없어요",
-    description: "새로운 주문은 차단했습니다. 데이터를 다시 확인한 뒤 모든 위험 검사를 통과하면 계획을 새로 만들 수 있어요.",
+    description:
+      "새로운 주문은 차단했습니다. 데이터를 다시 확인한 뒤 모든 위험 검사를 통과하면 계획을 새로 만들 수 있어요.",
     action: "문제 해결하기",
   },
   complete: {
@@ -32,7 +35,8 @@ const scenarios = {
     icon: "✓",
     kicker: "Paper 실행을 완료했어요",
     title: "포트폴리오가 목표 범위로 돌아왔어요",
-    description: "가상 주문 2건의 체결을 확인했습니다. 실제 계좌에는 어떤 주문도 제출되지 않았어요.",
+    description:
+      "가상 주문 2건의 체결을 확인했습니다. 실제 계좌에는 어떤 주문도 제출되지 않았어요.",
     action: "실행 결과 보기",
   },
 };
@@ -62,7 +66,9 @@ function setScenario(key) {
   safetyState.lastElementChild.textContent = scenario.safety[1];
 }
 
-buttons.forEach((button) => button.addEventListener("click", () => setScenario(button.dataset.scenario)));
+buttons.forEach((button) =>
+  button.addEventListener("click", () => setScenario(button.dataset.scenario)),
+);
 
 const privacyButton = document.querySelector("#privacy-button");
 privacyButton.addEventListener("click", () => {

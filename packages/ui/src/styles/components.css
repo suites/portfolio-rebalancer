@@ -1,0 +1,11 @@
+:root {
+  --control-min-height: 44px;
+  --card-padding: 1.5rem;
+  --safety-bar-height: 58px;
+}
+
+@media (max-width: 760px) {
+  :root {
+    --card-padding: 1.125rem;
+  }
+}

@@ -1,10 +1,16 @@
-# Stories and Docs
+# 스토리와 문서
 
-정적 프로토타입에서 다음 상태를 전환해 확인할 수 있다.
+Storybook은 아직 구성되지 않았습니다. 현재 실행 가능한 예시는 Next.js 첫 화면과 정적 프로토타입입니다.
 
-- 정상 — 거래 필요 없음
-- 계획 있음 — 검토 필요
-- 거래 차단 — 오래된 데이터와 보호 조치
-- 실행 완료 — Paper 실행 결과
+Storybook 이전의 최소 계약은 Vitest 정적 렌더링 테스트로 유지합니다. 현재 Button disabled, StatusBanner accessible ID, AllocationBand attention 상태와 텍스트 설명을 검증합니다.
 
-README에 로컬 실행 방법을 기록하고, `docs/WEB_UI.md`에 행동·토큰·프로토타입의 기준 관계를 명시했다. loading, empty, unknown과 partial fill은 실제 컴포넌트 구현 시 Storybook에 추가한다.
+생산 컴포넌트의 후속 Storybook 범위:
+
+- `Button`: primary, secondary, disabled, focus
+- `Badge`: 모든 tone과 dot 유무
+- `StatusBanner`: normal, attention, blocked, unknown
+- `SummaryCard`: 기본, 강조, 값 확인 불가
+- `AllocationBand`: 범위 안, 하한 미만, 상한 초과, 경계값
+- app shell: desktop, tablet, 390px와 320px
+
+행동·안전·접근성은 `docs/WEB_UI.md`, 구현 상태는 `docs/TODO.md`, 토큰과 컴포넌트 사용은 `packages/ui`를 기준으로 합니다.

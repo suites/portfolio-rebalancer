@@ -1,0 +1,108 @@
+openapi: 3.1.0
+info:
+  title: Portfolio Rebalancer Read-only BFF
+  version: 0.1.0
+  description: 현재 구현된 로컬 상태 확인용 GET route만 기술한다.
+paths:
+  /api/v1/system/health:
+    get:
+      operationId: getSystemHealth
+      summary: 시스템의 안전 기본 상태 확인
+      responses:
+        "200":
+          description: 상태 응답
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemHealth"
+  /api/v1/brokers:
+    get:
+      operationId: listBrokers
+      summary: 구성된 브로커 메타데이터 확인
+      responses:
+        "200":
+          description: 브로커 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [brokers]
+                properties:
+                  brokers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BrokerSummary"
+components:
+  schemas:
+    SystemHealth:
+      type: object
+      additionalProperties: false
+      required: [status, mode, dataSource, brokerConnection, liveOrdersEnabled, timestamp]
+      properties:
+        status:
+          const: ok
+        mode:
+          const: paper
+        dataSource:
+          const: synthetic
+        brokerConnection:
+          const: not_connected
+        liveOrdersEnabled:
+          const: false
+        timestamp:
+          type: string
+          format: date-time
+    BrokerSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - displayName
+        - openApiVersion
+        - operationCount
+        - connectionStatus
+        - adapterStatus
+        - transportCapabilities
+        - liveOrdersEnabled
+      properties:
+        id:
+          const: toss
+        displayName:
+          type: string
+        openApiVersion:
+          const: 1.2.4
+        operationCount:
+          type: integer
+          const: 30
+        connectionStatus:
+          const: not_connected
+        adapterStatus:
+          const: transport_only
+        transportCapabilities:
+          type: array
+          minItems: 18
+          maxItems: 18
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - accounts.read
+              - holdings.read
+              - market.quotes
+              - market.orderbook
+              - market.trades
+              - market.price-limits
+              - market.candles
+              - market.calendar
+              - instruments.read
+              - instruments.warnings
+              - fx.rates
+              - orders.read
+              - orders.conditional.read
+              - pretrade.buying-power
+              - pretrade.sellable-quantity
+              - pretrade.commissions
+              - rankings.read
+              - indicators.read
+        liveOrdersEnabled:
+          const: false

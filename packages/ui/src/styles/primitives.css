@@ -1,0 +1,37 @@
+:root {
+  --pr-blue-50: #e8f3ff;
+  --pr-blue-500: #3182f6;
+  --pr-blue-700: #1b64da;
+  --pr-gray-0: #ffffff;
+  --pr-gray-50: #f8fafc;
+  --pr-gray-100: #f5f7fa;
+  --pr-gray-200: #eef1f4;
+  --pr-gray-300: #e5e8eb;
+  --pr-gray-400: #d1d6db;
+  --pr-gray-600: #6b7684;
+  --pr-gray-700: #4e5968;
+  --pr-gray-900: #191f28;
+  --pr-green-50: #e9f8f2;
+  --pr-green-700: #137657;
+  --pr-amber-50: #fff7e0;
+  --pr-amber-800: #8a4b08;
+  --pr-red-50: #fff0f0;
+  --pr-red-700: #c8353a;
+  --pr-violet-50: #f2efff;
+  --pr-violet-700: #6246c9;
+
+  --pr-space-1: 0.25rem;
+  --pr-space-2: 0.5rem;
+  --pr-space-3: 0.75rem;
+  --pr-space-4: 1rem;
+  --pr-space-5: 1.25rem;
+  --pr-space-6: 1.5rem;
+  --pr-space-8: 2rem;
+  --pr-space-10: 2.5rem;
+  --pr-space-12: 3rem;
+
+  --pr-radius-sm: 0.625rem;
+  --pr-radius-md: 0.875rem;
+  --pr-radius-lg: 1.25rem;
+  --pr-radius-pill: 999px;
+}

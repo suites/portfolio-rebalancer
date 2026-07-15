@@ -2,14 +2,15 @@
 
 ## Phase 0 — 프로젝트 기반
 
-- [ ] 기술 스택과 런타임 결정
-- [ ] 패키지 구조와 의존성 방향 정의
-- [ ] 포맷터, 린터, 단위 테스트 구성
+- [x] 기술 스택과 런타임 결정
+- [x] 패키지 구조와 의존성 방향 정의
+- [x] 포맷터, 린터, 단위 테스트 구성
+- [x] V8 테스트 coverage 실행 의존성과 workspace 명령 구성
 - [ ] 설정 스키마와 예제 설정 작성
 - [ ] 첫 운영 시장을 한국으로 고정하는 ADR 작성
 - [ ] 비밀정보 로딩 규칙과 `.gitignore` 구성
 - [ ] 오류 코드와 구조화 로그 형식 정의
-- [ ] 자격증명 없이 실행되는 demo fixture와 Quick Start 작성
+- [x] 자격증명 없이 실행되는 demo fixture와 Quick Start 작성
 - [ ] `setup`, `doctor`, `check`, `plan`, `run`, `status` CLI 골격 구현
 - [ ] 완전한 `config.example.yaml`과 안내형 설정 흐름 작성
 - [ ] 한국어 결과 상태와 오류 행동 지침 형식 정의
@@ -17,15 +18,20 @@
 ## Phase 1 — 순수 도메인 계산
 
 - [ ] 통화, 금액, 수량, 비중 값 객체 구현
-- [ ] 목표 비중 합과 자산군 내부 비중 검증
-- [ ] 포트폴리오 평가 계산기 구현
+- [x] 목표 비중 합 검증
+- [ ] 자산군 내부 종목 비중 검증
+- [x] 합성 평가액 기반 포트폴리오 비중 계산기 구현
+- [x] 자산 ID 고유성과 비어 있지 않은 ID 검증
+- [x] `bigint` 교차곱으로 1bp 미만 밴드 이탈 판정
+- [x] 대시보드 허용 범위와 검증된 현금·cash 자산 일치 검증
 - [ ] 절대 및 상대 허용 범위 구현
 - [ ] `band_edge`와 `target` 복귀 정책 구현
 - [ ] 신규 현금 우선 배분 규칙 구현
 - [ ] 최소 주문금액과 수량 반올림 구현
 - [ ] 반올림 후 예상 비중 재검증
-- [ ] 동일 입력의 결정론 테스트
-- [ ] 경계값과 property-based 테스트
+- [x] 현재 비중 계산과 목표 합계 차단의 결정론 테스트
+- [x] 밴드 상·하한과 1bp 미만 이탈 경계 테스트
+- [ ] property-based 테스트
 
 ## Phase 2 — 상태 저장소
 
@@ -43,18 +49,39 @@
 
 ## Phase 3 — 토스증권 조회 어댑터
 
-- [ ] OAuth 2.0 토큰 발급과 안전한 캐시
+### Phase 3A — 공식 OpenAPI 전송 계층
+
+- [x] 공식 OpenAPI `1.2.4` 스냅샷 고정
+- [x] OAuth를 포함한 30개 operation 타입과 manifest 생성
+- [x] 조회용 GET business operation 23개 호출 표면 구현
+- [x] 계좌 변경 operation 6개의 타입·명시적 메서드와 하드 차단 구현
+- [x] OAuth 토큰 메모리 캐시와 동시 발급 single-flight 구현
+- [x] 공식 origin 상수 고정과 임의 `baseUrl` 주입 제거
+- [x] 공통 10초 timeout과 네트워크·HTTP 안전 오류 정규화
+- [x] `401` 응답 시 OAuth 토큰 캐시 무효화
+- [x] `429`의 `Retry-After`, rate-limit group과 request ID 메타데이터 추출
+- [x] 고정 명세와 명시적 호출 메서드의 parity 테스트
+- [x] 생성 산출물을 임시 디렉터리에서 완성한 뒤 각 대상 파일로 원자적으로 교체
+- [x] Toss transport descriptor를 18개 read-only capability로 정의하고 write capability 제외
+- [x] 계좌·보유·시세·호가·종목·캘린더·일반/조건주문·pretrade 중립 조회 포트 정의
+- [ ] 토스 원본 응답을 증권사 중립 모델로 변환하는 어댑터 구현
+- [ ] 공식 명세 변경 감지와 검토를 CI에 연결
+
+### Phase 3B — 운영 가능한 조회 어댑터
+
+- [ ] secret store에서 OAuth 자격증명을 로딩하는 운영 구성
 - [ ] 계좌 및 보유 주식 조회
 - [ ] 가격, 종목, 시장 캘린더 조회
 - [ ] KRW/USD 환율 조회는 미국 시장 후속 범위로 분리
 - [ ] 매수 가능 금액과 매도 가능 수량 조회
 - [ ] 평가용 현금 source of truth와 buying power의 차이를 실계좌 표본으로 검증
-- [ ] 검증 전 현금 목표 계산 차단 테스트
+- [x] 검증된 관리 현금 부재 시 거래 결론 차단 테스트
 - [ ] 수수료 및 종목 경고 조회
 - [ ] 응답 스키마 검증
-- [ ] rate-limit 헤더 처리
+- [x] rate-limit과 request ID 응답 헤더 메타데이터 추출
+- [ ] 그룹별 client-side limiter 구현
 - [ ] 429 백오프와 jitter 구현
-- [ ] 타임아웃, 4xx, 5xx 오류 분류
+- [x] timeout, 네트워크, 4xx와 5xx 안전 오류 분류
 - [ ] request ID 감사 로그 저장
 - [ ] 고정 출구 IP 운영 방식 결정
 - [ ] `doctor`에서 토큰, 허용 IP, 계좌 및 조회 API를 주문 없이 점검
@@ -132,7 +159,7 @@
 
 ## 문서 백로그
 
-- [ ] 기술 스택 결정 후 로컬 개발 가이드 작성
+- [x] 기술 스택과 합성 데이터 Web GUI 로컬 개발 가이드 작성
 - [ ] 설정 레퍼런스 작성
 - [ ] 토스증권 어댑터 오류 매핑 문서 작성
 - [ ] 데이터 모델과 ER 다이어그램 추가
@@ -153,9 +180,11 @@
 
 ### UI-1 — 디자인 시스템과 App Shell
 
-- [ ] primitive·semantic·component 토큰 정의
-- [ ] 상태 토큰 `정상/확인 필요/차단/확인 중/알 수 없음` 정의
-- [ ] `AppShell`, 내비게이션과 `GlobalSafetyBar` 구현
+- [x] primitive·semantic·component 토큰 정의
+- [x] 상태 토큰 `정상/확인 필요/차단/확인 중/알 수 없음` 정의
+- [x] 첫 화면의 App shell, 내비게이션과 `GlobalSafetyBar` 구현
+- [x] 미구현 내비게이션을 비활성 `준비 중` 상태로 표현
+- [x] 공통 UI 컴포넌트 정적 렌더링 계약 테스트
 - [ ] 금액·비중·시간 표기 유틸리티 구현
 - [ ] 공통 loading, empty, stale, blocked, unknown 상태 구현
 - [ ] Storybook과 접근성 검사 기반 구성
@@ -163,8 +192,10 @@
 ### UI-2 — 읽기 전용 운영 화면
 
 - [ ] GUI와 CLI가 공통 애플리케이션 서비스를 사용하는 BFF/API 경계 구현
-- [ ] 홈 상태 요약과 최근 활동
-- [ ] 포트폴리오 `AllocationBandBar`와 접근 가능한 표
+- [x] 합성 서버 스냅샷을 공통 애플리케이션 서비스와 Zod 계약으로 전달
+- [x] 홈 상태 요약과 최근 활동
+- [x] 포트폴리오 `AllocationBand`와 텍스트 대체 설명
+- [ ] 포트폴리오 접근 가능한 표
 - [ ] 보유자산 계층과 관리되지 않는 자산 표시
 - [ ] 리밸런싱 이유와 Before/After 비교
 - [ ] 주문 없는 위험 검사 결과 표시
@@ -190,12 +221,14 @@
 ### UI-5 — 접근성과 릴리스 검증
 
 - [ ] WCAG 2.2 AA 자동 검사
+- [x] skip link focus, `focus-visible`과 reduced-motion 기본 스타일
 - [ ] 키보드 전용 핵심 흐름 검증
 - [ ] macOS VoiceOver와 Safari 검증
 - [ ] 200% 확대·320px reflow·forced-colors 검증
 - [ ] 설정, 점검, 계획, Paper, Live 확인과 UNKNOWN 복구 E2E
 - [ ] 중요한 상태가 색상과 토스트에만 의존하지 않는지 검증
-- [ ] localhost·사설 네트워크 기본 바인딩과 배포 경계 검증
+- [x] 개발·production start를 `127.0.0.1`에 고정
+- [ ] 사설 네트워크와 외부 배포 경계 검증
 - [ ] 비밀정보가 브라우저 저장소·응답·클라이언트 로그에 없는지 검증
 - [ ] 세션 쿠키, CSRF와 CSP 정책 검증
 - [ ] 새로고침·뒤로 가기·중복 클릭·네트워크 재시도 중복 주문 테스트

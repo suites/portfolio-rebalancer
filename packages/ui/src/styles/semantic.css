@@ -1,0 +1,57 @@
+:root {
+  color-scheme: light;
+  --color-canvas: var(--pr-gray-100);
+  --color-surface: var(--pr-gray-0);
+  --color-surface-soft: var(--pr-gray-50);
+  --color-surface-accent: var(--pr-blue-50);
+  --color-text: var(--pr-gray-900);
+  --color-text-secondary: var(--pr-gray-700);
+  --color-text-tertiary: var(--pr-gray-600);
+  --color-border: var(--pr-gray-300);
+  --color-border-strong: var(--pr-gray-400);
+  --color-primary: var(--pr-blue-700);
+  --color-primary-decoration: var(--pr-blue-500);
+  --color-primary-hover: #1455bd;
+  --color-primary-soft: var(--pr-blue-50);
+  --color-normal: var(--pr-green-700);
+  --color-normal-soft: var(--pr-green-50);
+  --color-attention: var(--pr-amber-800);
+  --color-attention-soft: var(--pr-amber-50);
+  --color-blocked: var(--pr-red-700);
+  --color-blocked-soft: var(--pr-red-50);
+  --color-pending: var(--pr-violet-700);
+  --color-pending-soft: var(--pr-violet-50);
+  --color-unknown: #4f5b67;
+  --color-unknown-soft: var(--pr-gray-200);
+  --color-buy: var(--pr-blue-700);
+  --color-sell: var(--pr-red-700);
+
+  --font-sans: Geist, Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.5rem;
+  --font-size-2xl: clamp(1.75rem, 4vw, 2.25rem);
+  --line-tight: 1.28;
+  --line-normal: 1.55;
+
+  --space-1: var(--pr-space-1);
+  --space-2: var(--pr-space-2);
+  --space-3: var(--pr-space-3);
+  --space-4: var(--pr-space-4);
+  --space-5: var(--pr-space-5);
+  --space-6: var(--pr-space-6);
+  --space-8: var(--pr-space-8);
+  --space-10: var(--pr-space-10);
+  --space-12: var(--pr-space-12);
+
+  --radius-sm: var(--pr-radius-sm);
+  --radius-md: var(--pr-radius-md);
+  --radius-lg: var(--pr-radius-lg);
+  --radius-pill: var(--pr-radius-pill);
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 4%), 0 8px 24px rgb(15 23 42 / 5%);
+  --shadow-float: 0 16px 40px rgb(15 23 42 / 12%);
+  --content-max: 1200px;
+  --sidebar-width: 232px;
+}
