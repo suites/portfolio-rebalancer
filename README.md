@@ -63,6 +63,16 @@ flowchart LR
 - [Web GUI 설계](docs/WEB_UI.md)
 - [에이전트 작업 지침](AGENTS.md)
 
+## UX 프로토타입
+
+현재 Web GUI의 시각·레이아웃 기준은 [`prototype/index.html`](prototype/index.html)입니다. 실제 계좌나 API를 연결하지 않고 합성 데이터로 정상, 계획 있음, 거래 차단과 실행 완료 상태를 확인할 수 있습니다.
+
+```bash
+python3 -m http.server 4173
+```
+
+서버를 실행한 뒤 `http://127.0.0.1:4173/prototype/`에서 확인합니다. 색상, 타이포그래피, 간격과 상태 의미는 [`design/tokens.css`](design/tokens.css)를 기준으로 사용합니다. 시스템 행동과 안전·접근성 계약은 [`docs/WEB_UI.md`](docs/WEB_UI.md)를 따릅니다.
+
 ## 예상 설정 형태
 
 아래 값은 소프트웨어 구조를 설명하기 위한 예시이며 투자 권고가 아닙니다.

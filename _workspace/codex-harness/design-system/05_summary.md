@@ -1,3 +1,3 @@
 # Summary
 
-The product should be a calm asset-management console, not a trading terminal. Primary flow: understand status, review reason and impact, approve safely, verify receipt, recover without database edits.
+차분한 자산관리 콘솔 형태의 반응형 프로토타입을 구현했다. 큰 상태 결론, 자산 요약, 목표 범위 밴드와 필요한 행동을 한 화면에서 파악할 수 있다. 인앱 브라우저에서 데스크톱과 390px 모바일, 상태 전환, 금액 숨김과 콘솔 오류 여부를 검증했다. 실제 API, 계좌와 주문은 연결하지 않았다.

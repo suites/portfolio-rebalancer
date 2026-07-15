@@ -1,8 +1,7 @@
 # Components
 
-- App shell, global safety bar, mode badge, freshness indicator, kill switch
-- portfolio summary, allocation band bar, holdings table
-- rebalance decision card, before/after comparison, order plan table
-- risk gate checklist, confirmation panel, execution receipt
-- order timeline, recovery panel, audit log
-- setup wizard, config diff, diagnostics panel
+- 구현: App shell, sidebar/mobile navigation, global safety bar, mode badge
+- 구현: status banner, portfolio summary cards, allocation band bars
+- 구현: rebalance action card, before/after summary, recent activity
+- 상호작용: 운영 상태 전환, 금액 숨김, 모바일 메뉴
+- 후속 구현: risk checklist, 상세 주문 계획, execution receipt, recovery panel
