@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 
-import type { TossResponseMetadata } from "@portfolio-rebalancer/broker-toss";
+import type { BrokerLiveOrderPort } from "@portfolio-rebalancer/broker";
+import { TossOpenApiClient, type TossResponseMetadata } from "@portfolio-rebalancer/broker-toss";
 
 import { ENGINE_CONFIG } from "../../../../config/engine-config.token";
 import type { EngineConfig } from "../../../../config/engine.config";
@@ -18,6 +19,7 @@ import {
 
 export interface TossRuntime {
   readonly source: TossPretradeReadSource;
+  readonly liveOrders: BrokerLiveOrderPort;
   readonly accountReferenceKey: string;
   readonly requestAuditContext: TossRequestAuditContext;
 }
@@ -46,13 +48,26 @@ export class TossRuntimeService {
         "engine 프로젝트의 환경변수에 토스증권 자격증명을 설정하세요.",
       );
     }
-    return {
-      source: createTossReadSource({
+    const client = new TossOpenApiClient(
+      {
         clientId: this.config.TOSSINVEST_CLIENT_ID,
         clientSecret: this.config.TOSSINVEST_CLIENT_SECRET,
+      },
+      {
         onResponseMetadata: (metadata) => this.appendRequestAttempt(metadata),
-        onResponseValidation: (event) => this.appendResponseValidation(event),
-      }),
+      },
+    );
+    return {
+      source: createTossReadSource(
+        {
+          clientId: this.config.TOSSINVEST_CLIENT_ID,
+          clientSecret: this.config.TOSSINVEST_CLIENT_SECRET,
+          onResponseMetadata: (metadata) => this.appendRequestAttempt(metadata),
+          onResponseValidation: (event) => this.appendResponseValidation(event),
+        },
+        { client },
+      ),
+      liveOrders: client.createLiveOrderAdapter(),
       accountReferenceKey:
         this.config.ACCOUNT_REFERENCE_KEY ?? this.config.TOSSINVEST_CLIENT_SECRET,
       requestAuditContext: this.requestAuditContext,
