@@ -30,6 +30,14 @@ enum CheckOutcome {
   BLOCKED
 }
 
+enum BrokerRequestOutcome {
+  SUCCEEDED
+  HTTP_ERROR
+  TIMEOUT
+  NETWORK_ERROR
+  SCHEMA_ERROR
+}
+
 model BrokerAccount {
   id              String   @id @default(uuid()) @db.Uuid
   broker          String
@@ -199,9 +207,10 @@ model CollectionRun {
   adapterVersion String              @map("adapter_version")
   errorCode      String?             @map("error_code")
 
-  account      BrokerAccount       @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  rawResponses RawBrokerResponse[]
-  snapshot     PortfolioSnapshot?
+  account         BrokerAccount          @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  rawResponses    RawBrokerResponse[]
+  requestAttempts BrokerRequestAttempt[]
+  snapshot        PortfolioSnapshot?
 
   @@index([accountId, startedAt(sort: Desc)])
   @@map("collection_run")
@@ -224,6 +233,37 @@ model RawBrokerResponse {
   @@unique([collectionRunId, operationId, ordinal])
   @@index([requestId])
   @@map("raw_broker_response")
+}
+
+model BrokerRequestAttempt {
+  id                     String               @id @default(uuid()) @db.Uuid
+  workflowType           String               @map("workflow_type")
+  correlationId          String               @map("correlation_id") @db.Uuid
+  collectionRunId        String?              @map("collection_run_id") @db.Uuid
+  operationId            String               @map("operation_id")
+  ordinal                Int
+  attempt                Int
+  rateLimitGroup         String               @map("rate_limit_group")
+  startedAt              DateTime             @map("started_at") @db.Timestamptz(6)
+  completedAt            DateTime             @map("completed_at") @db.Timestamptz(6)
+  outcome                BrokerRequestOutcome
+  httpStatus             Int?                 @map("http_status")
+  requestId              String?              @map("request_id")
+  rateLimitLimit         Int?                 @map("rate_limit_limit")
+  rateLimitRemaining     Int?                 @map("rate_limit_remaining")
+  rateLimitResetSeconds  Int?                 @map("rate_limit_reset_seconds")
+  retryAfterSeconds      Int?                 @map("retry_after_seconds")
+  safeErrorCode          String?              @map("safe_error_code")
+  redactedRequestSummary Json                 @map("redacted_request_summary") @db.JsonB
+  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  collectionRun CollectionRun? @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
+
+  @@unique([workflowType, correlationId, operationId, ordinal, attempt], map: "broker_request_attempt_identity_key")
+  @@index([correlationId, startedAt(sort: Desc)])
+  @@index([collectionRunId, startedAt])
+  @@index([requestId])
+  @@map("broker_request_attempt")
 }
 
 model PortfolioSnapshot {

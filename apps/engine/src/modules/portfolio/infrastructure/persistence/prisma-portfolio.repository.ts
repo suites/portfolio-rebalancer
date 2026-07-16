@@ -29,6 +29,45 @@ export interface RedactedResponseInput {
   readonly body: Prisma.InputJsonValue;
 }
 
+export type StoredBrokerRequestAttemptInput = {
+  readonly workflowType: string;
+  readonly correlationId: string;
+  readonly collectionRunId: string | null;
+  readonly operationId: string;
+  readonly ordinal: number;
+  readonly attempt: number;
+  readonly rateLimitGroup: string;
+  readonly startedAt: Date;
+  readonly completedAt: Date;
+  readonly requestId: string | null;
+  readonly rateLimitLimit: number | null;
+  readonly rateLimitRemaining: number | null;
+  readonly rateLimitResetSeconds: number | null;
+  readonly retryAfterSeconds: number | null;
+  readonly redactedRequestSummary: Prisma.InputJsonObject;
+} & (
+  | {
+      readonly outcome: "SUCCEEDED";
+      readonly httpStatus: number;
+      readonly safeErrorCode: null;
+    }
+  | {
+      readonly outcome: "HTTP_ERROR";
+      readonly httpStatus: number;
+      readonly safeErrorCode: string;
+    }
+  | {
+      readonly outcome: "TIMEOUT" | "NETWORK_ERROR";
+      readonly httpStatus: null;
+      readonly safeErrorCode: string;
+    }
+  | {
+      readonly outcome: "SCHEMA_ERROR";
+      readonly httpStatus: number;
+      readonly safeErrorCode: string;
+    }
+);
+
 export interface StoredBuyingPowerInput {
   readonly currency: "KRW" | "USD";
   readonly amount: string;
@@ -131,6 +170,31 @@ export interface ActivateTargetDraftInput {
 
 export class PrismaPortfolioRepository {
   constructor(private readonly database: DatabaseClient) {}
+
+  appendBrokerRequestAttempt(input: StoredBrokerRequestAttemptInput) {
+    return this.database.brokerRequestAttempt.create({
+      data: {
+        workflowType: input.workflowType,
+        correlationId: input.correlationId,
+        collectionRunId: input.collectionRunId,
+        operationId: input.operationId,
+        ordinal: input.ordinal,
+        attempt: input.attempt,
+        rateLimitGroup: input.rateLimitGroup,
+        startedAt: input.startedAt,
+        completedAt: input.completedAt,
+        outcome: input.outcome,
+        httpStatus: input.httpStatus,
+        requestId: input.requestId,
+        rateLimitLimit: input.rateLimitLimit,
+        rateLimitRemaining: input.rateLimitRemaining,
+        rateLimitResetSeconds: input.rateLimitResetSeconds,
+        retryAfterSeconds: input.retryAfterSeconds,
+        safeErrorCode: input.safeErrorCode,
+        redactedRequestSummary: normalizedJson(input.redactedRequestSummary),
+      },
+    });
+  }
 
   recordInstrumentValidation(input: StoredInstrumentValidationInput) {
     return this.database.$transaction(async (transaction) => {

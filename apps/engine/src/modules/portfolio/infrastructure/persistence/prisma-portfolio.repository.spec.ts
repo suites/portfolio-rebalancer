@@ -44,6 +44,111 @@ const allocations = [
   },
 ];
 
+describe("PrismaPortfolioRepository broker request attempts", () => {
+  it("workflow correlation과 rate-limit 메타데이터를 append-only 행으로 저장한다", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "attempt-1" });
+    const database = {
+      brokerRequestAttempt: { create },
+    } as unknown as DatabaseClient;
+    const repository = new PrismaPortfolioRepository(database);
+    const startedAt = new Date("2026-07-16T03:00:00.000Z");
+    const completedAt = new Date("2026-07-16T03:00:00.250Z");
+
+    await repository.appendBrokerRequestAttempt({
+      workflowType: "PORTFOLIO_COLLECTION",
+      correlationId: "11111111-1111-4111-8111-111111111111",
+      collectionRunId: "22222222-2222-4222-8222-222222222222",
+      operationId: "getPrices",
+      ordinal: 0,
+      attempt: 2,
+      rateLimitGroup: "MARKET_DATA",
+      startedAt,
+      completedAt,
+      outcome: "HTTP_ERROR",
+      httpStatus: 429,
+      requestId: "synthetic-request-id",
+      rateLimitLimit: 10,
+      rateLimitRemaining: 0,
+      rateLimitResetSeconds: 1,
+      retryAfterSeconds: 1,
+      safeErrorCode: "TOSS_API_RESPONSE_ERROR",
+      redactedRequestSummary: {
+        method: "GET",
+        path: "/api/v1/prices",
+        symbols: ["005930"],
+        account: "[REDACTED]",
+      },
+    });
+
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        workflowType: "PORTFOLIO_COLLECTION",
+        correlationId: "11111111-1111-4111-8111-111111111111",
+        collectionRunId: "22222222-2222-4222-8222-222222222222",
+        operationId: "getPrices",
+        ordinal: 0,
+        attempt: 2,
+        rateLimitGroup: "MARKET_DATA",
+        startedAt,
+        completedAt,
+        outcome: "HTTP_ERROR",
+        httpStatus: 429,
+        requestId: "synthetic-request-id",
+        rateLimitLimit: 10,
+        rateLimitRemaining: 0,
+        rateLimitResetSeconds: 1,
+        retryAfterSeconds: 1,
+        safeErrorCode: "TOSS_API_RESPONSE_ERROR",
+        redactedRequestSummary: {
+          method: "GET",
+          path: "/api/v1/prices",
+          symbols: ["005930"],
+          account: "[REDACTED]",
+        },
+      },
+    });
+  });
+
+  it("collection run이 없는 진단 workflow와 nullable 응답 메타데이터도 보존한다", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "attempt-2" });
+    const database = {
+      brokerRequestAttempt: { create },
+    } as unknown as DatabaseClient;
+    const repository = new PrismaPortfolioRepository(database);
+
+    await repository.appendBrokerRequestAttempt({
+      workflowType: "DOCTOR",
+      correlationId: "33333333-3333-4333-8333-333333333333",
+      collectionRunId: null,
+      operationId: "getAccounts",
+      ordinal: 0,
+      attempt: 1,
+      rateLimitGroup: "ACCOUNT",
+      startedAt: new Date("2026-07-16T03:00:00.000Z"),
+      completedAt: new Date("2026-07-16T03:00:00.100Z"),
+      outcome: "NETWORK_ERROR",
+      httpStatus: null,
+      requestId: null,
+      rateLimitLimit: null,
+      rateLimitRemaining: null,
+      rateLimitResetSeconds: null,
+      retryAfterSeconds: null,
+      safeErrorCode: "TOSS_API_NETWORK_FAILED",
+      redactedRequestSummary: { method: "GET", path: "/api/v1/accounts" },
+    });
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        workflowType: "DOCTOR",
+        collectionRunId: null,
+        outcome: "NETWORK_ERROR",
+        httpStatus: null,
+        requestId: null,
+      }),
+    });
+  });
+});
+
 describe("PrismaPortfolioRepository target settings", () => {
   it("canonical hash와 다음 버전으로 DRAFT를 생성한다", async () => {
     const create = vi
