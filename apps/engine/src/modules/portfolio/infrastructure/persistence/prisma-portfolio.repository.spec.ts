@@ -110,7 +110,9 @@ describe("PrismaPortfolioRepository broker request attempts", () => {
   });
 
   it("collection run이 없는 진단 workflow와 nullable 응답 메타데이터도 보존한다", async () => {
-    const create = vi.fn().mockResolvedValue({ id: "attempt-2" });
+    const create = vi
+      .fn<(input: unknown) => Promise<unknown>>()
+      .mockResolvedValue({ id: "attempt-2" });
     const database = {
       brokerRequestAttempt: { create },
     } as unknown as DatabaseClient;
@@ -137,14 +139,74 @@ describe("PrismaPortfolioRepository broker request attempts", () => {
       redactedRequestSummary: { method: "GET", path: "/api/v1/accounts" },
     });
 
-    expect(create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        workflowType: "DOCTOR",
-        collectionRunId: null,
-        outcome: "NETWORK_ERROR",
-        httpStatus: null,
-        requestId: null,
-      }),
+    const createInput = create.mock.calls[0]?.[0] as
+      { readonly data: Record<string, unknown> } | undefined;
+    expect(createInput?.data).toMatchObject({
+      workflowType: "DOCTOR",
+      collectionRunId: null,
+      outcome: "NETWORK_ERROR",
+      httpStatus: null,
+      requestId: null,
+    });
+  });
+
+  it("같은 논리 요청의 재시도를 동일 ordinal과 증가한 attempt의 별도 행으로 append한다", async () => {
+    const create = vi
+      .fn<(input: unknown) => Promise<unknown>>()
+      .mockResolvedValueOnce({ id: "attempt-1" })
+      .mockResolvedValueOnce({ id: "attempt-2" });
+    const repository = new PrismaPortfolioRepository({
+      brokerRequestAttempt: { create },
+    } as unknown as DatabaseClient);
+    const common = {
+      workflowType: "PORTFOLIO_COLLECTION",
+      correlationId: "11111111-1111-4111-8111-111111111111",
+      collectionRunId: "22222222-2222-4222-8222-222222222222",
+      operationId: "getBuyingPower",
+      ordinal: 0,
+      rateLimitGroup: "ORDER_INFO",
+      startedAt: new Date("2026-07-16T03:00:00.000Z"),
+      completedAt: new Date("2026-07-16T03:00:00.100Z"),
+      requestId: "synthetic-request-id",
+      rateLimitLimit: 10,
+      rateLimitRemaining: 0,
+      rateLimitResetSeconds: 1,
+      retryAfterSeconds: 1,
+      redactedRequestSummary: {
+        method: "GET",
+        path: "/api/v1/buying-power",
+      },
+    } as const;
+
+    await repository.appendBrokerRequestAttempt({
+      ...common,
+      attempt: 1,
+      outcome: "HTTP_ERROR",
+      httpStatus: 429,
+      safeErrorCode: "TOSS_API_RESPONSE_ERROR",
+    });
+    await repository.appendBrokerRequestAttempt({
+      ...common,
+      attempt: 2,
+      outcome: "SUCCEEDED",
+      httpStatus: 200,
+      safeErrorCode: null,
+    });
+
+    expect(create).toHaveBeenCalledTimes(2);
+    const firstCreate = create.mock.calls[0]?.[0] as
+      { readonly data: Record<string, unknown> } | undefined;
+    const secondCreate = create.mock.calls[1]?.[0] as
+      { readonly data: Record<string, unknown> } | undefined;
+    expect(firstCreate?.data).toMatchObject({
+      ordinal: 0,
+      attempt: 1,
+      outcome: "HTTP_ERROR",
+    });
+    expect(secondCreate?.data).toMatchObject({
+      ordinal: 0,
+      attempt: 2,
+      outcome: "SUCCEEDED",
     });
   });
 });

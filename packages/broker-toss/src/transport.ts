@@ -10,6 +10,7 @@ export type TossRequestOutcome = "SUCCESS" | "HTTP_ERROR" | "TIMEOUT" | "NETWORK
 
 export interface TossResponseMetadata {
   readonly operationId: TossOperationId;
+  readonly requestSequence: number;
   readonly staticRateLimitGroup: TossRateLimitGroup | null;
   readonly attempt: 1 | 2;
   readonly startedAt: string;
@@ -146,6 +147,7 @@ export function createTossManagedFetch(
   const random = options.random ?? Math.random;
   const maxRetryAfterMs = options.maxRetryAfterMs ?? 30_000;
   const retryJitterMaxMs = options.retryJitterMaxMs ?? 250;
+  let nextRequestSequence = 0;
 
   assertNonNegativeSafeInteger(maxRetryAfterMs, "maxRetryAfterMs");
   assertPositiveSafeInteger(retryJitterMaxMs, "retryJitterMaxMs");
@@ -157,9 +159,14 @@ export function createTossManagedFetch(
       const url = new URL(reusableRequest.url);
       throw new TossOperationMetadataError(reusableRequest.method, url.pathname);
     }
+    if (!Number.isSafeInteger(nextRequestSequence)) {
+      throw new Error("토스증권 requestSequence 범위를 초과했습니다.");
+    }
+    const requestSequence = nextRequestSequence;
+    nextRequestSequence += 1;
 
     const execute = () =>
-      executeManagedRequest(reusableRequest, operation, fetchImplementation, {
+      executeManagedRequest(reusableRequest, operation, requestSequence, fetchImplementation, {
         now,
         sleep,
         random,
@@ -185,6 +192,7 @@ interface ResolvedManagedFetchOptions {
 async function executeManagedRequest(
   reusableRequest: Request,
   operation: TossOperation,
+  requestSequence: number,
   fetchImplementation: typeof globalThis.fetch,
   options: ResolvedManagedFetchOptions,
 ): Promise<Response> {
@@ -196,6 +204,7 @@ async function executeManagedRequest(
     } catch (cause) {
       await emitMetadata(options.onResponseMetadata, {
         operationId: operation.operationId,
+        requestSequence,
         staticRateLimitGroup: operation.rateLimitGroup,
         attempt,
         startedAt,
@@ -216,7 +225,14 @@ async function executeManagedRequest(
       throw cause;
     }
 
-    const metadata = metadataFromResponse(response, operation, attempt, startedAt, options.now());
+    const metadata = metadataFromResponse(
+      response,
+      operation,
+      requestSequence,
+      attempt,
+      startedAt,
+      options.now(),
+    );
     responseMetadata.set(response, metadata);
     await emitMetadata(options.onResponseMetadata, metadata);
 
@@ -238,12 +254,14 @@ async function executeManagedRequest(
 function metadataFromResponse(
   response: Response,
   operation: TossOperation,
+  requestSequence: number,
   attempt: 1 | 2,
   startedAt: string,
   receivedAtMs: number,
 ): TossResponseMetadata {
   return {
     operationId: operation.operationId,
+    requestSequence,
     staticRateLimitGroup: operation.rateLimitGroup,
     attempt,
     startedAt,

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { Inject, Injectable, Logger } from "@nestjs/common";
 
 import {
@@ -287,25 +289,35 @@ export class PortfolioService {
     exact: NonNullable<ReturnType<typeof parseExactInstrumentQuery>>,
   ) {
     assertVercelEgressConfigured(this.config);
-    const source = this.tossRuntime.get().source;
-    const stocks = await source.getStocks([exact.symbol]);
-    let stock;
-    try {
-      stock = selectExactStock(stocks.result, exact);
-    } catch (error) {
-      throw new TargetSettingsError(
-        "INSTRUMENT_VALIDATION_FAILED",
-        error instanceof Error ? error.message : "토스증권 종목 응답을 정확히 대조하지 못했습니다.",
-      );
-    }
-    const warnings = await source.getStockWarnings(exact.symbol);
-    const normalized = normalizeTossInstrumentValidation({
-      request: exact,
-      stock,
-      warnings: warnings.result,
-      observedAt: new Date(),
-    });
-    return this.repository.recordInstrumentValidation(normalized);
+    const runtime = this.tossRuntime.get();
+    return runtime.requestAuditContext.run(
+      {
+        workflowType: "INSTRUMENT_VALIDATION",
+        correlationId: randomUUID(),
+      },
+      async () => {
+        const stocks = await runtime.source.getStocks([exact.symbol]);
+        let stock;
+        try {
+          stock = selectExactStock(stocks.result, exact);
+        } catch (error) {
+          throw new TargetSettingsError(
+            "INSTRUMENT_VALIDATION_FAILED",
+            error instanceof Error
+              ? error.message
+              : "토스증권 종목 응답을 정확히 대조하지 못했습니다.",
+          );
+        }
+        const warnings = await runtime.source.getStockWarnings(exact.symbol);
+        const normalized = normalizeTossInstrumentValidation({
+          request: exact,
+          stock,
+          warnings: warnings.result,
+          observedAt: new Date(),
+        });
+        return this.repository.recordInstrumentValidation(normalized);
+      },
+    );
   }
 
   async activateTargetDraft(version: number): Promise<TargetSettingsSnapshotContract> {
@@ -367,6 +379,7 @@ export class PortfolioService {
       await collectPortfolio({
         source: runtime.source,
         repository: this.repository,
+        requestAuditContext: runtime.requestAuditContext,
         selectedAccountSeq: this.config.TOSSINVEST_ACCOUNT_SEQ,
         accountReferenceKey: runtime.accountReferenceKey,
       });

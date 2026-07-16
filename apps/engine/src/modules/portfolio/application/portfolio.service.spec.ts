@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { EngineConfig } from "../../../config/engine.config";
 import type { TargetSettingsError } from "../domain/target-settings.error";
+import { TossRequestAuditContext } from "../infrastructure/broker/toss-request-audit.context";
 import type { TossRuntimeService } from "../infrastructure/broker/toss-runtime.service";
 import type {
   ActivateTargetDraftInput,
@@ -254,12 +255,22 @@ describe("PortfolioService target settings", () => {
     repository.recordInstrumentValidation.mockImplementation((input) =>
       Promise.resolve(validationRecordFromInput(input)),
     );
+    const requestAuditContext = new TossRequestAuditContext();
     const source = {
-      getStocks: vi.fn().mockResolvedValue({ result: [stockFixture()] }),
-      getStockWarnings: vi.fn().mockResolvedValue({ result: [] }),
+      getStocks: vi.fn().mockImplementation(() => {
+        expect(requestAuditContext.currentWorkflow()?.workflowType).toBe("INSTRUMENT_VALIDATION");
+        return Promise.resolve({ result: [stockFixture()] });
+      }),
+      getStockWarnings: vi.fn().mockImplementation(() => {
+        expect(requestAuditContext.currentWorkflow()?.workflowType).toBe("INSTRUMENT_VALIDATION");
+        return Promise.resolve({ result: [] });
+      }),
     };
     const service = createService(repository, {
-      get: vi.fn().mockReturnValue({ source }),
+      get: vi.fn().mockReturnValue({
+        source,
+        requestAuditContext,
+      }),
     });
     const input = {
       ...validInput,
@@ -315,6 +326,7 @@ describe("PortfolioService target settings", () => {
           getStocks: vi.fn().mockResolvedValue({ result: [stockFixture()] }),
           getStockWarnings: vi.fn().mockResolvedValue({ result: [] }),
         },
+        requestAuditContext: new TossRequestAuditContext(),
       }),
     });
     const input = {
@@ -343,6 +355,7 @@ describe("PortfolioService target settings", () => {
           getStocks: vi.fn().mockResolvedValue({ result: [stockFixture()] }),
           getStockWarnings: vi.fn().mockRejectedValue(new Error("warning unavailable")),
         },
+        requestAuditContext: new TossRequestAuditContext(),
       }),
     });
 

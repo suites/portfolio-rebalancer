@@ -86,6 +86,10 @@ describe("createTossManagedFetch", () => {
 
   it("GET 429를 Retry-After와 양의 bounded jitter 이후 딱 한 번 재시도한다", async () => {
     const requests: Request[] = [];
+    const metadata: {
+      readonly requestSequence: number;
+      readonly attempt: number;
+    }[] = [];
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockImplementationOnce((input) => {
@@ -113,6 +117,9 @@ describe("createTossManagedFetch", () => {
       sleep,
       random: () => 0.5,
       retryJitterMaxMs: 100,
+      onResponseMetadata: (entry) => {
+        metadata.push(entry);
+      },
     });
 
     const response = await managedFetch(
@@ -129,6 +136,36 @@ describe("createTossManagedFetch", () => {
       "Bearer synthetic-token",
       "Bearer synthetic-token",
     ]);
+    expect(metadata).toEqual([
+      expect.objectContaining({ requestSequence: 0, attempt: 1 }),
+      expect.objectContaining({ requestSequence: 0, attempt: 2 }),
+    ]);
+  });
+
+  it("병렬 동일 operation 논리 요청에는 서로 다른 requestSequence를 부여한다", async () => {
+    const sequences: number[] = [];
+    const managedFetch = createTossManagedFetch(
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify({ result: { currency: "KRW", cashBuyingPower: "0" } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+      {
+        onResponseMetadata: (metadata) => {
+          if (metadata.operationId === "getBuyingPower") {
+            sequences.push(metadata.requestSequence);
+          }
+        },
+      },
+    );
+
+    await Promise.all([
+      managedFetch("https://openapi.tossinvest.com/api/v1/buying-power?currency=KRW"),
+      managedFetch("https://openapi.tossinvest.com/api/v1/buying-power?currency=USD"),
+    ]);
+
+    expect(sequences).toEqual([0, 1]);
   });
 
   it("jitter를 포함한 총 대기시간이 최대값을 넘으면 재시도하지 않는다", async () => {
@@ -227,6 +264,7 @@ describe("createTossManagedFetch", () => {
     expect(metadata).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         operationId: "getAccounts",
+        requestSequence: 0,
         staticRateLimitGroup: "ACCOUNT",
         attempt: 1,
         outcome: "NETWORK_ERROR",

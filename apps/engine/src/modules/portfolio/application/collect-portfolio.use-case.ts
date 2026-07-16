@@ -13,12 +13,14 @@ import type {
   StoredHoldingInput,
 } from "../infrastructure/persistence/prisma-portfolio.repository";
 import type { TossReadSource } from "../infrastructure/broker/toss-read-source.adapter";
+import type { TossRequestAuditContext } from "../infrastructure/broker/toss-request-audit.context";
 import { CollectionError } from "../domain/collection.error";
 import { krwAmountToMinor, usdAmountToKrwMinor } from "../domain/valuation";
 
 export interface CollectPortfolioOptions {
   readonly source: TossReadSource;
   readonly repository: PrismaPortfolioRepository;
+  readonly requestAuditContext: TossRequestAuditContext;
   readonly selectedAccountSeq?: number | undefined;
   readonly accountReferenceKey: string;
   readonly now?: () => Date;
@@ -35,140 +37,151 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
     );
   }
   try {
-    const observedAt = (options.now ?? (() => new Date()))();
-    const accounts = await options.source.listAccounts();
-    const selected = selectAccount(accounts, options.selectedAccountSeq);
-    await assertCollectionLease(options.repository, lease);
-    const account = await options.repository.upsertAccount({
-      externalRefHmac: createAccountReference(selected.accountNo, options.accountReferenceKey),
-      maskedNumber: maskAccountNumber(selected.accountNo),
-      accountTypeRaw: selected.accountType,
-      seenAt: observedAt,
-    });
-    const run = await options.repository.startCollection(
-      account.id,
-      observedAt,
-      TOSS_OPENAPI_VERSION,
-    );
-
-    try {
-      const holdingsResponse = await options.source.getHoldings(selected.accountSeq);
-      const hasUsd = holdingsResponse.result.items.some(({ currency }) => currency === "USD");
-      const buyingPowerCurrencies: readonly ("KRW" | "USD")[] = hasUsd ? ["KRW", "USD"] : ["KRW"];
-      const buyingPowerResponses = await Promise.all(
-        buyingPowerCurrencies.map(async (currency) => {
-          const response = await options.source.getBuyingPower(selected.accountSeq, currency);
-          validateBuyingPowerCurrency(response.result.currency, currency);
-          return response;
-        }),
-      );
-      const exchangeResponse = hasUsd ? await options.source.getUsdKrwRate() : null;
-      if (
-        exchangeResponse &&
-        (exchangeResponse.result.baseCurrency !== "USD" ||
-          exchangeResponse.result.quoteCurrency !== "KRW")
-      ) {
-        throw new CollectionError(
-          "DATA_INVALID",
-          "USD/KRW 환율 응답의 통화 방향이 올바르지 않습니다.",
-          "토스증권 환율 응답을 확인한 뒤 다시 수집하세요.",
+    await options.requestAuditContext.run(
+      {
+        workflowType: "PORTFOLIO_COLLECTION",
+        correlationId: randomUUID(),
+      },
+      async () => {
+        const observedAt = (options.now ?? (() => new Date()))();
+        const accounts = await options.source.listAccounts();
+        const selected = selectAccount(accounts, options.selectedAccountSeq);
+        await assertCollectionLease(options.repository, lease);
+        const account = await options.repository.upsertAccount({
+          externalRefHmac: createAccountReference(selected.accountNo, options.accountReferenceKey),
+          maskedNumber: maskAccountNumber(selected.accountNo),
+          accountTypeRaw: selected.accountType,
+          seenAt: observedAt,
+        });
+        const run = await options.repository.startCollection(
+          account.id,
+          observedAt,
+          TOSS_OPENAPI_VERSION,
         );
-      }
+        options.requestAuditContext.attachCollectionRunId(run.id);
 
-      const holdings = holdingsResponse.result.items.map((item) =>
-        normalizeHolding(item, exchangeResponse?.result.rate),
-      );
-      const securitiesValueMinor = holdings.reduce(
-        (total, holding) => total + holding.marketValueKrwMinor,
-        0n,
-      );
-      const buyingPower: readonly StoredBuyingPowerInput[] = buyingPowerResponses.map(
-        ({ result }) => {
-          if (result.currency === "KRW") {
-            return {
-              currency: result.currency,
-              amount: result.cashBuyingPower,
-              valueKrwMinor: krwAmountToMinor(result.cashBuyingPower),
-            };
-          }
-          if (!exchangeResponse) {
+        try {
+          const holdingsResponse = await options.source.getHoldings(selected.accountSeq);
+          const hasUsd = holdingsResponse.result.items.some(({ currency }) => currency === "USD");
+          const buyingPowerCurrencies: readonly ("KRW" | "USD")[] = hasUsd
+            ? ["KRW", "USD"]
+            : ["KRW"];
+          const buyingPowerResponses = await Promise.all(
+            buyingPowerCurrencies.map(async (currency) => {
+              const response = await options.source.getBuyingPower(selected.accountSeq, currency);
+              validateBuyingPowerCurrency(response.result.currency, currency);
+              return response;
+            }),
+          );
+          const exchangeResponse = hasUsd ? await options.source.getUsdKrwRate() : null;
+          if (
+            exchangeResponse &&
+            (exchangeResponse.result.baseCurrency !== "USD" ||
+              exchangeResponse.result.quoteCurrency !== "KRW")
+          ) {
             throw new CollectionError(
               "DATA_INVALID",
-              "USD 매수 가능 금액이 있지만 USD/KRW 환율을 확인하지 못했습니다.",
-              "환율 API 상태를 확인한 뒤 다시 수집하세요.",
+              "USD/KRW 환율 응답의 통화 방향이 올바르지 않습니다.",
+              "토스증권 환율 응답을 확인한 뒤 다시 수집하세요.",
             );
           }
-          return {
-            currency: result.currency,
-            amount: result.cashBuyingPower,
-            valueKrwMinor: usdAmountToKrwMinor(
-              result.cashBuyingPower,
-              exchangeResponse.result.rate,
-            ),
-          };
-        },
-      );
-      await assertCollectionLease(options.repository, lease);
-      const completed = await options.repository.completeCollection({
-        runId: run.id,
-        accountId: account.id,
-        observedAt,
-        securitiesValueMinor,
-        usdKrwRate: exchangeResponse?.result.rate ?? null,
-        holdings,
-        buyingPower,
-        lease,
-        rawResponses: [
-          {
-            operationId: "getAccounts",
-            ordinal: 0,
-            receivedAt: observedAt,
-            body: {
-              result: accounts.map((item) => ({
-                accountNo: maskAccountNumber(item.accountNo),
-                accountSeq: "[REDACTED]",
-                accountType: item.accountType,
-              })),
+
+          const holdings = holdingsResponse.result.items.map((item) =>
+            normalizeHolding(item, exchangeResponse?.result.rate),
+          );
+          const securitiesValueMinor = holdings.reduce(
+            (total, holding) => total + holding.marketValueKrwMinor,
+            0n,
+          );
+          const buyingPower: readonly StoredBuyingPowerInput[] = buyingPowerResponses.map(
+            ({ result }) => {
+              if (result.currency === "KRW") {
+                return {
+                  currency: result.currency,
+                  amount: result.cashBuyingPower,
+                  valueKrwMinor: krwAmountToMinor(result.cashBuyingPower),
+                };
+              }
+              if (!exchangeResponse) {
+                throw new CollectionError(
+                  "DATA_INVALID",
+                  "USD 매수 가능 금액이 있지만 USD/KRW 환율을 확인하지 못했습니다.",
+                  "환율 API 상태를 확인한 뒤 다시 수집하세요.",
+                );
+              }
+              return {
+                currency: result.currency,
+                amount: result.cashBuyingPower,
+                valueKrwMinor: usdAmountToKrwMinor(
+                  result.cashBuyingPower,
+                  exchangeResponse.result.rate,
+                ),
+              };
             },
-          },
-          {
-            operationId: "getHoldings",
-            ordinal: 0,
-            receivedAt: observedAt,
-            body: holdingsResponse,
-          },
-          ...buyingPowerResponses.map((response, ordinal) => ({
-            operationId: "getBuyingPower",
-            ordinal,
-            receivedAt: observedAt,
-            body: response,
-          })),
-          ...(exchangeResponse
-            ? [
-                {
-                  operationId: "getExchangeRate",
-                  ordinal: 0,
-                  receivedAt: observedAt,
-                  body: exchangeResponse,
+          );
+          await assertCollectionLease(options.repository, lease);
+          const completed = await options.repository.completeCollection({
+            runId: run.id,
+            accountId: account.id,
+            observedAt,
+            securitiesValueMinor,
+            usdKrwRate: exchangeResponse?.result.rate ?? null,
+            holdings,
+            buyingPower,
+            lease,
+            rawResponses: [
+              {
+                operationId: "getAccounts",
+                ordinal: 0,
+                receivedAt: observedAt,
+                body: {
+                  result: accounts.map((item) => ({
+                    accountNo: maskAccountNumber(item.accountNo),
+                    accountSeq: "[REDACTED]",
+                    accountType: item.accountType,
+                  })),
                 },
-              ]
-            : []),
-        ],
-      });
-      if (!completed) throw collectionLeaseLost();
-    } catch (error) {
-      const collectionError =
-        error instanceof CollectionError
-          ? error
-          : new CollectionError(
-              "DATA_INVALID",
-              "수집한 토스증권 데이터를 안전하게 저장하지 못했습니다.",
-              "응답 데이터와 PostgreSQL 상태를 확인한 뒤 다시 수집하세요.",
-              { cause: error },
-            );
-      await options.repository.failCollection(run.id, collectionError.code, new Date());
-      throw collectionError;
-    }
+              },
+              {
+                operationId: "getHoldings",
+                ordinal: 0,
+                receivedAt: observedAt,
+                body: holdingsResponse,
+              },
+              ...buyingPowerResponses.map((response, ordinal) => ({
+                operationId: "getBuyingPower",
+                ordinal,
+                receivedAt: observedAt,
+                body: response,
+              })),
+              ...(exchangeResponse
+                ? [
+                    {
+                      operationId: "getExchangeRate",
+                      ordinal: 0,
+                      receivedAt: observedAt,
+                      body: exchangeResponse,
+                    },
+                  ]
+                : []),
+            ],
+          });
+          if (!completed) throw collectionLeaseLost();
+        } catch (error) {
+          const collectionError =
+            error instanceof CollectionError
+              ? error
+              : new CollectionError(
+                  "DATA_INVALID",
+                  "수집한 토스증권 데이터를 안전하게 저장하지 못했습니다.",
+                  "응답 데이터와 PostgreSQL 상태를 확인한 뒤 다시 수집하세요.",
+                  { cause: error },
+                );
+          await options.repository.failCollection(run.id, collectionError.code, new Date());
+          throw collectionError;
+        }
+      },
+    );
   } finally {
     await options.repository.releaseCollectionLease(lease);
   }

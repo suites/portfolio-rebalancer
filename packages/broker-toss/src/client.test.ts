@@ -209,6 +209,7 @@ describe("Toss read transport", () => {
       expect.arrayContaining([
         expect.objectContaining({
           operationId: "getAccounts",
+          requestSequence: 1,
           staticRateLimitGroup: "ACCOUNT",
           attempt: 1,
           outcome: "HTTP_ERROR",
@@ -218,6 +219,7 @@ describe("Toss read transport", () => {
         }),
         expect.objectContaining({
           operationId: "getAccounts",
+          requestSequence: 1,
           staticRateLimitGroup: "ACCOUNT",
           attempt: 2,
           outcome: "SUCCESS",
@@ -327,6 +329,7 @@ describe("Toss read transport", () => {
 
     expect(metadata).toContainEqual({
       operationId: "getAccounts",
+      requestSequence: 1,
       staticRateLimitGroup: "ACCOUNT",
       attempt: 1,
       startedAt: "2026-07-16T00:00:00.000Z",

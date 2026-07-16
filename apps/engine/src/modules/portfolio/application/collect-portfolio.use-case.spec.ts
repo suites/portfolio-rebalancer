@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { CollectionError } from "../domain/collection.error";
+import { TossRequestAuditContext } from "../infrastructure/broker/toss-request-audit.context";
 import {
   collectPortfolio,
   createAccountReference,
@@ -11,6 +12,7 @@ const collectionLease = {
   owner: "11111111-1111-4111-8111-111111111111",
   fencingToken: 1n,
 };
+const requestAuditContext = new TossRequestAuditContext();
 
 describe("collectPortfolio", () => {
   it("여러 계좌를 임의 선택하지 않고 보유 조회 전에 차단한다", async () => {
@@ -34,6 +36,7 @@ describe("collectPortfolio", () => {
       collectPortfolio({
         source,
         repository: repository as never,
+        requestAuditContext,
         accountReferenceKey: "a".repeat(32),
       }),
     ).rejects.toMatchObject({
@@ -75,6 +78,7 @@ describe("collectPortfolio", () => {
     await collectPortfolio({
       source,
       repository: repository as never,
+      requestAuditContext,
       accountReferenceKey: "a".repeat(32),
       now: () => new Date("2026-07-16T09:00:00+09:00"),
     });
@@ -103,6 +107,74 @@ describe("collectPortfolio", () => {
         ({ operationId, ordinal }) => operationId === "getBuyingPower" && ordinal === 0,
       ),
     ).toBe(true);
+  });
+
+  it("계좌 조회 전에 correlation context를 만들고 run 생성 직후 collectionRunId를 연결한다", async () => {
+    const context = new TossRequestAuditContext();
+    const observedContexts: {
+      readonly phase: string;
+      readonly correlationId: string | undefined;
+      readonly collectionRunId: string | null | undefined;
+    }[] = [];
+    const capture = (phase: string) => {
+      const current = context.currentWorkflow();
+      observedContexts.push({
+        phase,
+        correlationId: current?.correlationId,
+        collectionRunId: current?.collectionRunId,
+      });
+      expect(current?.workflowType).toBe("PORTFOLIO_COLLECTION");
+    };
+    const source = {
+      listAccounts: vi.fn().mockImplementation(() => {
+        capture("listAccounts");
+        return Promise.resolve([
+          { accountNo: "12345678901", accountSeq: 1, accountType: "BROKERAGE" },
+        ]);
+      }),
+      getHoldings: vi.fn().mockImplementation(() => {
+        capture("getHoldings");
+        return Promise.resolve(emptyHoldingsResponse());
+      }),
+      getBuyingPower: vi.fn().mockImplementation(() => {
+        capture("getBuyingPower");
+        return Promise.resolve({
+          result: { currency: "KRW" as const, cashBuyingPower: "0" },
+        });
+      }),
+      getUsdKrwRate: vi.fn(),
+      getStocks: vi.fn(),
+      getStockWarnings: vi.fn(),
+    };
+    const repository = {
+      acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
+      releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
+      upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
+      startCollection: vi.fn().mockImplementation(() => {
+        capture("startCollection");
+        return Promise.resolve({ id: "run-1" });
+      }),
+      completeCollection: vi.fn().mockResolvedValue(true),
+      failCollection: vi.fn(),
+    };
+
+    await collectPortfolio({
+      source,
+      repository: repository as never,
+      requestAuditContext: context,
+      accountReferenceKey: "a".repeat(32),
+    });
+
+    const correlationIds = new Set(observedContexts.map(({ correlationId }) => correlationId));
+    expect(correlationIds.size).toBe(1);
+    expect(observedContexts).toEqual([
+      expect.objectContaining({ phase: "listAccounts", collectionRunId: null }),
+      expect.objectContaining({ phase: "startCollection", collectionRunId: null }),
+      expect.objectContaining({ phase: "getHoldings", collectionRunId: "run-1" }),
+      expect.objectContaining({ phase: "getBuyingPower", collectionRunId: "run-1" }),
+    ]);
+    expect(context.currentWorkflow()).toBeNull();
   });
 
   it("USD 매수 가능 금액이 있으면 환율로 원화 증거 금액을 계산한다", async () => {
@@ -148,6 +220,7 @@ describe("collectPortfolio", () => {
     await collectPortfolio({
       source,
       repository: repository as never,
+      requestAuditContext,
       accountReferenceKey: "a".repeat(32),
     });
 
@@ -203,6 +276,7 @@ describe("collectPortfolio", () => {
       collectPortfolio({
         source,
         repository: repository as never,
+        requestAuditContext,
         accountReferenceKey: "a".repeat(32),
       }),
     ).rejects.toMatchObject({ code: "DATA_INVALID" });
@@ -233,6 +307,7 @@ describe("collectPortfolio", () => {
       collectPortfolio({
         source,
         repository: repository as never,
+        requestAuditContext,
         accountReferenceKey: "a".repeat(32),
       }),
     ).rejects.toMatchObject({ code: "COLLECTION_LEASE_LOST" });
@@ -270,6 +345,7 @@ describe("collectPortfolio", () => {
       collectPortfolio({
         source,
         repository: repository as never,
+        requestAuditContext,
         accountReferenceKey: "a".repeat(32),
       }),
     ).rejects.toMatchObject({ code: "COLLECTION_LEASE_LOST" });

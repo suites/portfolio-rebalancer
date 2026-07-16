@@ -12,6 +12,7 @@ import {
   type TossHoldingsResponse,
   type TossStockWarningsResponse,
   type TossStocksResponse,
+  type TossResponseMetadata,
 } from "@portfolio-rebalancer/broker-toss";
 
 import { CollectionError } from "../../domain/collection.error";
@@ -28,8 +29,19 @@ export interface TossReadSource {
 export function createTossReadSource(credentials: {
   readonly clientId: string;
   readonly clientSecret: string;
+  readonly onResponseMetadata?: (metadata: TossResponseMetadata) => void | Promise<void>;
 }): TossReadSource {
-  const client = new TossOpenApiClient(credentials);
+  const client = new TossOpenApiClient(
+    {
+      clientId: credentials.clientId,
+      clientSecret: credentials.clientSecret,
+    },
+    {
+      ...(credentials.onResponseMetadata
+        ? { onResponseMetadata: credentials.onResponseMetadata }
+        : {}),
+    },
+  );
   return {
     async listAccounts() {
       try {
