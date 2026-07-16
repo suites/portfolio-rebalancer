@@ -495,12 +495,14 @@ function normalizeMarketSession(
     startEpoch,
     endEpoch,
     `${context} ${kind} 단일가 시작`,
+    "START",
   );
   assertAuctionBoundaryInInterval(
     auctionEndAt,
     startEpoch,
     endEpoch,
     `${context} ${kind} 단일가 종료`,
+    "END",
   );
 
   return {
@@ -517,10 +519,15 @@ function assertAuctionBoundaryInInterval(
   startEpoch: number,
   endEpoch: number,
   context: string,
+  boundaryKind: "START" | "END",
 ): void {
   if (boundary === null) return;
   const boundaryEpoch = Date.parse(boundary);
-  if (boundaryEpoch < startEpoch || boundaryEpoch > endEpoch) {
+  const invalid =
+    boundaryKind === "START"
+      ? boundaryEpoch < startEpoch || boundaryEpoch >= endEpoch
+      : boundaryEpoch <= startEpoch || boundaryEpoch > endEpoch;
+  if (invalid) {
     fail("AUCTION_BOUNDARY_INVALID", `${context} 시각이 세션 구간 밖에 있습니다.`);
   }
 }

@@ -380,7 +380,7 @@ describe("market calendar normalizers", () => {
     expectIssue(() => normalizeTossUsMarketCalendar(response), "SESSION_INTERVAL_INVALID");
   });
 
-  it("단일가 경계가 세션 구간 밖이면 차단하고 경계값 자체는 허용한다", () => {
+  it("단일가 시작 경계는 세션 종료보다 빨라야 한다", () => {
     const outside = validKrCalendar();
     if (!outside.result.today.integrated?.regularMarket) {
       throw new Error("테스트 캘린더 정규장이 없습니다.");
@@ -395,8 +395,16 @@ describe("market calendar normalizers", () => {
     }
     boundary.result.today.integrated.regularMarket.singlePriceAuctionStartTime =
       boundary.result.today.integrated.regularMarket.endTime;
-    expect(normalizeTossKrMarketCalendar(boundary).today.sessions[1]?.auctionStartAt).toBe(
-      "2026-03-25T15:30:00+09:00",
+    expectIssue(() => normalizeTossKrMarketCalendar(boundary), "AUCTION_BOUNDARY_INVALID");
+
+    const inside = validKrCalendar();
+    if (!inside.result.today.integrated?.regularMarket) {
+      throw new Error("테스트 캘린더 정규장이 없습니다.");
+    }
+    inside.result.today.integrated.regularMarket.singlePriceAuctionStartTime =
+      "2026-03-25T15:29:59.999+09:00";
+    expect(normalizeTossKrMarketCalendar(inside).today.sessions[1]?.auctionStartAt).toBe(
+      "2026-03-25T15:29:59.999+09:00",
     );
   });
 
