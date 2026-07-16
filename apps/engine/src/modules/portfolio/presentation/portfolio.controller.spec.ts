@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ConsoleRecordsSnapshotSchema,
   DashboardSnapshotSchema,
+  InstrumentCatalogSearchResultSchema,
+  InstrumentValidationResultSchema,
   TargetSettingsSnapshotSchema,
 } from "@portfolio-rebalancer/contracts";
 
@@ -172,6 +174,66 @@ describe("NestJS engine HTTP contract", () => {
     expect(JSON.stringify(body)).toContain("10000bp");
     expect(harness.portfolio.createTargetDraft).not.toHaveBeenCalled();
   });
+
+  it("로컬 종목 검색과 Toss 정확 심볼 검증을 별도 endpoint로 제공한다", async () => {
+    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+    app = harness.app;
+    const candidate = instrumentCandidate();
+    harness.portfolio.searchInstrumentCatalog.mockResolvedValue(
+      InstrumentCatalogSearchResultSchema.parse({
+        query: "애플",
+        catalogScope: "LOCAL_VALIDATED",
+        candidates: [{ ...candidate, source: "CATALOG" }],
+      }),
+    );
+    harness.portfolio.validateInstrument.mockResolvedValue(
+      InstrumentValidationResultSchema.parse({ candidate }),
+    );
+
+    const searched = await harness.fastify.inject({
+      method: "GET",
+      url: "/internal/v1/instruments/search?query=%EC%95%A0%ED%94%8C",
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
+    });
+    const validated = await harness.fastify.inject({
+      method: "POST",
+      url: "/internal/v1/instrument-validations",
+      headers: {
+        authorization: `Bearer ${SERVICE_TOKEN}`,
+        "content-type": "application/json",
+      },
+      payload: { query: "US:AAPL" },
+    });
+
+    expect(searched.statusCode).toBe(200);
+    expect(searched.headers["cache-control"]).toBe("no-store");
+    expect(searched.json()).toMatchObject({ catalogScope: "LOCAL_VALIDATED" });
+    expect(harness.portfolio.searchInstrumentCatalog).toHaveBeenCalledWith("애플");
+    expect(validated.statusCode).toBe(200);
+    expect(validated.headers["cache-control"]).toBe("no-store");
+    expect(validated.json()).toMatchObject({
+      candidate: { instrumentKey: "US:AAPL", targetEligibility: "ELIGIBLE" },
+    });
+    expect(harness.portfolio.validateInstrument).toHaveBeenCalledWith("US:AAPL");
+  });
+
+  it("정확 심볼이 아닌 검증 입력은 Toss service 호출 전에 거부한다", async () => {
+    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+    app = harness.app;
+
+    const response = await harness.fastify.inject({
+      method: "POST",
+      url: "/internal/v1/instrument-validations",
+      headers: {
+        authorization: `Bearer ${SERVICE_TOKEN}`,
+        "content-type": "application/json",
+      },
+      payload: { query: "삼성전자" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(harness.portfolio.validateInstrument).not.toHaveBeenCalled();
+  });
 });
 
 async function createHarness(environment: NodeJS.ProcessEnv) {
@@ -211,6 +273,8 @@ async function createHarness(environment: NodeJS.ProcessEnv) {
         liveOrdersEnabled: false,
       }),
     ),
+    searchInstrumentCatalog: vi.fn(),
+    validateInstrument: vi.fn(),
     createTargetDraft: vi.fn(),
     activateTargetDraft: vi.fn(),
   };
@@ -230,4 +294,29 @@ async function createHarness(environment: NodeJS.ProcessEnv) {
     fastify: nestApp.getHttpAdapter().getInstance(),
     portfolio,
   };
+}
+
+function instrumentCandidate() {
+  return {
+    validationId: "2bf2e437-c981-4dbd-842e-d0d9a11ac318",
+    instrumentKey: "US:AAPL",
+    symbol: "AAPL",
+    name: "애플",
+    englishName: "Apple Inc.",
+    marketCountry: "US",
+    listingMarket: "NASDAQ",
+    currency: "USD",
+    securityType: "FOREIGN_STOCK",
+    listingStatus: "ACTIVE",
+    source: "TOSS_EXACT",
+    targetEligibility: "ELIGIBLE",
+    targetReasonCodes: [],
+    addEligible: true,
+    blockedReason: null,
+    tradeBlockedNow: false,
+    tradeReasonCodes: [],
+    tradeBlockedReason: null,
+    requiresOrderRevalidation: false,
+    verifiedAt: "2026-07-16T13:00:00.000Z",
+  } as const;
 }

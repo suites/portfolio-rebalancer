@@ -52,9 +52,12 @@ describe("getTargetSettings", () => {
               },
               instruments: [
                 {
+                  validationId: null,
                   marketCountry: "US",
                   listingMarket: null,
                   symbol: "AAPL",
+                  name: "Apple",
+                  englishName: null,
                   currency: "USD",
                   withinAssetPoints: 10_000,
                 },

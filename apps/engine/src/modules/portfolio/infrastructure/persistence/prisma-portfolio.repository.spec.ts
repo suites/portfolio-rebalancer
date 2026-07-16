@@ -31,9 +31,12 @@ const allocations = [
     },
     instruments: [
       {
+        validationId: "2bf2e437-c981-4dbd-842e-d0d9a11ac318",
         marketCountry: "US",
         listingMarket: "NASDAQ",
         symbol: "AAPL",
+        name: "Apple",
+        englishName: "Apple Inc.",
         currency: "USD",
         withinAssetPoints: 10_000,
       },
@@ -95,7 +98,7 @@ describe("PrismaPortfolioRepository target settings", () => {
       createHash("sha256")
         .update(
           JSON.stringify({
-            version: 5,
+            version: 6,
             cashPolicy,
             sourceSnapshotId: "snapshot-1",
             sourceSnapshotDigest: "digest-1",
@@ -105,7 +108,7 @@ describe("PrismaPortfolioRepository target settings", () => {
         .digest("hex"),
     );
     expect(createInput?.data.cashPolicy).toEqual(cashPolicy);
-    expect(createInput?.data.source.version).toBe(5);
+    expect(createInput?.data.source.version).toBe(6);
     expect(createInput?.data.source.cashPolicy).toEqual(cashPolicy);
     expect(createInput?.data.source.sourceSnapshotId).toBe("snapshot-1");
     expect(createInput?.data.source.sourceSnapshotDigest).toBe("digest-1");
@@ -234,6 +237,83 @@ describe("PrismaPortfolioRepository target settings", () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { accountId: "account-1" }, take: 20 }),
     );
+  });
+
+  it("종목 검증 증거를 새 행으로 저장한 뒤 검색 카탈로그의 최신 포인터만 갱신한다", async () => {
+    const createValidation = vi.fn().mockResolvedValue({
+      id: "2bf2e437-c981-4dbd-842e-d0d9a11ac318",
+    });
+    const updateCatalog = vi.fn().mockResolvedValue({ id: "catalog-1" });
+    const transaction = {
+      instrumentCatalog: {
+        upsert: vi.fn().mockResolvedValue({ id: "catalog-1" }),
+        update: updateCatalog,
+      },
+      instrumentValidation: {
+        create: createValidation,
+      },
+    };
+    const repository = repositoryWithTransaction(transaction);
+    const observedAt = new Date("2026-07-16T13:00:00.000Z");
+
+    await repository.recordInstrumentValidation({
+      requestedMarketCountry: "US",
+      requestedSymbol: "SGOV",
+      providerApiVersion: "1.2.4",
+      marketCountry: "US",
+      symbol: "SGOV",
+      listingMarket: "NYSE",
+      name: "아이셰어즈 0-3개월 미국채",
+      englishName: "iShares 0-3 Month Treasury Bond ETF",
+      isinCode: "US46436E7186",
+      currency: "USD",
+      securityType: "FOREIGN_ETF",
+      isCommonShare: false,
+      listingStatus: "ACTIVE",
+      listDate: "2020-05-26",
+      delistDate: null,
+      sharesOutstanding: "1000000",
+      leverageFactor: "1.0",
+      liquidationTrading: null,
+      nxtSupported: null,
+      krxTradingSuspended: null,
+      nxtTradingSuspended: null,
+      targetEligibility: "ELIGIBLE",
+      targetReasonCodes: [],
+      tradeBlockedNow: false,
+      tradeReasonCodes: [],
+      requiresOrderRevalidation: false,
+      stockPayload: { symbol: "SGOV", optional: undefined },
+      warningsPayload: [],
+      observedAt,
+    });
+
+    const createInput = createValidation.mock.calls[0]?.[0] as
+      | {
+          data: {
+            catalogId: string;
+            stockPayload: unknown;
+            warningsPayload: unknown;
+            stockPayloadSha256: string;
+            warningsPayloadSha256: string;
+            observedAt: Date;
+          };
+        }
+      | undefined;
+    expect(createInput?.data).toMatchObject({
+      catalogId: "catalog-1",
+      stockPayload: { symbol: "SGOV" },
+      warningsPayload: [],
+      stockPayloadSha256: createHash("sha256")
+        .update(JSON.stringify({ symbol: "SGOV" }))
+        .digest("hex"),
+      warningsPayloadSha256: createHash("sha256").update(JSON.stringify([])).digest("hex"),
+      observedAt,
+    });
+    expect(updateCatalog).toHaveBeenCalledWith({
+      where: { id: "catalog-1" },
+      data: { lastValidationId: "2bf2e437-c981-4dbd-842e-d0d9a11ac318" },
+    });
   });
 });
 

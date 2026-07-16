@@ -11,7 +11,10 @@
 9. Preview에는 운영 Toss keys를 주입하지 않는다.
 10. 배포 후 `/`, `/portfolio`, `/rebalancing`, `/orders`, `/troubleshooting`, `/settings`가 모두 열리는지 확인한다.
 11. 목표 초안 저장과 적용 사이 snapshot이 바뀌면 적용이 차단되는지 확인하고, 적용 뒤 read-only 수집을 새로 실행해 snapshot에 설정 버전이 고정되는지 확인한다.
-12. 모든 화면에서 `liveOrdersEnabled=false`와 실주문 차단 표시가 유지되는지 확인한다.
+12. 국내 6자리 코드 또는 미국 티커 하나를 종목 검증하고, 같은 종목이 이후
+    `LOCAL_VALIDATED` 이름 검색에 나타나는지 확인한다. 이 검증은 read-only Toss
+    operation만 사용하며 주문 operation 호출이 0회인지 확인한다.
+13. 모든 화면에서 `liveOrdersEnabled=false`와 실주문 차단 표시가 유지되는지 확인한다.
 
 ## macOS home-server
 

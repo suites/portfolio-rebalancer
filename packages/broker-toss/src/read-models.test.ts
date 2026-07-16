@@ -4,6 +4,8 @@ import {
   TossAccountsResponseSchema,
   TossBuyingPowerResponseSchema,
   TossHoldingsResponseSchema,
+  TossStockWarningsResponseSchema,
+  TossStocksResponseSchema,
 } from "./read-models";
 
 describe("Toss read response schemas", () => {
@@ -77,6 +79,71 @@ describe("Toss read response schemas", () => {
     expect(
       TossBuyingPowerResponseSchema.safeParse({
         result: { currency: "USD", cashBuyingPower: 1 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("종목 기본 정보의 시장, 상태, 통화와 decimal 필드를 검증한다", () => {
+    const valid = {
+      result: [
+        {
+          symbol: "360750",
+          name: "TIGER 미국S&P500",
+          englishName: "TIGER S&P500",
+          isinCode: "KR7360750004",
+          market: "KOSPI",
+          securityType: "ETF",
+          isCommonShare: false,
+          status: "ACTIVE",
+          currency: "KRW",
+          listDate: "2020-08-07",
+          delistDate: null,
+          sharesOutstanding: "1000000",
+          leverageFactor: "1.0",
+          koreanMarketDetail: {
+            liquidationTrading: false,
+            nxtSupported: false,
+            krxTradingSuspended: false,
+            nxtTradingSuspended: null,
+          },
+        },
+      ],
+    };
+
+    expect(TossStocksResponseSchema.safeParse(valid).success).toBe(true);
+    expect(
+      TossStocksResponseSchema.safeParse({
+        result: [{ ...valid.result[0], market: "LSE" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      TossStocksResponseSchema.safeParse({
+        result: [{ ...valid.result[0], sharesOutstanding: -1 }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("종목 유의사항은 알려지지 않은 warningType도 허용하고 날짜 형식은 검증한다", () => {
+    expect(
+      TossStockWarningsResponseSchema.safeParse({
+        result: [
+          {
+            warningType: "FUTURE_WARNING_CODE",
+            exchange: "KRX",
+            startDate: "2026-03-26",
+            endDate: null,
+          },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      TossStockWarningsResponseSchema.safeParse({
+        result: [{ warningType: "", exchange: null }],
+      }).success,
+    ).toBe(false);
+    expect(
+      TossStockWarningsResponseSchema.safeParse({
+        result: [{ warningType: "VI_STATIC", startDate: "2026-03-26T09:00:00+09:00" }],
       }).success,
     ).toBe(false);
   });

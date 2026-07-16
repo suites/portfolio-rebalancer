@@ -1,22 +1,36 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 
 import {
+  InstrumentCatalogSearchResultSchema,
+  InstrumentSearchInputSchema,
+  InstrumentValidationInputSchema,
+  InstrumentValidationResultSchema,
   TargetSettingsDraftInputSchema,
   DashboardSnapshotSchema,
   type ConsoleRecordsSnapshotContract,
   type DashboardBlockReasonContract,
   type DashboardSnapshotContract,
+  type InstrumentCatalogSearchResultContract,
+  type InstrumentValidationResultContract,
   type TargetSettingsDraftInputContract,
   type TargetSettingsSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
 import {
   resolveAutoAllocationBand,
+  resolveEqualWithinAssetPoints,
   resolvePreserveCurrentWithinAssetPoints,
+  type ResolvedWithinAssetAllocation,
 } from "@portfolio-rebalancer/domain";
 
 import { ENGINE_CONFIG } from "../../../config/engine-config.token";
 import { assertVercelEgressConfigured, type EngineConfig } from "../../../config/engine.config";
 import { collectPortfolio } from "./collect-portfolio.use-case";
+import {
+  normalizeTossInstrumentValidation,
+  parseExactInstrumentQuery,
+  selectExactStock,
+  validationCandidate,
+} from "./instrument-catalog";
 import {
   getConsoleRecords,
   getTargetSettings,
@@ -27,7 +41,10 @@ import { safeErrorMetadata } from "./safe-error-metadata";
 import { CollectionError } from "../domain/collection.error";
 import { TargetSettingsError } from "../domain/target-settings.error";
 import { TossRuntimeService } from "../infrastructure/broker/toss-runtime.service";
-import { PrismaPortfolioRepository } from "../infrastructure/persistence/prisma-portfolio.repository";
+import {
+  PrismaPortfolioRepository,
+  type StoredCompositionPolicy,
+} from "../infrastructure/persistence/prisma-portfolio.repository";
 
 type BlockCode = DashboardBlockReasonContract["code"];
 
@@ -72,6 +89,33 @@ export class PortfolioService {
     return getTargetSettings(this.repository);
   }
 
+  async searchInstrumentCatalog(query: string): Promise<InstrumentCatalogSearchResultContract> {
+    const parsed = InstrumentSearchInputSchema.parse({ query });
+    const catalogRows = await this.repository.searchInstrumentCatalog(parsed.query, 20);
+    return InstrumentCatalogSearchResultSchema.parse({
+      query: parsed.query,
+      catalogScope: "LOCAL_VALIDATED",
+      candidates: catalogRows.flatMap(({ lastValidation }) =>
+        lastValidation ? [validationCandidate(lastValidation, "CATALOG")] : [],
+      ),
+    });
+  }
+
+  async validateInstrument(query: string): Promise<InstrumentValidationResultContract> {
+    const parsed = InstrumentValidationInputSchema.parse({ query });
+    const exact = parseExactInstrumentQuery(parsed.query);
+    if (!exact) {
+      throw new TargetSettingsError(
+        "INSTRUMENT_VALIDATION_FAILED",
+        "국내 6자리 종목코드, 미국 티커 또는 KR:/US: 접두 형식을 입력하세요.",
+      );
+    }
+    const validation = await this.validateExactInstrument(exact);
+    return InstrumentValidationResultSchema.parse({
+      candidate: validationCandidate(validation, "TOSS_EXACT"),
+    });
+  }
+
   async createTargetDraft(
     input: TargetSettingsDraftInputContract,
   ): Promise<TargetSettingsSnapshotContract> {
@@ -91,9 +135,8 @@ export class PortfolioService {
       .filter(({ assetKey }) => assetKey !== "CASH")
       .flatMap(({ instrumentKeys }) => instrumentKeys);
     if (
-      assignedInstrumentKeys.length !== holdings.size ||
+      assignedInstrumentKeys.length < holdings.size ||
       new Set(assignedInstrumentKeys).size !== assignedInstrumentKeys.length ||
-      assignedInstrumentKeys.some((key) => !holdings.has(key)) ||
       [...holdings.keys()].some((key) => !assignedInstrumentKeys.includes(key))
     ) {
       throw new TargetSettingsError(
@@ -101,6 +144,9 @@ export class PortfolioService {
         "모든 최신 보유종목을 안전자산, 핵심 공격자산 또는 위성 공격자산 중 정확히 한 곳에 포함해야 합니다.",
       );
     }
+    const additionalInstruments = await this.resolveAdditionalTargetInstruments(
+      assignedInstrumentKeys.filter((instrumentKey) => !holdings.has(instrumentKey)),
+    );
 
     const draft = await this.repository.createTargetDraft({
       accountId: snapshot.accountId,
@@ -118,31 +164,43 @@ export class PortfolioService {
             instruments: [],
           };
         }
-        const classHoldings = allocation.instrumentKeys.map((instrumentKey) => {
+        const classMembers = allocation.instrumentKeys.map((instrumentKey) => {
           const holding = holdings.get(instrumentKey);
-          if (!holding) {
+          const additional = additionalInstruments.get(instrumentKey);
+          if (!holding && !additional) {
             throw new TargetSettingsError(
-              "ASSET_SET_MISMATCH",
-              "최신 스냅샷에서 자산군 구성 종목을 찾을 수 없습니다.",
+              "INSTRUMENT_VALIDATION_FAILED",
+              `${instrumentKey} 종목을 토스증권에서 안전하게 검증하지 못했습니다.`,
             );
           }
-          return { instrumentKey, holding };
+          return { instrumentKey, holding, additional };
         });
-        let resolved;
-        try {
-          resolved = resolvePreserveCurrentWithinAssetPoints(
-            classHoldings.map(({ instrumentKey, holding }) => ({
-              instrumentKey,
-              valueMinor: holding.marketValueKrwMinor,
-            })),
-          );
-        } catch (error) {
-          if (classHoldings.length === 0) {
-            resolved = {
-              policyVersion: "PRESERVE_CURRENT_V1" as const,
-              instruments: [],
-            };
-          } else {
+        let resolved: ResolvedWithinAssetAllocation;
+        if (classMembers.length === 0) {
+          resolved = {
+            policyVersion:
+              allocation.compositionPolicy.mode === "EQUAL"
+                ? ("EQUAL_V1" as const)
+                : ("PRESERVE_CURRENT_V1" as const),
+            instruments: [],
+          };
+        } else if (allocation.compositionPolicy.mode === "EQUAL") {
+          resolved = resolveEqualWithinAssetPoints(allocation.instrumentKeys);
+        } else {
+          if (classMembers.some(({ holding }) => !holding)) {
+            throw new TargetSettingsError(
+              "CLASS_POLICY_REQUIRED",
+              "현재 미보유 종목을 추가한 자산군은 내부 비중을 균등 배분으로 명시적으로 선택하세요.",
+            );
+          }
+          try {
+            resolved = resolvePreserveCurrentWithinAssetPoints(
+              classMembers.map(({ instrumentKey, holding }) => ({
+                instrumentKey,
+                valueMinor: holding?.marketValueKrwMinor ?? 0n,
+              })),
+            );
+          } catch (error) {
             throw new TargetSettingsError(
               "CLASS_VALUE_UNAVAILABLE",
               error instanceof Error
@@ -152,27 +210,32 @@ export class PortfolioService {
           }
         }
         const band = resolveTargetBand(allocation);
+        const compositionPolicy: StoredCompositionPolicy =
+          resolved.policyVersion === "EQUAL_V1"
+            ? { mode: "EQUAL", version: "EQUAL_V1" }
+            : { mode: "PRESERVE_CURRENT", version: "PRESERVE_CURRENT_V1" };
         return {
           ...allocation,
           ...band,
           label: assetClassLabel(allocation.assetKey),
-          compositionPolicy: {
-            mode: "PRESERVE_CURRENT" as const,
-            version: resolved.policyVersion,
-          },
+          compositionPolicy,
           instruments: resolved.instruments.map(({ instrumentKey, withinAssetPoints }) => {
             const holding = holdings.get(instrumentKey);
-            if (!holding) {
+            const additional = additionalInstruments.get(instrumentKey);
+            if (!holding && !additional) {
               throw new TargetSettingsError(
-                "ASSET_SET_MISMATCH",
-                "최신 스냅샷에서 자산군 구성 종목을 찾을 수 없습니다.",
+                "INSTRUMENT_VALIDATION_FAILED",
+                `${instrumentKey} 종목을 토스증권에서 안전하게 검증하지 못했습니다.`,
               );
             }
             return {
-              marketCountry: holding.marketCountry,
-              listingMarket: null,
-              symbol: holding.symbol,
-              currency: holding.currency,
+              validationId: additional?.id ?? null,
+              marketCountry: holding?.marketCountry ?? additional!.marketCountry,
+              listingMarket: additional?.listingMarket ?? null,
+              symbol: holding?.symbol ?? additional!.symbol,
+              name: holding?.name ?? additional!.name,
+              englishName: additional?.englishName ?? null,
+              currency: holding?.currency ?? additional!.currency,
               withinAssetPoints: Number(withinAssetPoints),
             };
           }),
@@ -186,6 +249,63 @@ export class PortfolioService {
       );
     }
     return getTargetSettings(this.repository);
+  }
+
+  private async resolveAdditionalTargetInstruments(instrumentKeys: readonly string[]) {
+    const uniqueKeys = [...new Set(instrumentKeys)].sort();
+    const resolved = new Map<
+      string,
+      Awaited<ReturnType<PortfolioService["validateExactInstrument"]>>
+    >();
+    if (uniqueKeys.length === 0) return resolved;
+    const requests = uniqueKeys.map((instrumentKey) => {
+      const exact = parseExactInstrumentQuery(instrumentKey);
+      if (!exact) {
+        throw new TargetSettingsError(
+          "INSTRUMENT_VALIDATION_FAILED",
+          `${instrumentKey} 종목 키는 KR:종목코드 또는 US:티커 형식이어야 합니다.`,
+        );
+      }
+      return { instrumentKey, exact };
+    });
+    for (const { instrumentKey, exact } of requests) {
+      const validation = await this.validateExactInstrument(exact);
+      if (validation.targetEligibility !== "ELIGIBLE") {
+        const candidate = validationCandidate(validation, "TOSS_EXACT");
+        throw new TargetSettingsError(
+          "INSTRUMENT_VALIDATION_FAILED",
+          candidate.blockedReason ??
+            `${instrumentKey} 종목의 시장 또는 통화를 안전하게 확인하지 못했습니다.`,
+        );
+      }
+      resolved.set(instrumentKey, validation);
+    }
+    return resolved;
+  }
+
+  private async validateExactInstrument(
+    exact: NonNullable<ReturnType<typeof parseExactInstrumentQuery>>,
+  ) {
+    assertVercelEgressConfigured(this.config);
+    const source = this.tossRuntime.get().source;
+    const stocks = await source.getStocks([exact.symbol]);
+    let stock;
+    try {
+      stock = selectExactStock(stocks.result, exact);
+    } catch (error) {
+      throw new TargetSettingsError(
+        "INSTRUMENT_VALIDATION_FAILED",
+        error instanceof Error ? error.message : "토스증권 종목 응답을 정확히 대조하지 못했습니다.",
+      );
+    }
+    const warnings = await source.getStockWarnings(exact.symbol);
+    const normalized = normalizeTossInstrumentValidation({
+      request: exact,
+      stock,
+      warnings: warnings.result,
+      observedAt: new Date(),
+    });
+    return this.repository.recordInstrumentValidation(normalized);
   }
 
   async activateTargetDraft(version: number): Promise<TargetSettingsSnapshotContract> {

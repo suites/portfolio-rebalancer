@@ -18,6 +18,15 @@
 - 현재 보유종목을 SAFE/CORE/SATELLITE로 분류하고 CASH를 포함한 네 자산군 목표로 전환했다.
 - `PRESERVE_CURRENT_V1` 내부 비중과 버전 단위 종목 UNIQUE/복합 FK를 구현했다.
 - 로컬 기존 instrument 2개 backfill에서 null·버전 불일치·중복 0개를 확인하고 중복 insert가 `P2010`으로 롤백됨을 확인했다.
+- `EQUAL_V1` 결정론적 균등 배분과 미보유 종목 포함 자산군의 명시적 정책 요구를 구현했다.
+- 이름 검색은 이전 검증 결과를 가진 `LOCAL_VALIDATED` PostgreSQL 카탈로그로 제한하고,
+  Toss `getStocks`를 이름 검색에 사용하지 않는다.
+- 정확 심볼 검증은 `getStocks`와 `getStockWarnings`가 모두 성공해야
+  `InstrumentValidation` append-only 증거와 catalog 최신 포인터를 원자 저장한다.
+- 상장 상태, 목표 편입 가능 여부와 현재 거래 차단 여부를 분리했다.
+- 미보유 목표 종목의 `validationId`를 TargetInstrument와 설정 content hash에 고정했다.
+- 설정 UI에서 검색·검증과 초안 저장을 분리하고, 실패 시 입력 상태를 보존하며,
+  현재 보유종목은 필수·미보유 추가 종목만 제거 가능하게 했다.
 
 - 실제 주문 전송 차단 유지: 통과
 - 브라우저/Next의 Toss secret 접근 금지: 통과
@@ -33,6 +42,8 @@
 - 홈 외 실제 라우트와 모바일 내비게이션: 통과, 6개 SSR 경로 HTTP 200
 - 버전형 목표 설정 UI와 snapshot 고정: 통과, DRAFT/ACTIVE 분리와 ID·digest 경쟁 조건 차단
 - 수집 기록과 fail-closed 진단 화면: 통과, 현재 계좌 제한과 첫 실패 기록 포함
+- 로컬 catalog 검색과 Toss 정확 심볼·유의사항 검증 경계: 구현, 주문 쓰기 호출 없음
+- 미보유 목표 종목과 `EQUAL_V1` 설정 흐름: 구현, 전체 주문 계획과 Live 승격에는 영향 없음
 - 주문 계획·원장·paper 체결·복구: 이번 범위 밖, 화면에서 안전한 빈 상태 유지
 - URL query만으로 설정·재점검 성공 표시 불가: 통과
 - `pnpm verify` format/lint/typecheck/test/build: 통과

@@ -4,10 +4,14 @@ import {
   TossExchangeRateResponseSchema,
   TossHoldingsResponseSchema,
   TossOpenApiClient,
+  TossStockWarningsResponseSchema,
+  TossStocksResponseSchema,
   type TossAccount,
   type TossBuyingPowerResponse,
   type TossExchangeRateResponse,
   type TossHoldingsResponse,
+  type TossStockWarningsResponse,
+  type TossStocksResponse,
 } from "@portfolio-rebalancer/broker-toss";
 
 import { CollectionError } from "../../domain/collection.error";
@@ -17,6 +21,8 @@ export interface TossReadSource {
   getHoldings(accountSeq: number): Promise<TossHoldingsResponse>;
   getBuyingPower(accountSeq: number, currency: "KRW" | "USD"): Promise<TossBuyingPowerResponse>;
   getUsdKrwRate(): Promise<TossExchangeRateResponse>;
+  getStocks(symbols: readonly string[]): Promise<TossStocksResponse>;
+  getStockWarnings(symbol: string): Promise<TossStockWarningsResponse>;
 }
 
 export function createTossReadSource(credentials: {
@@ -64,6 +70,44 @@ export function createTossReadSource(credentials: {
         return TossExchangeRateResponseSchema.parse(response.data);
       } catch (error) {
         throw normalizeTossError(error, "원화 환율");
+      }
+    },
+    async getStocks(symbols) {
+      if (
+        symbols.length === 0 ||
+        symbols.length > 200 ||
+        symbols.some((symbol) => !/^[A-Za-z0-9.-]+$/.test(symbol))
+      ) {
+        throw new CollectionError(
+          "DATA_INVALID",
+          "종목 심볼 조회 요청이 올바르지 않습니다.",
+          "국내 종목코드 또는 미국 티커를 확인하세요.",
+        );
+      }
+      try {
+        const response = await client.read.getStocks({
+          params: { query: { symbols: symbols.join(",") } },
+        });
+        return TossStocksResponseSchema.parse(response.data);
+      } catch (error) {
+        throw normalizeTossError(error, "종목 기본 정보");
+      }
+    },
+    async getStockWarnings(symbol) {
+      if (!/^[A-Za-z0-9.-]+$/.test(symbol)) {
+        throw new CollectionError(
+          "DATA_INVALID",
+          "종목 유의사항 조회 심볼이 올바르지 않습니다.",
+          "국내 종목코드 또는 미국 티커를 확인하세요.",
+        );
+      }
+      try {
+        const response = await client.read.getStockWarnings({
+          params: { path: { symbol } },
+        });
+        return TossStockWarningsResponseSchema.parse(response.data);
+      } catch (error) {
+        throw normalizeTossError(error, "종목 유의사항");
       }
     },
   };

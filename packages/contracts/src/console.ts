@@ -67,10 +67,25 @@ export const TargetStoredCashPolicySchema = z.discriminatedUnion("mode", [
   FixedKrwCashPolicySchema,
 ]);
 
+export const TargetCompositionPolicyInputSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("PRESERVE_CURRENT"),
+    version: z.literal("PRESERVE_CURRENT_V1").default("PRESERVE_CURRENT_V1"),
+  }),
+  z.object({
+    mode: z.literal("EQUAL"),
+    version: z.literal("EQUAL_V1").default("EQUAL_V1"),
+  }),
+]);
+
 export const TargetAllocationInputSchema = z.object({
   assetKey: TargetAssetClassKeySchema,
   targetBasisPoints: basisPoints,
   instrumentKeys: z.array(instrumentKey).max(100),
+  compositionPolicy: TargetCompositionPolicyInputSchema.default({
+    mode: "PRESERVE_CURRENT",
+    version: "PRESERVE_CURRENT_V1",
+  }),
   bandPolicy: TargetBandPolicyInputSchema.default({
     mode: "AUTO",
     version: "MIXED_V1",
@@ -177,6 +192,10 @@ export const TargetCompositionPolicySchema = z.discriminatedUnion("mode", [
     version: z.literal("CASH_V1"),
   }),
   z.object({
+    mode: z.literal("EQUAL"),
+    version: z.literal("EQUAL_V1"),
+  }),
+  z.object({
     mode: z.literal("LEGACY_SINGLE"),
     version: z.string().min(1),
   }),
@@ -184,9 +203,12 @@ export const TargetCompositionPolicySchema = z.discriminatedUnion("mode", [
 
 export const TargetSettingsInstrumentSchema = z.object({
   instrumentKey,
+  validationId: z.uuid().nullable(),
   marketCountry: z.enum(["KR", "US"]),
   listingMarket: z.string().min(1).nullable(),
   symbol: z.string().min(1),
+  name: z.string().min(1),
+  englishName: z.string().min(1).nullable(),
   currency: z.enum(["KRW", "USD"]),
   withinAssetPoints: basisPoints,
 });

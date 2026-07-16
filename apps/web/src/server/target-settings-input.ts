@@ -3,7 +3,12 @@ import { TargetSettingsDraftInputSchema } from "@portfolio-rebalancer/contracts"
 export function targetSettingsInputFromFormData(formData: FormData) {
   const assetKeys = formData.getAll("assetKey");
   const targets = formData.getAll("targetPercent");
-  if (assetKeys.length === 0 || targets.length !== assetKeys.length) {
+  const compositionModes = formData.getAll("compositionMode");
+  if (
+    assetKeys.length === 0 ||
+    targets.length !== assetKeys.length ||
+    compositionModes.length !== assetKeys.length
+  ) {
     throw new Error("모든 자산군의 목표 비중을 입력하세요.");
   }
   const instrumentKeys = formData.getAll("instrumentKey");
@@ -38,12 +43,26 @@ export function targetSettingsInputFromFormData(formData: FormData) {
 
   return TargetSettingsDraftInputSchema.parse({
     cashPolicy,
-    allocations: assetKeys.map((key, index) => ({
-      assetKey: requiredString(key),
-      targetBasisPoints: percentToBasisPoints(requiredString(targets[index])),
-      instrumentKeys: memberships.get(requiredString(key)) ?? [],
-      bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
-    })),
+    allocations: assetKeys.map((key, index) => {
+      const assetKey = requiredString(key);
+      const compositionMode = requiredString(compositionModes[index]);
+      if (compositionMode !== "PRESERVE_CURRENT" && compositionMode !== "EQUAL") {
+        throw new Error("자산군 내부 배분 방식을 다시 선택하세요.");
+      }
+      return {
+        assetKey,
+        targetBasisPoints: percentToBasisPoints(requiredString(targets[index])),
+        instrumentKeys: memberships.get(assetKey) ?? [],
+        compositionPolicy:
+          compositionMode === "EQUAL"
+            ? ({ mode: "EQUAL", version: "EQUAL_V1" } as const)
+            : ({
+                mode: "PRESERVE_CURRENT",
+                version: "PRESERVE_CURRENT_V1",
+              } as const),
+        bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
+      };
+    }),
   });
 }
 

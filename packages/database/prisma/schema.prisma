@@ -101,17 +101,92 @@ model TargetInstrument {
   id                String  @id @default(uuid()) @db.Uuid
   allocationId      String  @map("allocation_id") @db.Uuid
   configVersionId   String  @map("config_version_id") @db.Uuid
+  validationId      String? @map("validation_id") @db.Uuid
   marketCountry     String  @map("market")
   listingMarket     String? @map("listing_market")
   symbol            String
+  name              String
+  englishName       String? @map("english_name")
   currency          String
   withinAssetPoints Int     @map("within_asset_points")
 
-  allocation TargetAllocation @relation(fields: [allocationId, configVersionId], references: [id, configVersionId], onDelete: Restrict)
+  allocation TargetAllocation      @relation(fields: [allocationId, configVersionId], references: [id, configVersionId], onDelete: Restrict)
+  validation InstrumentValidation? @relation(fields: [validationId, marketCountry, symbol], references: [id, marketCountry, symbol], onDelete: Restrict)
 
   @@unique([allocationId, marketCountry, symbol], map: "target_instrument_allocation_id_market_symbol_key")
   @@unique([configVersionId, marketCountry, symbol], map: "target_instrument_config_version_id_market_symbol_key")
+  @@index([validationId])
   @@map("target_instrument")
+}
+
+model InstrumentCatalog {
+  id               String   @id @default(uuid()) @db.Uuid
+  broker           String
+  marketCountry    String   @map("market_country")
+  symbol           String
+  listingMarket    String   @map("listing_market")
+  name             String
+  englishName      String?  @map("english_name")
+  isinCode         String   @map("isin_code")
+  currency         String
+  securityType     String   @map("security_type")
+  listingStatus    String   @map("listing_status")
+  lastValidationId String?  @unique @map("last_validation_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  validations    InstrumentValidation[] @relation("InstrumentCatalogValidations")
+  lastValidation InstrumentValidation?  @relation("InstrumentCatalogLastValidation", fields: [lastValidationId], references: [id], onDelete: Restrict)
+
+  @@unique([broker, marketCountry, symbol])
+  @@index([name])
+  @@index([englishName])
+  @@map("instrument_catalog")
+}
+
+model InstrumentValidation {
+  id                        String   @id @default(uuid()) @db.Uuid
+  catalogId                 String   @map("catalog_id") @db.Uuid
+  requestedMarketCountry    String   @map("requested_market_country")
+  requestedSymbol           String   @map("requested_symbol")
+  providerApiVersion        String   @map("provider_api_version")
+  marketCountry             String   @map("market_country")
+  symbol                    String
+  listingMarket             String   @map("listing_market")
+  name                      String
+  englishName               String?  @map("english_name")
+  isinCode                  String   @map("isin_code")
+  currency                  String
+  securityType              String   @map("security_type")
+  isCommonShare             Boolean  @map("is_common_share")
+  listingStatus             String   @map("listing_status")
+  listDate                  String?  @map("list_date")
+  delistDate                String?  @map("delist_date")
+  sharesOutstanding         String   @map("shares_outstanding")
+  leverageFactor            String?  @map("leverage_factor")
+  liquidationTrading        Boolean? @map("liquidation_trading")
+  nxtSupported              Boolean? @map("nxt_supported")
+  krxTradingSuspended       Boolean? @map("krx_trading_suspended")
+  nxtTradingSuspended       Boolean? @map("nxt_trading_suspended")
+  targetEligibility         String   @map("target_eligibility")
+  targetReasonCodes         Json     @map("target_reason_codes") @db.JsonB
+  tradeBlockedNow           Boolean  @map("trade_blocked_now")
+  tradeReasonCodes          Json     @map("trade_reason_codes") @db.JsonB
+  requiresOrderRevalidation Boolean  @map("requires_order_revalidation")
+  stockPayload              Json     @map("stock_payload") @db.JsonB
+  warningsPayload           Json     @map("warnings_payload") @db.JsonB
+  stockPayloadSha256        String   @map("stock_payload_sha256") @db.Char(64)
+  warningsPayloadSha256     String   @map("warnings_payload_sha256") @db.Char(64)
+  observedAt                DateTime @map("observed_at") @db.Timestamptz(6)
+  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  catalog           InstrumentCatalog  @relation("InstrumentCatalogValidations", fields: [catalogId], references: [id], onDelete: Restrict)
+  currentForCatalog InstrumentCatalog? @relation("InstrumentCatalogLastValidation")
+  targetInstruments TargetInstrument[]
+
+  @@unique([id, marketCountry, symbol], map: "instrument_validation_id_market_country_symbol_key")
+  @@index([marketCountry, symbol, observedAt(sort: Desc)])
+  @@map("instrument_validation")
 }
 
 model CollectionRun {

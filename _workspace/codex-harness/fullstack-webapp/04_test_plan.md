@@ -25,8 +25,19 @@
 - Web form에서 관리 현금 정책과 `CASH` 목표 제출, nullable 현재 비중은 `계산 전` 표시
 - `SAFE/CORE/SATELLITE/CASH` 정확한 cardinality와 모든 현재 보유종목의 단일 membership
 - largest-remainder, canonical tie-break, 입력 순서 불변, 일부/전체 0원 정책
+- `EQUAL_V1` 10000점 균등 배분, 나머지 canonical tie-break와 입력 순서 불변
 - 버전 내 같은 종목의 다른 allocation insert가 DB UNIQUE로 거부되고 롤백됨
 - dashboard 자산군 합산, 구성 종목 표시와 unmanaged holding 별도 차단
+- 이름 검색은 `LOCAL_VALIDATED` catalog만 읽고 Toss 호출과 DB 쓰기 0회
+- 국내 6자리 코드·미국 티커 exact parser와 요청 시장/응답 시장 단일 일치
+- `getStocks` 성공 뒤 `getStockWarnings` 실패 시 validation/catalog/target 부분 저장 0회
+- append-only validation 생성과 catalog `lastValidationId`의 원자적 갱신
+- 기본정보·유의사항 정규화 payload SHA-256과 immutable UPDATE/DELETE 거부
+- `KR_ETC`·`US_ETC`, inactive, currency mismatch, unsupported security, non-common share,
+  ETF leverage unknown/not +1와 liquidation trading의 목표 편입 차단
+- KRX 거래정지, known/unknown warning과 VI의 현재 거래 차단 및 재검증 표시
+- 미보유 목표 종목의 `validationId` FK와 target content hash 포함
+- 미보유 종목이 포함된 자산군의 `PRESERVE_CURRENT_V1` 거부와 `EQUAL_V1` 허용
 
 - Toss 계좌·보유·환율 런타임 schema rejection
 - USD/KRW bigint 환산과 KRW fractional rejection
@@ -42,8 +53,9 @@
 - format, lint, typecheck, unit tests, production build
 - 6개 실제 내비게이션 링크, 단일 aria-current와 `준비 중` 제거
 - 포트폴리오 native table caption/header/status 계약
-- 목표 합계 10000bp, band 순서, 중복·미보유 asset 거부
+- 목표 합계 10000bp, band 순서, 중복·미검증 미보유 asset 거부
 - 설정 저장의 snapshot-bound version/hash, 경쟁 수집 시 DRAFT_STALE, 단일 ACTIVE와 snapshot 재수집 요구
 - 리밸런싱이 target stale, managed cash `UNSET`/미반영에서 계획·주문을 계속 차단
 - 현재 계좌의 첫 실패를 포함한 수집 기록과 raw payload, 비밀정보, 전체 계좌번호 부재 확인
+- 검색·검증과 목표 저장의 분리, 오류 시 입력 상태 보존, 현재 보유 필수·미보유만 제거
 - 320px·390px·desktop reflow와 키보드 focus 확인

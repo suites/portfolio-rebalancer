@@ -181,9 +181,12 @@ function dashboardState({ managedCashMinor }: { readonly managedCashMinor: bigin
             },
             instruments: [
               {
+                validationId: null,
                 marketCountry: "US",
                 listingMarket: null,
                 symbol: "AAPL",
+                name: "Apple",
+                englishName: null,
                 currency: "USD",
                 withinAssetPoints: 10_000,
               },
@@ -201,9 +204,12 @@ function dashboardState({ managedCashMinor }: { readonly managedCashMinor: bigin
             },
             instruments: [
               {
+                validationId: null,
                 marketCountry: "US",
                 listingMarket: null,
                 symbol: "BRK.B",
+                name: "Berkshire",
+                englishName: null,
                 currency: "USD",
                 withinAssetPoints: 10_000,
               },

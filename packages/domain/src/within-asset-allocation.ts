@@ -1,6 +1,7 @@
 import { BASIS_POINT_SCALE } from "./allocation";
 
 export const PRESERVE_CURRENT_WITHIN_ASSET_POLICY_VERSION = "PRESERVE_CURRENT_V1" as const;
+export const EQUAL_WITHIN_ASSET_POLICY_VERSION = "EQUAL_V1" as const;
 
 export interface WithinAssetValueInput {
   readonly instrumentKey: string;
@@ -13,7 +14,8 @@ export interface ResolvedWithinAssetInstrument {
 }
 
 export interface ResolvedWithinAssetAllocation {
-  readonly policyVersion: typeof PRESERVE_CURRENT_WITHIN_ASSET_POLICY_VERSION;
+  readonly policyVersion:
+    typeof PRESERVE_CURRENT_WITHIN_ASSET_POLICY_VERSION | typeof EQUAL_WITHIN_ASSET_POLICY_VERSION;
   readonly instruments: readonly ResolvedWithinAssetInstrument[];
 }
 
@@ -67,6 +69,31 @@ export function resolvePreserveCurrentWithinAssetPoints(
     instruments: provisional.map(({ instrumentKey, withinAssetPoints }) => ({
       instrumentKey,
       withinAssetPoints: withinAssetPoints + (bonusIds.has(instrumentKey) ? 1n : 0n),
+    })),
+  };
+}
+
+export function resolveEqualWithinAssetPoints(
+  instrumentKeys: readonly string[],
+): ResolvedWithinAssetAllocation {
+  const sorted = [...instrumentKeys].sort(compareText);
+  if (sorted.length === 0) {
+    throw new Error("자산군에 구성 종목이 없습니다.");
+  }
+  if (sorted.some((instrumentKey) => instrumentKey.trim().length === 0)) {
+    throw new Error("종목 키는 비어 있을 수 없습니다.");
+  }
+  if (new Set(sorted).size !== sorted.length) {
+    throw new Error("종목 키는 서로 달라야 합니다.");
+  }
+  const count = BigInt(sorted.length);
+  const base = BASIS_POINT_SCALE / count;
+  const remaining = Number(BASIS_POINT_SCALE % count);
+  return {
+    policyVersion: EQUAL_WITHIN_ASSET_POLICY_VERSION,
+    instruments: sorted.map((instrumentKey, index) => ({
+      instrumentKey,
+      withinAssetPoints: base + (index < remaining ? 1n : 0n),
     })),
   };
 }

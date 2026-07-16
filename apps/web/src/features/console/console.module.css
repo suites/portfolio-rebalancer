@@ -263,6 +263,138 @@
   display: grid;
   gap: 1rem;
 }
+.lookupPanel {
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+}
+.lookupPanel h3 {
+  margin: 0;
+}
+.lookupPanel .fieldDescription {
+  margin: 0.35rem 0 0;
+}
+.lookupForm {
+  display: grid;
+  gap: 0.4rem;
+}
+.lookupForm > label,
+.lookupResultActions label,
+.instrumentRow label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+.lookupControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+.lookupButtonGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.lookupControls input,
+.lookupResultActions select,
+.instrumentRow select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--color-text);
+  font: inherit;
+}
+.lookupControls input:focus,
+.lookupResultActions select:focus,
+.instrumentRow select:focus {
+  border-color: var(--color-primary);
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.lookupFeedback,
+.policyNotice,
+.formError {
+  margin: 0;
+  padding: 0.8rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+.formError {
+  border: 1px solid #efb2b4;
+  background: var(--color-blocked-soft);
+  color: var(--color-blocked);
+}
+.policyNotice {
+  background: var(--color-attention-soft);
+  color: var(--color-attention);
+}
+.lookupResults {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lookupResult {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.8fr);
+  gap: 1rem;
+  padding: 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: white;
+}
+.lookupResultActions {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+}
+.instrumentEditor {
+  display: grid;
+  gap: 0.75rem;
+}
+.instrumentRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 0.75fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+.instrumentMeta {
+  display: grid;
+  gap: 0.2rem;
+  align-content: start;
+}
+.instrumentMeta span,
+.lockedInstrument {
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+}
+.blockedText {
+  color: var(--color-blocked) !important;
+}
+.attentionText {
+  margin: 0.75rem 0 0;
+  color: var(--color-attention) !important;
+  font-size: 0.8125rem;
+}
+.lockedInstrument {
+  align-self: center;
+  padding-bottom: 0.7rem;
+  white-space: nowrap;
+}
 .allocationFieldset {
   min-width: 0;
   margin: 0;
@@ -350,6 +482,14 @@
   }
   .fieldGrid {
     grid-template-columns: 1fr;
+  }
+  .lookupControls,
+  .lookupResult,
+  .instrumentRow {
+    grid-template-columns: 1fr;
+  }
+  .lockedInstrument {
+    padding-bottom: 0;
   }
   .formFooter {
     align-items: stretch;

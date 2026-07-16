@@ -4,8 +4,12 @@ import { cache } from "react";
 
 import {
   ConsoleRecordsSnapshotSchema,
+  InstrumentCatalogSearchResultSchema,
+  InstrumentValidationResultSchema,
   TargetSettingsSnapshotSchema,
   type ConsoleRecordsSnapshotContract,
+  type InstrumentCatalogSearchResultContract,
+  type InstrumentValidationResultContract,
   type TargetSettingsDraftInputContract,
   type TargetSettingsSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
@@ -58,6 +62,23 @@ export async function activateEngineTargetDraft(
 ): Promise<TargetSettingsSnapshotContract> {
   return TargetSettingsSnapshotSchema.parse(
     await requestEngine(`/internal/v1/target-settings/drafts/${version}/activate`, "POST"),
+  );
+}
+
+export async function searchEngineInstrumentCatalog(
+  query: string,
+): Promise<InstrumentCatalogSearchResultContract> {
+  const search = new URLSearchParams({ query });
+  return InstrumentCatalogSearchResultSchema.parse(
+    await requestEngine(`/internal/v1/instruments/search?${search.toString()}`, "GET"),
+  );
+}
+
+export async function validateEngineInstrument(
+  query: string,
+): Promise<InstrumentValidationResultContract> {
+  return InstrumentValidationResultSchema.parse(
+    await requestEngine("/internal/v1/instrument-validations", "POST", { query }),
   );
 }
 

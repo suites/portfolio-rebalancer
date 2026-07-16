@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolvePreserveCurrentWithinAssetPoints } from "./within-asset-allocation";
+import {
+  resolveEqualWithinAssetPoints,
+  resolvePreserveCurrentWithinAssetPoints,
+} from "./within-asset-allocation";
 
 describe("resolvePreserveCurrentWithinAssetPoints", () => {
   it("현재 평가액 비율을 largest-remainder 방식으로 정확히 10000점에 배분한다", () => {
@@ -58,5 +61,20 @@ describe("resolvePreserveCurrentWithinAssetPoints", () => {
     expect(() =>
       resolvePreserveCurrentWithinAssetPoints([{ instrumentKey: "US:AAPL", valueMinor: -1n }]),
     ).toThrow("음수");
+  });
+});
+
+describe("resolveEqualWithinAssetPoints", () => {
+  it("명시적으로 선택한 종목을 정규 키 순서로 균등 배분한다", () => {
+    expect(resolveEqualWithinAssetPoints(["US:C", "US:A", "US:B"]).instruments).toEqual([
+      { instrumentKey: "US:A", withinAssetPoints: 3_334n },
+      { instrumentKey: "US:B", withinAssetPoints: 3_333n },
+      { instrumentKey: "US:C", withinAssetPoints: 3_333n },
+    ]);
+  });
+
+  it("빈 구성과 중복 키를 거부한다", () => {
+    expect(() => resolveEqualWithinAssetPoints([])).toThrow("구성 종목");
+    expect(() => resolveEqualWithinAssetPoints(["US:A", "US:A"])).toThrow("서로 달라야");
   });
 });

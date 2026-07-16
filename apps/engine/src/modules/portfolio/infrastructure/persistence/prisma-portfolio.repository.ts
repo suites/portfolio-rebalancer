@@ -35,15 +35,50 @@ export interface StoredBuyingPowerInput {
   readonly valueKrwMinor: bigint;
 }
 
+export interface StoredInstrumentValidationInput {
+  readonly requestedMarketCountry: "KR" | "US";
+  readonly requestedSymbol: string;
+  readonly providerApiVersion: string;
+  readonly marketCountry: "KR" | "US";
+  readonly symbol: string;
+  readonly listingMarket: string;
+  readonly name: string;
+  readonly englishName: string | null;
+  readonly isinCode: string;
+  readonly currency: "KRW" | "USD";
+  readonly securityType: string;
+  readonly isCommonShare: boolean;
+  readonly listingStatus: string;
+  readonly listDate: string | null;
+  readonly delistDate: string | null;
+  readonly sharesOutstanding: string;
+  readonly leverageFactor: string | null;
+  readonly liquidationTrading: boolean | null;
+  readonly nxtSupported: boolean | null;
+  readonly krxTradingSuspended: boolean | null;
+  readonly nxtTradingSuspended: boolean | null;
+  readonly targetEligibility: "ELIGIBLE" | "BLOCKED";
+  readonly targetReasonCodes: readonly string[];
+  readonly tradeBlockedNow: boolean;
+  readonly tradeReasonCodes: readonly string[];
+  readonly requiresOrderRevalidation: boolean;
+  readonly stockPayload: unknown;
+  readonly warningsPayload: unknown;
+  readonly observedAt: Date;
+}
+
 export interface CollectionLease {
   readonly owner: string;
   readonly fencingToken: bigint;
 }
 
 export interface StoredTargetInstrumentInput {
+  readonly validationId: string | null;
   readonly marketCountry: string;
   readonly listingMarket: string | null;
   readonly symbol: string;
+  readonly name: string;
+  readonly englishName: string | null;
   readonly currency: string;
   readonly withinAssetPoints: number;
 }
@@ -59,6 +94,7 @@ export type StoredCashPolicy =
 
 export type StoredCompositionPolicy =
   | { readonly mode: "PRESERVE_CURRENT"; readonly version: "PRESERVE_CURRENT_V1" }
+  | { readonly mode: "EQUAL"; readonly version: "EQUAL_V1" }
   | { readonly mode: "NONE"; readonly version: "CASH_V1" }
   | { readonly mode: "LEGACY_SINGLE"; readonly version: string };
 
@@ -95,6 +131,105 @@ export interface ActivateTargetDraftInput {
 
 export class PrismaPortfolioRepository {
   constructor(private readonly database: DatabaseClient) {}
+
+  recordInstrumentValidation(input: StoredInstrumentValidationInput) {
+    return this.database.$transaction(async (transaction) => {
+      const stockPayload = normalizedJson(input.stockPayload);
+      const warningsPayload = normalizedJson(input.warningsPayload);
+      const catalog = await transaction.instrumentCatalog.upsert({
+        where: {
+          broker_marketCountry_symbol: {
+            broker: "toss",
+            marketCountry: input.marketCountry,
+            symbol: input.symbol,
+          },
+        },
+        create: {
+          broker: "toss",
+          marketCountry: input.marketCountry,
+          symbol: input.symbol,
+          listingMarket: input.listingMarket,
+          name: input.name,
+          englishName: input.englishName,
+          isinCode: input.isinCode,
+          currency: input.currency,
+          securityType: input.securityType,
+          listingStatus: input.listingStatus,
+        },
+        update: {
+          listingMarket: input.listingMarket,
+          name: input.name,
+          englishName: input.englishName,
+          isinCode: input.isinCode,
+          currency: input.currency,
+          securityType: input.securityType,
+          listingStatus: input.listingStatus,
+        },
+      });
+      const stockPayloadSha256 = createHash("sha256")
+        .update(JSON.stringify(stockPayload))
+        .digest("hex");
+      const warningsPayloadSha256 = createHash("sha256")
+        .update(JSON.stringify(warningsPayload))
+        .digest("hex");
+      const validation = await transaction.instrumentValidation.create({
+        data: {
+          catalogId: catalog.id,
+          requestedMarketCountry: input.requestedMarketCountry,
+          requestedSymbol: input.requestedSymbol,
+          providerApiVersion: input.providerApiVersion,
+          marketCountry: input.marketCountry,
+          symbol: input.symbol,
+          listingMarket: input.listingMarket,
+          name: input.name,
+          englishName: input.englishName,
+          isinCode: input.isinCode,
+          currency: input.currency,
+          securityType: input.securityType,
+          isCommonShare: input.isCommonShare,
+          listingStatus: input.listingStatus,
+          listDate: input.listDate,
+          delistDate: input.delistDate,
+          sharesOutstanding: input.sharesOutstanding,
+          leverageFactor: input.leverageFactor,
+          liquidationTrading: input.liquidationTrading,
+          nxtSupported: input.nxtSupported,
+          krxTradingSuspended: input.krxTradingSuspended,
+          nxtTradingSuspended: input.nxtTradingSuspended,
+          targetEligibility: input.targetEligibility,
+          targetReasonCodes: [...input.targetReasonCodes],
+          tradeBlockedNow: input.tradeBlockedNow,
+          tradeReasonCodes: [...input.tradeReasonCodes],
+          requiresOrderRevalidation: input.requiresOrderRevalidation,
+          stockPayload,
+          warningsPayload,
+          stockPayloadSha256,
+          warningsPayloadSha256,
+          observedAt: input.observedAt,
+        },
+      });
+      await transaction.instrumentCatalog.update({
+        where: { id: catalog.id },
+        data: { lastValidationId: validation.id },
+      });
+      return validation;
+    });
+  }
+
+  searchInstrumentCatalog(query: string, limit: number) {
+    return this.database.instrumentCatalog.findMany({
+      where: {
+        OR: [
+          { symbol: { contains: query, mode: "insensitive" } },
+          { name: { contains: query, mode: "insensitive" } },
+          { englishName: { contains: query, mode: "insensitive" } },
+        ],
+      },
+      orderBy: [{ marketCountry: "asc" }, { symbol: "asc" }],
+      take: limit,
+      include: { lastValidation: true },
+    });
+  }
 
   async acquireCollectionLease(owner: string): Promise<CollectionLease | null> {
     const acquired = await this.database.$queryRaw<readonly { fencingToken: bigint }[]>`
@@ -373,7 +508,7 @@ export class PrismaPortfolioRepository {
         }),
       }));
     const source: Prisma.InputJsonObject = {
-      version: 5,
+      version: 6,
       cashPolicy: { ...input.cashPolicy },
       sourceSnapshotId: input.sourceSnapshotId,
       sourceSnapshotDigest: input.sourceSnapshotDigest,
@@ -586,4 +721,8 @@ function resolveManagedCashMinor(cashPolicy: Prisma.JsonValue | undefined): bigi
     case "FIXED_KRW":
       return BigInt(parsed.amountMinor);
   }
+}
+
+function normalizedJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }

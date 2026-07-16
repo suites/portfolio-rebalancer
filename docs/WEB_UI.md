@@ -56,6 +56,9 @@ Web GUI의 기준은 다음 계층으로 관리합니다.
 - 문제·보호 조치·다음 행동 진단과 사용자가 요청하는 read-only 재점검
 - 현재 보유종목을 `SAFE/CORE/SATELLITE`로 분류하는 snapshot-bound 자산군 목표 DRAFT 저장, 별도 적용과 새 스냅샷 요구 상태
 - 자산군 내부 현재 평가액 비율을 `PRESERVE_CURRENT_V1`로 고정하고 검토 화면에 구성 종목 표시
+- 이전 Toss 검증 결과로 만든 로컬 카탈로그의 종목명 검색과 국내 코드·미국 티커의 Toss 정확 검증을 분리
+- 목표 편입 가능 여부와 현재 거래 차단 여부를 구분해 표시하고 검증된 미보유 종목을 자산군에 추가
+- 미보유 종목이 포함된 자산군의 `EQUAL_V1` 명시적 균등 배분
 - 목표 비중만 입력하고 `MIXED_V1` 정책으로 하한·상한을 서버에서 자동 계산
 - 같은 0~100% 축에서 현재·목표·허용 범위를 표시하는 `AllocationBand`
 - 비중 이탈은 `확인 필요`로, 데이터·주문 차단은 `차단`으로 구분
@@ -358,7 +361,20 @@ AI 반도체        22%   →       18%
 - `ImpactPreview`
 - `RestorePreviousVersion`
 
-기본 화면에는 관리 현금 정책, 현재 보유종목의 자산군 분류, 네 자산군 목표 비중, 자동 계산된 허용 범위, 최소 주문금액과 일일 거래 한도만 표시합니다. 사용자는 기본 흐름에서 하한·상한이나 자산군 내부 종목 비중을 직접 입력하지 않습니다. 관리 현금은 `고정 관리금액 포함` 또는 `포트폴리오 평가에서 제외` 중 하나를 명시적으로 선택하며, 전자는 원 단위 비음수 정수를 요구하고 후자는 `CASH` 목표 0%만 허용합니다. 모든 현재 보유종목은 `안전자산`, `핵심 공격자산`, `위성 공격자산` 중 정확히 한 곳에 배치해야 합니다. 내부 종목 비중은 현재 평가액을 보존해 확정하고, 평가액 합계가 0인 자산군은 자동 균등 배분하지 않습니다. 수동 허용 범위, 심각한 이탈 기준, 슬리피지, 데이터 freshness와 반올림 정책은 고급 설정으로 분리합니다. 토스의 `매수 가능 금액`은 주문 가능성 참고값으로 표시하되 `관리 현금` 또는 `총 관리 자산`으로 이름을 바꾸거나 자동 합산하지 않습니다.
+기본 화면에는 관리 현금 정책, 현재 보유종목과 사용자가 추가한 미보유 종목의 자산군 분류, 네 자산군 목표 비중, 자동 계산된 허용 범위와 자산군 내부 배분 방식만 표시합니다. 사용자는 기본 흐름에서 하한·상한이나 개별 종목 내부 비중을 직접 입력하지 않습니다. 관리 현금은 `고정 관리금액 포함` 또는 `포트폴리오 평가에서 제외` 중 하나를 명시적으로 선택하며, 전자는 원 단위 비음수 정수를 요구하고 후자는 `CASH` 목표 0%만 허용합니다. 모든 현재 보유종목은 `안전자산`, `핵심 공격자산`, `위성 공격자산` 중 정확히 한 곳에 배치해야 하며 제거할 수 없습니다. 사용자가 추가한 현재 미보유 종목만 목표 구성에서 제거할 수 있습니다.
+
+종목 찾기와 목표 초안 저장은 별도 동작입니다. 종목명 검색은 `GET /internal/v1/instruments/search`를 통해 서버가 이전에 Toss로 검증해 둔 `LOCAL_VALIDATED` 카탈로그만 조회합니다. 국내 6자리 코드, 미국 티커와 `KR:/US:` 형식은 `POST /internal/v1/instrument-validations`로 Toss 기본정보와 유의사항을 정확히 재검증합니다. 검색이나 검증만으로 설정 버전을 만들거나 적용하지 않습니다. 검색 결과에는 다음을 구분해 표시합니다.
+
+- 상장 상태
+- 장기 목표 편입 가능 여부와 차단 이유
+- 현재 거래 차단 여부와 재검증 필요 안내
+- 검증 기준 시각
+
+목표 편입이 차단된 결과에는 추가 동작을 제공하지 않습니다. 현재 거래만 차단된 종목은 장기 목표 후보로 추가할 수 있더라도, 향후 계획 생성과 주문 직전에 유의사항을 다시 확인해야 한다는 설명을 함께 표시합니다.
+
+현재 보유종목만 있는 자산군은 `현재 평가액 비율 유지(PRESERVE_CURRENT_V1)` 또는 `균등 배분(EQUAL_V1)`을 선택할 수 있습니다. 미보유 종목이 하나라도 포함된 자산군은 평가액 기반 비중을 계산할 수 없으므로 `EQUAL_V1`을 명시적으로 선택해야 합니다. 균등 배분의 나머지 점수는 정규 종목 키 순서로 결정해 합계를 정확히 10000점으로 고정합니다. 현재 보유종목의 평가액 합계가 0인 자산군은 `PRESERVE_CURRENT_V1`로 저장하지 않습니다.
+
+검색 오류, Toss 검증 실패, 목표 합계 오류 또는 초안 저장 실패가 발생해도 입력한 관리 현금, 목표 비중, 자산군 선택과 추가한 미보유 종목을 보존합니다. 오류는 폼 안의 지속되는 텍스트로 원인과 다음 행동을 알리고, 저장 성공 후에만 서버의 새 버전을 다시 읽습니다. 수동 허용 범위, 심각한 이탈 기준, 슬리피지, 데이터 freshness와 반올림 정책은 고급 설정으로 분리합니다. 토스의 `매수 가능 금액`은 주문 가능성 참고값으로 표시하되 `관리 현금` 또는 `총 관리 자산`으로 이름을 바꾸거나 자동 합산하지 않습니다.
 
 목표 비중 합이 100%가 아니면 문제만 알리지 말고 수정 방법을 제안합니다.
 
@@ -371,17 +387,17 @@ AI 반도체        22%   →       18%
 
 ## 12. 공통 컴포넌트 카탈로그
 
-| 영역       | 컴포넌트                                                                      |
-| ---------- | ----------------------------------------------------------------------------- |
-| 프레임     | `AppShell`, `GlobalSafetyBar`, `PageHeader`, `SideNavigation`                 |
-| 상태       | `ModeBadge`, `StatusBanner`, `FreshnessIndicator`, `KillSwitch`               |
-| 요약       | `SummaryCard`, `ActionRequiredCard`, `NextRunIndicator`                       |
-| 포트폴리오 | `AllocationBandBar`, `AllocationTable`, `HoldingsTree`                        |
-| 계획       | `WhyPanel`, `BeforeAfterComparison`, `OrderPlanTable`, `RiskChecklist`        |
-| 실행       | `ConfirmationDialog`, `ExecutionReceipt`, `ExecutionTimeline`, `FillProgress` |
-| 복구       | `DiagnosticCard`, `RecoveryPanel`, `ExplainDrawer`, `ErrorSummary`            |
-| 설정       | `SetupWizard`, `WeightTotalMeter`, `ConfigDiff`, `ImpactPreview`              |
-| 공통 상태  | `LoadingState`, `EmptyState`, `StaleDataState`, `BlockedState`                |
+| 영역       | 컴포넌트                                                                             |
+| ---------- | ------------------------------------------------------------------------------------ |
+| 프레임     | `AppShell`, `GlobalSafetyBar`, `PageHeader`, `SideNavigation`                        |
+| 상태       | `ModeBadge`, `StatusBanner`, `FreshnessIndicator`, `KillSwitch`                      |
+| 요약       | `SummaryCard`, `ActionRequiredCard`, `NextRunIndicator`                              |
+| 포트폴리오 | `AllocationBandBar`, `AllocationTable`, `HoldingsTree`                               |
+| 계획       | `WhyPanel`, `BeforeAfterComparison`, `OrderPlanTable`, `RiskChecklist`               |
+| 실행       | `ConfirmationDialog`, `ExecutionReceipt`, `ExecutionTimeline`, `FillProgress`        |
+| 복구       | `DiagnosticCard`, `RecoveryPanel`, `ExplainDrawer`, `ErrorSummary`                   |
+| 설정       | `SetupWizard`, `InstrumentPicker`, `WeightTotalMeter`, `ConfigDiff`, `ImpactPreview` |
+| 공통 상태  | `LoadingState`, `EmptyState`, `StaleDataState`, `BlockedState`                       |
 
 각 컴포넌트는 최소한 `loading`, `empty`, `normal`, `attention`, `blocked`, `unknown`, `error`, `disabled` 상태를 정의합니다.
 
@@ -520,7 +536,7 @@ Web GUI는 다음 수직 흐름 순서로 구현합니다.
 6. 문제 해결, 진단과 복구
 7. 접근성 E2E와 실거래 확인 흐름
 
-현재는 1~2의 생산 구현, 주문 없는 범위의 3, 목표 초안·적용의 4, 수집 기록과 read-only 진단의 일부가 완료되었습니다. Before/After 주문 계획, paper 영수증, 주문 상태 머신, recover와 live 확인은 선행 안전 모델이 없어 계속 후속 범위입니다.
+현재는 1~2의 생산 구현, 주문 없는 범위의 3, 자산군 목표·검증된 미보유 종목을 포함한 목표 초안·적용의 4, 수집 기록과 read-only 진단의 일부가 완료되었습니다. 설정 변경 Diff와 거래 영향 미리보기, Before/After 주문 계획, paper 영수증, 주문 상태 머신, recover와 live 확인은 선행 안전 모델이 없어 계속 후속 범위입니다.
 
 첫 번째 핵심 수직 슬라이스는 `계좌 스냅샷 → 리밸런싱 계획 → 위험 검사 → 주문 없는 결과 확인`입니다. 첫 구현 화면은 홈보다 리밸런싱 계획 검토 화면을 우선해도 좋습니다. 이 화면이 계산, 설명, 위험 차단과 실행 계약을 모두 연결하기 때문입니다.
 

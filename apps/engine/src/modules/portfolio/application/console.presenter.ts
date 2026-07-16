@@ -127,9 +127,12 @@ function presentVersion(version: {
     readonly bandPolicy: unknown;
     readonly compositionPolicy: unknown;
     readonly instruments: readonly {
+      readonly validationId: string | null;
       readonly marketCountry: string;
       readonly listingMarket: string | null;
       readonly symbol: string;
+      readonly name: string;
+      readonly englishName: string | null;
       readonly currency: string;
       readonly withinAssetPoints: number;
     }[];
@@ -150,9 +153,12 @@ function presentVersion(version: {
       compositionPolicy: allocation.compositionPolicy,
       instruments: allocation.instruments.map((instrument) => ({
         instrumentKey: `${instrument.marketCountry}:${instrument.symbol}`,
+        validationId: instrument.validationId,
         marketCountry: instrument.marketCountry,
         listingMarket: instrument.listingMarket,
         symbol: instrument.symbol,
+        name: instrument.name,
+        englishName: instrument.englishName,
         currency: instrument.currency,
         withinAssetPoints: instrument.withinAssetPoints,
       })),

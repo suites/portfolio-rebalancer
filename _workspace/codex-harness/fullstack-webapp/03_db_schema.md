@@ -1,23 +1,30 @@
 # Database
 
-Prisma models: BrokerAccount, TargetConfig/Version/Allocation/Instrument, CollectionRun,
-RawBrokerResponse, PortfolioSnapshot, HoldingSnapshot, BuyingPowerSnapshot, SnapshotCheck,
-RuntimeLease.
+Prisma models: BrokerAccount, TargetConfig/Version/Allocation/Instrument, InstrumentCatalog,
+InstrumentValidation, CollectionRun, RawBrokerResponse, PortfolioSnapshot, HoldingSnapshot,
+BuyingPowerSnapshot, SnapshotCheck, RuntimeLease.
 
 - accountNo는 저장하지 않는다.
 - external account reference는 HMAC, UI 표시는 마지막 4자리 마스크만 사용한다.
 - 원본 응답은 redaction 후 JSONB로 저장한다.
-- snapshot/evidence/check는 append-only이다.
+- snapshot/evidence/check와 `InstrumentValidation`은 append-only이다.
 - `BuyingPowerSnapshot`은 통화, 원문 amount, 원화 참고값, 관측 시각과
   `valuationEligible=false`를 저장하며 관리 현금과 분리한다.
 - `TargetAllocation.bandPolicy` JSONB는 `AUTO/MIXED_V1` 또는 versioned CUSTOM 정책을
   확정 lower/upper와 함께 보존한다. 기존 행은 `CUSTOM/LEGACY_V1`으로 migration한다.
 - `TargetConfigVersion.cashPolicy` JSONB는 `UNSET`, `EXCLUDED`, `FIXED_KRW` 정책을
   버전과 함께 보존한다.
-- `TargetAllocation.compositionPolicy` JSONB는 `PRESERVE_CURRENT_V1`, `CASH_V1` 또는
-  legacy 단일 종목 정책을 보존한다.
+- `TargetAllocation.compositionPolicy` JSONB는 `PRESERVE_CURRENT_V1`, `EQUAL_V1`,
+  `CASH_V1` 또는 legacy 단일 종목 정책을 보존한다.
 - `TargetInstrument.configVersionId`와 복합 FK는 부모 allocation의 버전 일치를 보장하고,
   `(configVersionId, marketCountry, symbol)` UNIQUE가 버전 내 복수 자산군 배정을 막는다.
+- `TargetInstrument.validationId`는 현재 미보유 목표 종목의 append-only 검증 증거를
+  참조한다. 이름·영문명·상장 시장도 검증 시점 metadata로 함께 고정한다.
+- `InstrumentCatalog`는 `broker + marketCountry + symbol`마다 하나이며 이름 검색용
+  metadata와 `lastValidationId` 최신 포인터를 갱신한다.
+- `InstrumentValidation`은 요청 시장·심볼, Toss API 버전, 기본정보와 유의사항 payload,
+  각각의 SHA-256, `listingStatus`, `targetEligibility`, `tradeBlockedNow`, 이유 코드와
+  관측 시각을 보존한다.
 - `PortfolioSnapshot.securitiesValueMinor`는 주식 평가액이고 DB CHECK가
   `totalValueMinor = securitiesValueMinor + COALESCE(managedCashMinor, 0)`을 보장한다.
 - snapshot의 target version ID와 managed cash는 같은 fenced transaction에서 결정한다.
@@ -25,8 +32,10 @@ RuntimeLease.
   DB 열을 정규 국가 키로 해석한다. `TargetInstrument.listingMarket`은 별도 nullable
   metadata 열이다.
 - RuntimeLease는 Vercel 수평 실행의 중복 Toss 수집을 막는다.
-- 새 테이블은 추가하지 않는다. 기존 TargetConfig 계열에 immutable version을 추가하고 이전 ACTIVE를 RETIRED로 전환한다.
-- TargetConfigVersion.source와 contentHash는 초안 원본 snapshot ID·digest를 포함한다.
+- 종목 검색·검증 슬라이스는 `InstrumentCatalog`와 `InstrumentValidation`을 추가한다.
+  주문·체결·복구 원장 테이블은 아직 추가하지 않는다.
+- TargetConfigVersion.source와 contentHash는 초안 원본 snapshot ID·digest 및
+  미보유 목표 종목의 `validationId`를 포함한다.
 - dashboard는 최신 ACTIVE 설정을 과거 snapshot에 덮어쓰지 않고 snapshot.targetConfigVersionId가 가리키는 버전만 사용한다.
 - 주문·체결·복구 원장은 아직 없으므로 UI에서도 존재하는 것처럼 표현하지 않는다.
 

@@ -6,6 +6,7 @@ import type { TossRuntimeService } from "../infrastructure/broker/toss-runtime.s
 import type {
   ActivateTargetDraftInput,
   PrismaPortfolioRepository,
+  StoredInstrumentValidationInput,
   StoredTargetDraftInput,
 } from "../infrastructure/persistence/prisma-portfolio.repository";
 import { PortfolioService } from "./portfolio.service";
@@ -21,24 +22,40 @@ const validInput = {
       assetKey: "SAFE" as const,
       targetBasisPoints: 0,
       instrumentKeys: [],
+      compositionPolicy: {
+        mode: "PRESERVE_CURRENT" as const,
+        version: "PRESERVE_CURRENT_V1" as const,
+      },
       bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
     {
       assetKey: "CORE" as const,
       targetBasisPoints: 0,
       instrumentKeys: [],
+      compositionPolicy: {
+        mode: "PRESERVE_CURRENT" as const,
+        version: "PRESERVE_CURRENT_V1" as const,
+      },
       bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
     {
       assetKey: "SATELLITE" as const,
       targetBasisPoints: 9_000,
       instrumentKeys: ["US:AAPL", "US:BRK.B"],
+      compositionPolicy: {
+        mode: "PRESERVE_CURRENT" as const,
+        version: "PRESERVE_CURRENT_V1" as const,
+      },
       bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
     {
       assetKey: "CASH" as const,
       targetBasisPoints: 1_000,
       instrumentKeys: [],
+      compositionPolicy: {
+        mode: "PRESERVE_CURRENT" as const,
+        version: "PRESERVE_CURRENT_V1" as const,
+      },
       bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
   ],
@@ -72,16 +89,22 @@ describe("PortfolioService target settings", () => {
       },
       instruments: [
         {
+          validationId: null,
           marketCountry: "US",
           listingMarket: null,
           symbol: "AAPL",
+          name: "Apple",
+          englishName: null,
           currency: "USD",
           withinAssetPoints: 6_000,
         },
         {
+          validationId: null,
           marketCountry: "US",
           listingMarket: null,
           symbol: "BRK.B",
+          name: "Berkshire",
+          englishName: null,
           currency: "USD",
           withinAssetPoints: 4_000,
         },
@@ -108,24 +131,40 @@ describe("PortfolioService target settings", () => {
           assetKey: "SAFE" as const,
           targetBasisPoints: 0,
           instrumentKeys: [],
+          compositionPolicy: {
+            mode: "PRESERVE_CURRENT" as const,
+            version: "PRESERVE_CURRENT_V1" as const,
+          },
           bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
         },
         {
           assetKey: "CORE" as const,
           targetBasisPoints: 0,
           instrumentKeys: [],
+          compositionPolicy: {
+            mode: "PRESERVE_CURRENT" as const,
+            version: "PRESERVE_CURRENT_V1" as const,
+          },
           bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
         },
         {
           assetKey: "SATELLITE" as const,
           targetBasisPoints: 9_000,
           instrumentKeys: ["US:AAPL"],
+          compositionPolicy: {
+            mode: "PRESERVE_CURRENT" as const,
+            version: "PRESERVE_CURRENT_V1" as const,
+          },
           bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
         },
         {
           assetKey: "CASH" as const,
           targetBasisPoints: 1_000,
           instrumentKeys: [],
+          compositionPolicy: {
+            mode: "PRESERVE_CURRENT" as const,
+            version: "PRESERVE_CURRENT_V1" as const,
+          },
           bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
         },
       ],
@@ -190,13 +229,136 @@ describe("PortfolioService target settings", () => {
     } satisfies Partial<TargetSettingsError>);
     expect(repository.createTargetDraft).not.toHaveBeenCalled();
   });
+
+  it("이름 검색은 로컬 검증 카탈로그만 읽고 Toss를 호출하지 않는다", async () => {
+    const repository = repositoryMock();
+    repository.searchInstrumentCatalog.mockResolvedValue([
+      {
+        lastValidation: validationRecord(),
+      },
+    ]);
+    const get = vi.fn();
+    const service = createService(repository, { get });
+
+    const result = await service.searchInstrumentCatalog("애플");
+
+    expect(result).toMatchObject({
+      catalogScope: "LOCAL_VALIDATED",
+      candidates: [{ instrumentKey: "US:SGOV" }],
+    });
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("미보유 종목은 기본정보와 경고를 다시 검증하고 EQUAL 정책으로만 저장한다", async () => {
+    const repository = repositoryMock();
+    repository.recordInstrumentValidation.mockImplementation((input) =>
+      Promise.resolve(validationRecordFromInput(input)),
+    );
+    const source = {
+      getStocks: vi.fn().mockResolvedValue({ result: [stockFixture()] }),
+      getStockWarnings: vi.fn().mockResolvedValue({ result: [] }),
+    };
+    const service = createService(repository, {
+      get: vi.fn().mockReturnValue({ source }),
+    });
+    const input = {
+      ...validInput,
+      allocations: validInput.allocations.map((allocation) =>
+        allocation.assetKey === "CORE"
+          ? {
+              ...allocation,
+              targetBasisPoints: 1_000,
+              instrumentKeys: ["US:SGOV"],
+              compositionPolicy: {
+                mode: "EQUAL" as const,
+                version: "EQUAL_V1" as const,
+              },
+            }
+          : allocation.assetKey === "SATELLITE"
+            ? { ...allocation, targetBasisPoints: 8_000 }
+            : allocation,
+      ),
+    };
+
+    await service.createTargetDraft(input);
+
+    expect(source.getStocks).toHaveBeenCalledWith(["SGOV"]);
+    expect(source.getStockWarnings).toHaveBeenCalledWith("SGOV");
+    expect(
+      repository.createTargetDraft.mock.calls[0]?.[0].allocations.find(
+        ({ assetKey }) => assetKey === "CORE",
+      ),
+    ).toMatchObject({
+      compositionPolicy: { mode: "EQUAL", version: "EQUAL_V1" },
+      instruments: [
+        {
+          validationId: "2bf2e437-c981-4dbd-842e-d0d9a11ac318",
+          marketCountry: "US",
+          listingMarket: "NYSE",
+          symbol: "SGOV",
+          name: "아이셰어즈 0-3개월 미국채",
+          currency: "USD",
+          withinAssetPoints: 10_000,
+        },
+      ],
+    });
+  });
+
+  it("미보유 종목을 현재 평가액 보존 정책에 넣으면 저장하지 않는다", async () => {
+    const repository = repositoryMock();
+    repository.recordInstrumentValidation.mockImplementation((input) =>
+      Promise.resolve(validationRecordFromInput(input)),
+    );
+    const service = createService(repository, {
+      get: vi.fn().mockReturnValue({
+        source: {
+          getStocks: vi.fn().mockResolvedValue({ result: [stockFixture()] }),
+          getStockWarnings: vi.fn().mockResolvedValue({ result: [] }),
+        },
+      }),
+    });
+    const input = {
+      ...validInput,
+      allocations: validInput.allocations.map((allocation) =>
+        allocation.assetKey === "SATELLITE"
+          ? {
+              ...allocation,
+              instrumentKeys: [...allocation.instrumentKeys, "US:SGOV"],
+            }
+          : allocation,
+      ),
+    };
+
+    await expect(service.createTargetDraft(input)).rejects.toMatchObject({
+      code: "CLASS_POLICY_REQUIRED",
+    });
+    expect(repository.createTargetDraft).not.toHaveBeenCalled();
+  });
+
+  it("종목 유의사항 조회가 실패하면 카탈로그나 검증 증거를 쓰지 않는다", async () => {
+    const repository = repositoryMock();
+    const service = createService(repository, {
+      get: vi.fn().mockReturnValue({
+        source: {
+          getStocks: vi.fn().mockResolvedValue({ result: [stockFixture()] }),
+          getStockWarnings: vi.fn().mockRejectedValue(new Error("warning unavailable")),
+        },
+      }),
+    });
+
+    await expect(service.validateInstrument("US:SGOV")).rejects.toThrow("warning unavailable");
+    expect(repository.recordInstrumentValidation).not.toHaveBeenCalled();
+  });
 });
 
-function createService(repository: ReturnType<typeof repositoryMock>) {
+function createService(
+  repository: ReturnType<typeof repositoryMock>,
+  tossRuntime: { readonly get?: ReturnType<typeof vi.fn> } = {},
+) {
   return new PortfolioService(
     {} as EngineConfig,
     repository as unknown as PrismaPortfolioRepository,
-    {} as TossRuntimeService,
+    tossRuntime as unknown as TossRuntimeService,
   );
 }
 
@@ -258,5 +420,60 @@ function repositoryMock(options?: {
     activateTargetDraft: vi
       .fn<(input: ActivateTargetDraftInput) => Promise<object>>()
       .mockResolvedValue({}),
+    searchInstrumentCatalog: vi.fn().mockResolvedValue([]),
+    recordInstrumentValidation:
+      vi.fn<
+        (
+          input: StoredInstrumentValidationInput,
+        ) => Promise<StoredInstrumentValidationInput & { readonly id: string }>
+      >(),
+  };
+}
+
+function validationRecord() {
+  return {
+    id: "2bf2e437-c981-4dbd-842e-d0d9a11ac318",
+    marketCountry: "US",
+    symbol: "SGOV",
+    listingMarket: "NYSE",
+    name: "아이셰어즈 0-3개월 미국채",
+    englishName: "iShares 0-3 Month Treasury Bond ETF",
+    currency: "USD",
+    securityType: "FOREIGN_ETF",
+    listingStatus: "ACTIVE",
+    targetEligibility: "ELIGIBLE",
+    targetReasonCodes: [],
+    tradeBlockedNow: false,
+    tradeReasonCodes: [],
+    requiresOrderRevalidation: false,
+    observedAt: new Date("2026-07-16T13:00:00.000Z"),
+  };
+}
+
+function validationRecordFromInput(
+  input: StoredInstrumentValidationInput,
+): StoredInstrumentValidationInput & { readonly id: string } {
+  return {
+    id: "2bf2e437-c981-4dbd-842e-d0d9a11ac318",
+    ...input,
+  };
+}
+
+function stockFixture() {
+  return {
+    symbol: "SGOV",
+    name: "아이셰어즈 0-3개월 미국채",
+    englishName: "iShares 0-3 Month Treasury Bond ETF",
+    isinCode: "US46436E7186",
+    market: "NYSE" as const,
+    securityType: "FOREIGN_ETF" as const,
+    isCommonShare: false,
+    status: "ACTIVE" as const,
+    currency: "USD" as const,
+    listDate: "2020-05-26",
+    delistDate: null,
+    sharesOutstanding: "1000000",
+    leverageFactor: "1.0",
+    koreanMarketDetail: null,
   };
 }

@@ -8,6 +8,7 @@ import { SettingsScreen } from "./settings-screen";
 vi.mock("@/app/(console)/actions", () => ({
   activateTargetDraftAction: vi.fn(),
   saveTargetDraftAction: vi.fn(),
+  searchTargetInstrumentAction: vi.fn(),
 }));
 
 describe("SettingsScreen", () => {
@@ -105,9 +106,22 @@ describe("SettingsScreen", () => {
     expect(html).toContain('name="cashMode"');
     expect(html).toContain('name="managedCashWon"');
     expect(html).toContain('name="instrumentClass"');
+    expect(html).toContain('name="compositionMode"');
+    expect(html).toContain("LOCAL_VALIDATED");
+    expect(html).toContain("국내 6자리");
+    expect(html).toContain('name="lookupMode"');
+    expect(html).toContain('value="CATALOG"');
+    expect(html).toContain('value="EXACT"');
+    expect(html).toContain("로컬 이름 검색");
+    expect(html).toContain("코드·티커 정확 검증");
     expect(html).toContain("안전자산");
     expect(html).toContain("핵심 공격자산");
     expect(html).toContain("위성 공격자산");
     expect(html).toContain("계산 전");
+
+    const firstFormStart = html.indexOf("<form");
+    const firstFormEnd = html.indexOf("</form>", firstFormStart);
+    const secondFormStart = html.indexOf("<form", firstFormStart + 1);
+    expect(firstFormEnd).toBeLessThan(secondFormStart);
   });
 });

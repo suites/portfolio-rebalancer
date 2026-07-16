@@ -23,12 +23,16 @@ describe("target settings form parser", () => {
     formData.append("instrumentClass", "SATELLITE");
     formData.append("assetKey", "SAFE");
     formData.append("targetPercent", "0");
+    formData.append("compositionMode", "PRESERVE_CURRENT");
     formData.append("assetKey", "CORE");
     formData.append("targetPercent", "0");
+    formData.append("compositionMode", "PRESERVE_CURRENT");
     formData.append("assetKey", "SATELLITE");
     formData.append("targetPercent", "90");
+    formData.append("compositionMode", "EQUAL");
     formData.append("assetKey", "CASH");
     formData.append("targetPercent", "10");
+    formData.append("compositionMode", "PRESERVE_CURRENT");
 
     expect(targetSettingsInputFromFormData(formData)).toEqual({
       cashPolicy: {
@@ -41,24 +45,37 @@ describe("target settings form parser", () => {
           assetKey: "SAFE",
           targetBasisPoints: 0,
           instrumentKeys: [],
+          compositionPolicy: {
+            mode: "PRESERVE_CURRENT",
+            version: "PRESERVE_CURRENT_V1",
+          },
           bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
         },
         {
           assetKey: "CORE",
           targetBasisPoints: 0,
           instrumentKeys: [],
+          compositionPolicy: {
+            mode: "PRESERVE_CURRENT",
+            version: "PRESERVE_CURRENT_V1",
+          },
           bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
         },
         {
           assetKey: "SATELLITE",
           targetBasisPoints: 9_000,
           instrumentKeys: ["US:AAPL", "US:BRK.B"],
+          compositionPolicy: { mode: "EQUAL", version: "EQUAL_V1" },
           bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
         },
         {
           assetKey: "CASH",
           targetBasisPoints: 1_000,
           instrumentKeys: [],
+          compositionPolicy: {
+            mode: "PRESERVE_CURRENT",
+            version: "PRESERVE_CURRENT_V1",
+          },
           bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
         },
       ],
@@ -72,12 +89,16 @@ describe("target settings form parser", () => {
     formData.append("instrumentClass", "SATELLITE");
     formData.append("assetKey", "SAFE");
     formData.append("targetPercent", "0");
+    formData.append("compositionMode", "PRESERVE_CURRENT");
     formData.append("assetKey", "CORE");
     formData.append("targetPercent", "0");
+    formData.append("compositionMode", "PRESERVE_CURRENT");
     formData.append("assetKey", "SATELLITE");
     formData.append("targetPercent", "100");
+    formData.append("compositionMode", "PRESERVE_CURRENT");
     formData.append("assetKey", "CASH");
     formData.append("targetPercent", "0");
+    formData.append("compositionMode", "PRESERVE_CURRENT");
 
     expect(targetSettingsInputFromFormData(formData).cashPolicy).toEqual({
       mode: "EXCLUDED",
@@ -90,6 +111,14 @@ describe("target settings form parser", () => {
     formData.append("cashMode", "EXCLUDED");
     formData.append("instrumentKey", "US:AAPL");
     formData.append("instrumentClass", "");
+
+    expect(() => targetSettingsInputFromFormData(formData)).toThrow("모든 자산군");
+  });
+
+  it("자산군별 내부 배분 방식이 누락되면 거부한다", () => {
+    const formData = new FormData();
+    formData.append("assetKey", "SAFE");
+    formData.append("targetPercent", "100");
 
     expect(() => targetSettingsInputFromFormData(formData)).toThrow("모든 자산군");
   });

@@ -94,7 +94,7 @@ export async function getDashboard(
           targetConfigured: true,
           instruments: targetHoldings.map(({ instrumentKey, instrument, holding }) => ({
             id: instrumentKey,
-            label: holding?.name ?? instrument.symbol,
+            label: holding?.name ?? instrument.name,
             description: holding
               ? `${holding.marketCountry} · ${holding.currency} · ${holding.quantity}주`
               : `${instrument.marketCountry} · ${instrument.currency} · 현재 미보유`,

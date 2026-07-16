@@ -22,6 +22,8 @@ describe("collectPortfolio", () => {
       getHoldings: vi.fn(),
       getBuyingPower: vi.fn(),
       getUsdKrwRate: vi.fn(),
+      getStocks: vi.fn(),
+      getStockWarnings: vi.fn(),
     };
     const repository = {
       acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
@@ -56,6 +58,8 @@ describe("collectPortfolio", () => {
         }),
       ),
       getUsdKrwRate: vi.fn(),
+      getStocks: vi.fn(),
+      getStockWarnings: vi.fn(),
     };
     const completeCollection = vi.fn().mockResolvedValue(true);
     const repository = {
@@ -127,6 +131,8 @@ describe("collectPortfolio", () => {
           validUntil: "2026-07-16T09:01:00+09:00",
         },
       }),
+      getStocks: vi.fn(),
+      getStockWarnings: vi.fn(),
     };
     const completeCollection = vi.fn().mockResolvedValue(true);
     const repository = {
@@ -178,6 +184,8 @@ describe("collectPortfolio", () => {
         }),
       ),
       getUsdKrwRate: vi.fn(),
+      getStocks: vi.fn(),
+      getStockWarnings: vi.fn(),
     };
     const completeCollection = vi.fn();
     const failCollection = vi.fn().mockResolvedValue(undefined);
@@ -210,6 +218,8 @@ describe("collectPortfolio", () => {
       getHoldings: vi.fn(),
       getBuyingPower: vi.fn(),
       getUsdKrwRate: vi.fn(),
+      getStocks: vi.fn(),
+      getStockWarnings: vi.fn(),
     };
     const repository = {
       acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
@@ -242,6 +252,8 @@ describe("collectPortfolio", () => {
         result: { currency: "KRW" as const, cashBuyingPower: "0" },
       }),
       getUsdKrwRate: vi.fn(),
+      getStocks: vi.fn(),
+      getStockWarnings: vi.fn(),
     };
     const failCollection = vi.fn().mockResolvedValue(undefined);
     const repository = {

@@ -9,13 +9,18 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
   Res,
   ServiceUnavailableException,
   UseGuards,
 } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 
-import { TargetSettingsDraftInputSchema } from "@portfolio-rebalancer/contracts";
+import {
+  InstrumentSearchInputSchema,
+  InstrumentValidationInputSchema,
+  TargetSettingsDraftInputSchema,
+} from "@portfolio-rebalancer/contracts";
 
 import { CronTokenGuard } from "../../../common/auth/guards/cron-token.guard";
 import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
@@ -62,6 +67,46 @@ export class PortfolioController {
       return await this.portfolio.targetSettings();
     } catch (error) {
       throwTargetSettingsHttpError(error);
+    }
+  }
+
+  @Get("instruments/search")
+  @UseGuards(ServiceTokenGuard)
+  @Header("cache-control", "no-store")
+  async searchInstruments(@Query("query") query: unknown) {
+    const parsed = InstrumentSearchInputSchema.safeParse({ query });
+    if (!parsed.success) {
+      throw new BadRequestException({
+        code: "INSTRUMENT_SEARCH_INVALID",
+        message: "검색어를 1자 이상 입력하세요.",
+      });
+    }
+    try {
+      return await this.portfolio.searchInstrumentCatalog(parsed.data.query);
+    } catch {
+      throw new ServiceUnavailableException({
+        code: "INSTRUMENT_SEARCH_UNAVAILABLE",
+        message: "서버 종목 카탈로그를 안전하게 검색하지 못했습니다.",
+      });
+    }
+  }
+
+  @Post("instrument-validations")
+  @HttpCode(200)
+  @UseGuards(ServiceTokenGuard)
+  @Header("cache-control", "no-store")
+  async validateInstrument(@Body() body: unknown) {
+    const parsed = InstrumentValidationInputSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        code: "INSTRUMENT_VALIDATION_INVALID",
+        message: parsed.error.issues[0]?.message ?? "국내 종목코드 또는 미국 티커를 확인하세요.",
+      });
+    }
+    try {
+      return await this.portfolio.validateInstrument(parsed.data.query);
+    } catch (error) {
+      throwInstrumentValidationHttpError(error);
     }
   }
 
@@ -115,5 +160,15 @@ function throwTargetSettingsHttpError(error: unknown): never {
   throw new ServiceUnavailableException({
     code: "TARGET_SETTINGS_UNAVAILABLE",
     message: "목표 설정 저장소를 안전하게 확인하지 못했습니다.",
+  });
+}
+
+function throwInstrumentValidationHttpError(error: unknown): never {
+  if (error instanceof TargetSettingsError) {
+    throw new BadRequestException({ code: error.code, message: error.message });
+  }
+  throw new ServiceUnavailableException({
+    code: "INSTRUMENT_VALIDATION_UNAVAILABLE",
+    message: "토스증권 종목 기본정보와 유의사항을 모두 확인하지 못해 검증을 중단했습니다.",
   });
 }

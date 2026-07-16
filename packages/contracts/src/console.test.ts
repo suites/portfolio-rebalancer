@@ -188,9 +188,12 @@ describe("target settings contract", () => {
             instruments: [
               {
                 instrumentKey: "US:AAPL",
+                validationId: null,
                 marketCountry: "US",
                 listingMarket: "NASDAQ",
                 symbol: "AAPL",
+                name: "Apple",
+                englishName: null,
                 currency: "USD",
                 withinAssetPoints: 10_000,
               },

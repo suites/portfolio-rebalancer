@@ -3,15 +3,12 @@ import Link from "next/link";
 import type { TargetSettingsSnapshotContract } from "@portfolio-rebalancer/contracts";
 import { Badge, Button, Surface } from "@portfolio-rebalancer/ui";
 
-import { activateTargetDraftAction, saveTargetDraftAction } from "@/app/(console)/actions";
-import {
-  formatBasisPoints,
-  formatCurrentWeight,
-  formatObservedAt,
-  formatWon,
-} from "@/features/console/format";
+import { activateTargetDraftAction } from "@/app/(console)/actions";
+import { formatBasisPoints, formatObservedAt, formatWon } from "@/features/console/format";
 import { ConsolePageHeader } from "@/features/console/page-header";
 import styles from "@/features/console/console.module.css";
+
+import { TargetSettingsEditor } from "./target-settings-editor";
 
 export function SettingsScreen({
   settings,
@@ -20,7 +17,6 @@ export function SettingsScreen({
   readonly settings: TargetSettingsSnapshotContract;
   readonly status: string | undefined;
 }) {
-  const editable = settings.draftVersion ?? settings.activeVersion;
   const feedback = feedbackFor(settings.state === "UNAVAILABLE" ? "unavailable" : status);
   return (
     <>
@@ -79,121 +75,7 @@ export function SettingsScreen({
               ) : null}
             </div>
             {settings.assets.length > 0 ? (
-              <form className={styles.settingsForm} action={saveTargetDraftAction}>
-                <fieldset className={styles.allocationFieldset}>
-                  <legend>관리 현금 기준</legend>
-                  <p className={styles.fieldDescription}>
-                    토스의 매수 가능 금액은 평가용 현금으로 자동 사용하지 않습니다. 실제로 관리할
-                    원화 금액을 고정하거나 포트폴리오 평가에서 제외하세요.
-                  </p>
-                  <div className={styles.fieldGrid}>
-                    <label>
-                      처리 방식
-                      <select
-                        name="cashMode"
-                        defaultValue={
-                          editable?.cashPolicy.mode === "UNSET"
-                            ? ""
-                            : (editable?.cashPolicy.mode ?? "")
-                        }
-                        required
-                      >
-                        <option value="" disabled>
-                          선택하세요
-                        </option>
-                        <option value="FIXED_KRW">고정 관리금액 포함</option>
-                        <option value="EXCLUDED">포트폴리오 평가에서 제외</option>
-                      </select>
-                    </label>
-                    <label>
-                      고정 관리금액 (원)
-                      <input
-                        name="managedCashWon"
-                        type="number"
-                        inputMode="numeric"
-                        min="0"
-                        step="1"
-                        defaultValue={
-                          editable?.cashPolicy.mode === "FIXED_KRW"
-                            ? editable.cashPolicy.amountMinor
-                            : ""
-                        }
-                      />
-                    </label>
-                  </div>
-                  <p className={styles.fieldDescription}>
-                    제외를 선택하면 관리 현금 목표는 0%여야 합니다. 고정 금액은 다음 계좌 수집부터
-                    총 관리 자산과 현금 비중에 포함됩니다.
-                  </p>
-                </fieldset>
-                <fieldset className={styles.allocationFieldset}>
-                  <legend>현재 보유종목 분류</legend>
-                  <p className={styles.fieldDescription}>
-                    각 종목을 안전자산, 핵심 공격자산 또는 위성 공격자산 중 한 곳에 배치하세요.
-                    자산군 내부 목표는 현재 평가액 비율을 보존합니다.
-                  </p>
-                  <div className={styles.settingsForm}>
-                    {settings.holdings.map((holding) => (
-                      <div className={styles.fieldGrid} key={holding.instrumentKey}>
-                        <input type="hidden" name="instrumentKey" value={holding.instrumentKey} />
-                        <label>
-                          {holding.label} 자산군
-                          <select
-                            name="instrumentClass"
-                            defaultValue={assignedAssetClass(editable, holding.instrumentKey)}
-                            required
-                          >
-                            <option value="" disabled>
-                              선택하세요
-                            </option>
-                            <option value="SAFE">안전자산</option>
-                            <option value="CORE">핵심 공격자산</option>
-                            <option value="SATELLITE">위성 공격자산</option>
-                          </select>
-                        </label>
-                        <p className={styles.fieldDescription}>
-                          {holding.description} · 현재{" "}
-                          {formatCurrentWeight(holding.currentBasisPointHundredths)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </fieldset>
-                {settings.assets.map((asset) => {
-                  const configured = editable?.allocations.find(
-                    ({ assetKey }) => assetKey === asset.assetKey,
-                  );
-                  return (
-                    <fieldset className={styles.allocationFieldset} key={asset.assetKey}>
-                      <legend>{asset.label}</legend>
-                      <p className={styles.fieldDescription}>
-                        {asset.description} · 현재{" "}
-                        {asset.currentBasisPointHundredths === null
-                          ? "계산 전"
-                          : formatCurrentWeight(asset.currentBasisPointHundredths)}
-                      </p>
-                      <input type="hidden" name="assetKey" value={asset.assetKey} />
-                      <div className={styles.fieldGrid}>
-                        <PercentField
-                          label="목표"
-                          name="targetPercent"
-                          value={configured?.targetBasisPoints}
-                        />
-                      </div>
-                      <p className={styles.fieldDescription}>
-                        {configured
-                          ? `저장된 허용 범위 ${formatBasisPoints(
-                              configured.lowerBasisPoints,
-                            )}–${formatBasisPoints(configured.upperBasisPoints)}`
-                          : "초안 저장 시 MIXED_V1 정책으로 하한·상한을 계산합니다."}
-                      </p>
-                    </fieldset>
-                  );
-                })}
-                <div className={styles.formFooter}>
-                  <Button type="submit">목표 초안 저장</Button>
-                </div>
-              </form>
+              <TargetSettingsEditor settings={settings} />
             ) : (
               <div className={styles.emptyState}>
                 <strong>
@@ -277,60 +159,12 @@ export function SettingsScreen({
   );
 }
 
-function assignedAssetClass(
-  version: TargetSettingsSnapshotContract["draftVersion"],
-  instrumentKey: string,
-): "" | "SAFE" | "CORE" | "SATELLITE" {
-  const allocation = version?.allocations.find(
-    ({ assetKey, instruments }) =>
-      (assetKey === "SAFE" || assetKey === "CORE" || assetKey === "SATELLITE") &&
-      instruments.some((instrument) => instrument.instrumentKey === instrumentKey),
-  );
-  return allocation?.assetKey === "SAFE" ||
-    allocation?.assetKey === "CORE" ||
-    allocation?.assetKey === "SATELLITE"
-    ? allocation.assetKey
-    : "";
-}
-
 function cashPolicyLabel(
   policy: NonNullable<TargetSettingsSnapshotContract["draftVersion"]>["cashPolicy"],
 ): string {
   if (policy.mode === "UNSET") return "미설정";
   if (policy.mode === "EXCLUDED") return "평가에서 제외";
   return `${formatWon(policy.amountMinor)} 고정`;
-}
-
-function PercentField({
-  label,
-  name,
-  value,
-}: {
-  readonly label: string;
-  readonly name: string;
-  readonly value: number | undefined;
-}) {
-  return (
-    <label>
-      {label} (%)
-      <input
-        name={name}
-        type="number"
-        inputMode="decimal"
-        min="0"
-        max="100"
-        step="0.01"
-        defaultValue={value === undefined ? "" : basisPointsInput(value)}
-        required
-      />
-    </label>
-  );
-}
-
-function basisPointsInput(value: number): string {
-  const whole = Math.trunc(value / 100);
-  const fraction = value % 100;
-  return fraction === 0 ? `${whole}` : `${whole}.${fraction.toString().padStart(2, "0")}`;
 }
 
 function feedbackFor(
