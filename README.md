@@ -42,7 +42,7 @@ pnpm db:migrate:deploy
 pnpm dev
 ```
 
-루트 `.env`에 토스 read-only 자격증명을 넣고 브라우저에서 `http://127.0.0.1:3000`을 엽니다. 첫 화면은 저장된 스냅샷이 없을 때 한 번 실제 계좌 수집을 시도합니다. 전체 계좌번호와 토큰은 저장하거나 브라우저로 전달하지 않으며 주문을 제출하지 않습니다.
+`apps/engine/.env.example`, `apps/web/.env.example`, `packages/database/.env.example`을 각각 같은 위치의 `.env.local`로 복사하고 로컬 값을 설정합니다. 토스 read-only 자격증명은 engine에만 두고 브라우저에서 `http://127.0.0.1:3000`을 엽니다. 첫 화면은 저장된 스냅샷이 없을 때 한 번 실제 계좌 수집을 시도합니다. 전체 계좌번호와 토큰은 저장하거나 브라우저로 전달하지 않으며 주문을 제출하지 않습니다.
 
 전체 검증은 다음 명령으로 실행합니다.
 
@@ -110,6 +110,8 @@ engine 프로젝트의 Root Directory는 `apps/engine`으로 지정하고 외부
 토스증권은 허용 IP를 요구하므로 engine 프로젝트에서 Vercel Pro Static IPs 또는 Enterprise Secure Compute를 활성화해야 합니다. 해당 IP를 토스증권에 등록한 뒤에만 `TOSS_EGRESS_ALLOWLIST_CONFIRMED=true`를 설정하세요. 일반 Vercel 동적 출구 IP에서는 실제 수집이 코드에서 차단됩니다.
 
 Production engine에는 `TOSSINVEST_CLIENT_ID`, `TOSSINVEST_CLIENT_SECRET`, `DATABASE_URL`, `ENGINE_SERVICE_TOKEN`, `CRON_SECRET`을 민감 환경변수로 설정합니다. web에는 `ENGINE_INTERNAL_URL`과 같은 `ENGINE_SERVICE_TOKEN`만 설정합니다. Preview에는 운영 토스 키를 주입하지 않는 것을 기본으로 합니다.
+
+로컬 환경변수도 같은 권한 경계를 사용합니다. Web은 `apps/web/.env.local`, engine은 `apps/engine/.env.local`, Prisma migration은 `packages/database/.env.local`을 읽습니다. `.env.local`은 Git에 포함하지 않으며, `vercel env pull`은 파일을 덮어쓰므로 앱별 파일에 수동 override와 Vercel pull 결과를 섞지 않습니다.
 
 ## 안전 원칙
 

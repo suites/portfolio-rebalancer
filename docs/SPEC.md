@@ -86,6 +86,8 @@ apps/web -> apps/engine -> application -> broker ports -> domain
 - `apps/engine`: Toss 자격증명, 수집, Prisma와 PostgreSQL을 소유하는 NestJS 11/Vercel Function. Fastify adapter를 사용하며 `system`과 `portfolio` feature module, Controller, Guard와 singleton Provider로 구성한다. DB client 수명주기는 `PrismaModule`의 `PrismaService`가 관리한다. Vercel 프로젝트 Root Directory는 `apps/engine`이고 framework slug는 `nestjs`로 고정한다. Vercel 런타임에서는 platform `PORT`를 우선하며 Function 메모리는 Fluid Compute의 Dashboard 설정이 소유한다.
 - `apps/web`: engine 결과를 공유 Zod 계약으로 재검증한 뒤 브라우저에 전달
 
+로컬 비밀정보도 실행 경계별 `.env.local`로 분리한다. Web은 engine URL과 service token만, engine은 Toss 자격증명과 runtime database URL만, Prisma migration은 direct database URL만 소유한다. 루트 `.env`를 런타임 공용 secret store로 사용하지 않는다. Vercel에서는 같은 경계를 Project와 Production/Preview 환경 단위로 적용한다.
+
 새 증권사는 별도 어댑터 패키지에서 중립 포트를 구현하고, 지원하지 않는 기능은 capability에 선언하지 않습니다. 최소 공통분모를 넓혀 증권사 차이를 숨기지 않으며, 필수 capability가 없으면 주문 계획을 만들지 않고 한국어 오류로 차단합니다. 브로커 원본 응답과 상태는 대사·감사를 위해 보존하되 도메인 모델과 분리합니다.
 
 `GET /api/v1/brokers`는 engine이 저장한 최신 스냅샷의 실제 연결 상태와 `read_only_adapter` 상태를 반환합니다. 공식 OpenAPI와 transport가 제공하는 기능 목록은 실제 계좌에 연결된 제품 capability와 다른 계약입니다. UI와 애플리케이션은 연결·어댑터 상태를 함께 확인하고, transport 목록만으로 기능을 활성화하지 않습니다.

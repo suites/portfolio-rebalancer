@@ -8,7 +8,7 @@
 - [x] V8 테스트 coverage 실행 의존성과 workspace 명령 구성
 - [ ] 설정 스키마와 예제 설정 작성
 - [ ] 첫 운영 시장을 한국으로 고정하는 ADR 작성
-- [x] 비밀정보 로딩 규칙과 `.gitignore` 구성
+- [x] Web, engine, Prisma migration별 `.env.local` 로딩 규칙과 `.gitignore` 구성
 - [ ] 오류 코드와 구조화 로그 형식 정의
 - [x] 실제 read-only 자격증명과 PostgreSQL을 사용하는 Quick Start 작성
 - [ ] `setup`, `doctor`, `check`, `plan`, `run`, `status` CLI 골격 구현

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { config as loadDotenv } from "dotenv";
 import { defineConfig } from "prisma/config";
 
-loadDotenv({ path: fileURLToPath(new URL("../../.env", import.meta.url)) });
+loadDotenv({ path: fileURLToPath(new URL(".env.local", import.meta.url)) });
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
