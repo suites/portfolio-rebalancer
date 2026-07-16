@@ -3,13 +3,14 @@ import {
   type DashboardBlockReasonContract,
   type DashboardSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
+import { isOutsideAllocationBand } from "@portfolio-rebalancer/domain";
 
 import type { PrismaPortfolioRepository } from "../infrastructure/persistence/prisma-portfolio.repository";
 
 export async function getDashboard(
   repository: PrismaPortfolioRepository,
 ): Promise<DashboardSnapshotContract> {
-  const snapshot = await repository.latestSnapshot();
+  const { snapshot, activeTargetVersionId } = await repository.latestDashboardState();
   if (!snapshot) return blockedDashboard("NO_SNAPSHOT");
 
   if (snapshot.holdings.length === 0) {
@@ -30,30 +31,72 @@ export async function getDashboard(
   }
 
   const total = snapshot.totalValueMinor;
-  const allocations = snapshot.holdings.map((holding) => ({
-    id: `${holding.market}:${holding.symbol}`,
-    label: holding.name,
-    description: `${holding.market} · ${holding.currency} · ${holding.quantity}주`,
-    valueMinor: holding.marketValueKrwMinor.toString(),
-    currentBasisPointHundredths:
-      total === 0n ? 0 : Number((holding.marketValueKrwMinor * 1_000_000n) / total),
-    targetBasisPoints: null,
-    lowerBasisPoints: null,
-    upperBasisPoints: null,
-    bandStatus: "TARGET_NOT_CONFIGURED" as const,
-  }));
+  const pinnedTarget = snapshot.targetConfigVersion;
+  const targets = new Map(
+    pinnedTarget?.allocations.map((allocation) => [allocation.assetKey, allocation]) ?? [],
+  );
+  const allocations = snapshot.holdings.map((holding) => {
+    const id = `${holding.market}:${holding.symbol}`;
+    const target = targets.get(id);
+    const common = {
+      id,
+      label: holding.name,
+      description: `${holding.market} · ${holding.currency} · ${holding.quantity}주`,
+      valueMinor: holding.marketValueKrwMinor.toString(),
+      currentBasisPointHundredths:
+        total === 0n ? 0 : Number((holding.marketValueKrwMinor * 1_000_000n) / total),
+    };
+    if (!target || total <= 0n) {
+      return {
+        ...common,
+        targetBasisPoints: null,
+        lowerBasisPoints: null,
+        upperBasisPoints: null,
+        bandStatus: "TARGET_NOT_CONFIGURED" as const,
+      };
+    }
+    const outside = isOutsideAllocationBand({
+      valueMinor: holding.marketValueKrwMinor,
+      totalValueMinor: total,
+      lowerBasisPoints: BigInt(target.lowerBasisPoints),
+      upperBasisPoints: BigInt(target.upperBasisPoints),
+    });
+    return {
+      ...common,
+      targetBasisPoints: target.targetBasisPoints,
+      lowerBasisPoints: target.lowerBasisPoints,
+      upperBasisPoints: target.upperBasisPoints,
+      bandStatus: outside ? ("OUTSIDE_BAND" as const) : ("IN_RANGE" as const),
+    };
+  });
+
+  let blockCode: DashboardBlockReasonContract["code"] | null = null;
+  if (activeTargetVersionId !== (pinnedTarget?.id ?? null)) {
+    blockCode = activeTargetVersionId ? "TARGET_CONFIG_STALE" : "TARGET_CONFIG_MISSING";
+  } else if (!pinnedTarget) {
+    blockCode = "TARGET_CONFIG_MISSING";
+  } else if (
+    allocations.some(({ bandStatus }) => bandStatus === "TARGET_NOT_CONFIGURED") ||
+    targets.size !== snapshot.holdings.length
+  ) {
+    blockCode = "UNMANAGED_ASSET";
+  } else if (snapshot.managedCashMinor === null) {
+    blockCode = "MANAGED_CASH_MISSING";
+  }
+
+  const outsideBand = allocations.some(({ bandStatus }) => bandStatus === "OUTSIDE_BAND");
   return DashboardSnapshotSchema.parse({
-    state: "BLOCKED",
+    state: blockCode ? "BLOCKED" : "READY",
     mode: "SHADOW",
     dataSource: "TOSS",
     brokerConnection: "CONNECTED",
     accountLabel: snapshot.account.maskedNumber,
     observedAt: snapshot.observedAt.toISOString(),
-    conclusion: "BLOCKED",
+    conclusion: blockCode ? "BLOCKED" : outsideBand ? "REBALANCE_REQUIRED" : "NO_ACTION",
     totalValueMinor: total.toString(),
-    verifiedCashMinor: null,
+    verifiedCashMinor: snapshot.managedCashMinor?.toString() ?? null,
     allocations,
-    blockReason: reasonFor("TARGET_CONFIG_MISSING"),
+    blockReason: blockCode ? reasonFor(blockCode) : null,
     liveOrdersEnabled: false,
   });
 }
@@ -101,7 +144,28 @@ function reasonFor(code: DashboardBlockReasonContract["code"]): DashboardBlockRe
         ...common,
         code,
         problem: "실제 보유자산은 조회했지만 목표 비중이 설정되지 않았습니다.",
-        nextAction: "설정 화면이 제공되기 전까지 조회 결과만 확인하세요.",
+        nextAction: "설정에서 목표 비중 초안을 저장하고 적용한 뒤 새 스냅샷을 수집하세요.",
+      };
+    case "TARGET_CONFIG_STALE":
+      return {
+        ...common,
+        code,
+        problem: "활성 목표 설정이 최신 계좌 스냅샷에 아직 고정되지 않았습니다.",
+        nextAction: "문제 해결에서 토스 데이터 재점검을 실행하세요.",
+      };
+    case "MANAGED_CASH_MISSING":
+      return {
+        ...common,
+        code,
+        problem: "목표 비중은 확인했지만 평가에 포함할 관리 현금이 검증되지 않았습니다.",
+        nextAction: "관리 현금 source of truth가 구현될 때까지 현재·목표 비중만 검토하세요.",
+      };
+    case "UNMANAGED_ASSET":
+      return {
+        ...common,
+        code,
+        problem: "스냅샷 보유자산과 고정된 목표 설정의 종목 구성이 일치하지 않습니다.",
+        nextAction: "설정에서 모든 현재 보유자산을 확인하고 새 목표 버전을 적용하세요.",
       };
     case "CREDENTIALS_MISSING":
       return {

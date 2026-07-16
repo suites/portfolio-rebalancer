@@ -1,17 +1,27 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 
 import {
+  TargetSettingsDraftInputSchema,
   DashboardSnapshotSchema,
+  type ConsoleRecordsSnapshotContract,
   type DashboardBlockReasonContract,
   type DashboardSnapshotContract,
+  type TargetSettingsDraftInputContract,
+  type TargetSettingsSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
 
 import { ENGINE_CONFIG } from "../../../config/engine-config.token";
 import { assertVercelEgressConfigured, type EngineConfig } from "../../../config/engine.config";
 import { collectPortfolio } from "./collect-portfolio.use-case";
+import {
+  getConsoleRecords,
+  getTargetSettings,
+  unavailableConsoleRecords,
+} from "./console.presenter";
 import { blockedDashboard, getDashboard } from "./dashboard.presenter";
 import { safeErrorMetadata } from "./safe-error-metadata";
 import { CollectionError } from "../domain/collection.error";
+import { TargetSettingsError } from "../domain/target-settings.error";
 import { TossRuntimeService } from "../infrastructure/broker/toss-runtime.service";
 import { PrismaPortfolioRepository } from "../infrastructure/persistence/prisma-portfolio.repository";
 
@@ -54,6 +64,107 @@ export class PortfolioService {
     return { ok: true, dashboard: DashboardSnapshotSchema.parse(dashboard.dashboard) };
   }
 
+  targetSettings(): Promise<TargetSettingsSnapshotContract> {
+    return getTargetSettings(this.repository);
+  }
+
+  async createTargetDraft(
+    input: TargetSettingsDraftInputContract,
+  ): Promise<TargetSettingsSnapshotContract> {
+    const parsed = TargetSettingsDraftInputSchema.parse(input);
+    const { snapshot } = await this.repository.targetSettingsState();
+    if (!snapshot) {
+      throw new TargetSettingsError(
+        "NO_SNAPSHOT",
+        "목표 설정 전에 실제 계좌 스냅샷을 먼저 수집하세요.",
+      );
+    }
+
+    const requested = new Map(
+      parsed.allocations.map((allocation) => [allocation.assetKey, allocation]),
+    );
+    const holdings = new Map(
+      snapshot.holdings.map((holding) => [`${holding.market}:${holding.symbol}`, holding]),
+    );
+    if (
+      requested.size !== holdings.size ||
+      [...requested.keys()].some((key) => !holdings.has(key))
+    ) {
+      throw new TargetSettingsError(
+        "ASSET_SET_MISMATCH",
+        "목표 설정은 최신 스냅샷의 모든 보유자산을 정확히 한 번씩 포함해야 합니다.",
+      );
+    }
+
+    const draft = await this.repository.createTargetDraft({
+      accountId: snapshot.accountId,
+      sourceSnapshotId: snapshot.id,
+      sourceSnapshotDigest: snapshot.digest,
+      allocations: [...requested.entries()].map(([key, allocation]) => {
+        const holding = holdings.get(key);
+        if (!holding) {
+          throw new TargetSettingsError("ASSET_SET_MISMATCH", "보유자산을 찾을 수 없습니다.");
+        }
+        return {
+          ...allocation,
+          label: holding.name,
+          market: holding.market,
+          symbol: holding.symbol,
+          currency: holding.currency,
+        };
+      }),
+    });
+    if (!draft) {
+      throw new TargetSettingsError(
+        "DRAFT_STALE",
+        "목표 초안 저장 중 계좌 스냅샷이 변경되었습니다. 최신 상태를 확인한 뒤 다시 저장하세요. 설정과 주문은 변경되지 않았습니다.",
+      );
+    }
+    return getTargetSettings(this.repository);
+  }
+
+  async activateTargetDraft(version: number): Promise<TargetSettingsSnapshotContract> {
+    const { snapshot, draftVersion } = await this.repository.targetSettingsState();
+    if (!snapshot) {
+      throw new TargetSettingsError(
+        "NO_SNAPSHOT",
+        "목표 설정 전에 실제 계좌 스냅샷을 먼저 수집하세요.",
+      );
+    }
+    if (draftVersion?.version !== version) {
+      throw new TargetSettingsError(
+        "DRAFT_NOT_FOUND",
+        "현재 검토 대기 중인 목표 설정 초안과 요청 버전이 일치하지 않습니다.",
+      );
+    }
+    if (!targetSourceMatchesSnapshot(draftVersion.source, snapshot.id, snapshot.digest)) {
+      throw new TargetSettingsError(
+        "DRAFT_STALE",
+        "초안 저장 후 계좌 스냅샷이 변경되었습니다. 현재 보유자산으로 새 초안을 저장하세요. 설정과 주문은 변경되지 않았습니다.",
+      );
+    }
+    const activated = await this.repository.activateTargetDraft({
+      accountId: snapshot.accountId,
+      version,
+    });
+    if (!activated) {
+      throw new TargetSettingsError(
+        "DRAFT_STALE",
+        "초안 검토 중 계좌 스냅샷이 변경되었습니다. 현재 보유자산으로 새 초안을 저장하세요. 설정과 주문은 변경되지 않았습니다.",
+      );
+    }
+    return getTargetSettings(this.repository);
+  }
+
+  async records(): Promise<ConsoleRecordsSnapshotContract> {
+    try {
+      return await getConsoleRecords(this.repository);
+    } catch (error) {
+      this.logger.warn({ event: "console_records_read_blocked", ...safeErrorMetadata(error) });
+      return unavailableConsoleRecords();
+    }
+  }
+
   collectFromCron(): Promise<CollectionResult> {
     return this.collect("portfolio_cron_collection_blocked");
   }
@@ -75,6 +186,16 @@ export class PortfolioService {
       return { ok: false, code };
     }
   }
+}
+
+function targetSourceMatchesSnapshot(
+  source: unknown,
+  snapshotId: string,
+  snapshotDigest: string,
+): boolean {
+  if (source === null || Array.isArray(source) || typeof source !== "object") return false;
+  const record = source as Record<string, unknown>;
+  return record.sourceSnapshotId === snapshotId && record.sourceSnapshotDigest === snapshotDigest;
 }
 
 function collectionErrorCode(error: unknown): BlockCode {

@@ -12,3 +12,10 @@
 - 실제 AppModule과 PrismaModule provider graph bootstrap
 - dashboard와 refresh의 `cache-control: no-store`
 - format, lint, typecheck, unit tests, production build
+- 6개 실제 내비게이션 링크, 단일 aria-current와 `준비 중` 제거
+- 포트폴리오 native table caption/header/status 계약
+- 목표 합계 10000bp, band 순서, 중복·미보유 asset 거부
+- 설정 저장의 snapshot-bound version/hash, 경쟁 수집 시 DRAFT_STALE, 단일 ACTIVE와 snapshot 재수집 요구
+- 리밸런싱이 target stale, managed cash 미검증에서 계획·주문을 계속 차단
+- 현재 계좌의 첫 실패를 포함한 수집 기록과 raw payload, 비밀정보, 전체 계좌번호 부재 확인
+- 320px·390px·desktop reflow와 키보드 focus 확인

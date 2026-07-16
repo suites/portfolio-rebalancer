@@ -3,7 +3,11 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 import { Test } from "@nestjs/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DashboardSnapshotSchema } from "@portfolio-rebalancer/contracts";
+import {
+  ConsoleRecordsSnapshotSchema,
+  DashboardSnapshotSchema,
+  TargetSettingsSnapshotSchema,
+} from "@portfolio-rebalancer/contracts";
 
 import { CronTokenGuard } from "../../../common/auth/guards/cron-token.guard";
 import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
@@ -97,6 +101,59 @@ describe("NestJS engine HTTP contract", () => {
     expect(cron.statusCode).toBe(503);
     expect(cron.json()).toEqual({ ok: false, code: "COLLECTION_IN_PROGRESS" });
   });
+
+  it("records와 target settings도 service token과 no-store 경계를 사용한다", async () => {
+    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+    app = harness.app;
+
+    const records = await harness.fastify.inject({
+      method: "GET",
+      url: "/internal/v1/records",
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
+    });
+    const settings = await harness.fastify.inject({
+      method: "GET",
+      url: "/internal/v1/target-settings",
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
+    });
+
+    expect(records.statusCode).toBe(200);
+    expect(records.headers["cache-control"]).toBe("no-store");
+    expect(ConsoleRecordsSnapshotSchema.safeParse(records.json()).success).toBe(true);
+    expect(settings.statusCode).toBe(200);
+    expect(settings.headers["cache-control"]).toBe("no-store");
+    expect(TargetSettingsSnapshotSchema.safeParse(settings.json()).success).toBe(true);
+  });
+
+  it("잘못된 목표 합계는 service 호출 전에 400으로 거부한다", async () => {
+    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+    app = harness.app;
+
+    const response = await harness.fastify.inject({
+      method: "POST",
+      url: "/internal/v1/target-settings/drafts",
+      headers: {
+        authorization: `Bearer ${SERVICE_TOKEN}`,
+        "content-type": "application/json",
+      },
+      payload: {
+        allocations: [
+          {
+            assetKey: "NASDAQ:AAPL",
+            targetBasisPoints: 9_999,
+            lowerBasisPoints: 9_000,
+            upperBasisPoints: 10_000,
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body: unknown = response.json();
+    expect(body).toMatchObject({ code: "TARGET_SETTINGS_INVALID" });
+    expect(JSON.stringify(body)).toContain("10000bp");
+    expect(harness.portfolio.createTargetDraft).not.toHaveBeenCalled();
+  });
 });
 
 async function createHarness(environment: NodeJS.ProcessEnv) {
@@ -114,6 +171,29 @@ async function createHarness(environment: NodeJS.ProcessEnv) {
       dashboard: blockedDashboard("TARGET_CONFIG_MISSING"),
     }),
     collectFromCron: vi.fn().mockResolvedValue({ ok: true }),
+    records: vi.fn().mockResolvedValue(
+      ConsoleRecordsSnapshotSchema.parse({
+        state: "READY",
+        records: [],
+        orderLedgerState: "NOT_IMPLEMENTED",
+        liveOrdersEnabled: false,
+      }),
+    ),
+    targetSettings: vi.fn().mockResolvedValue(
+      TargetSettingsSnapshotSchema.parse({
+        state: "NO_SNAPSHOT",
+        accountLabel: null,
+        snapshotObservedAt: null,
+        snapshotTargetVersion: null,
+        activeVersion: null,
+        draftVersion: null,
+        requiresCollection: false,
+        assets: [],
+        liveOrdersEnabled: false,
+      }),
+    ),
+    createTargetDraft: vi.fn(),
+    activateTargetDraft: vi.fn(),
   };
   const testingModule = await Test.createTestingModule({
     controllers: [PortfolioController],

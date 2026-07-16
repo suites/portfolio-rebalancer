@@ -28,6 +28,29 @@ export interface RedactedResponseInput {
   readonly body: Prisma.InputJsonValue;
 }
 
+export interface StoredTargetAllocationInput {
+  readonly assetKey: string;
+  readonly label: string;
+  readonly market: string;
+  readonly symbol: string;
+  readonly currency: string;
+  readonly targetBasisPoints: number;
+  readonly lowerBasisPoints: number;
+  readonly upperBasisPoints: number;
+}
+
+export interface StoredTargetDraftInput {
+  readonly accountId: string;
+  readonly sourceSnapshotId: string;
+  readonly sourceSnapshotDigest: string;
+  readonly allocations: readonly StoredTargetAllocationInput[];
+}
+
+export interface ActivateTargetDraftInput {
+  readonly accountId: string;
+  readonly version: number;
+}
+
 export class PrismaPortfolioRepository {
   constructor(private readonly database: DatabaseClient) {}
 
@@ -174,7 +197,215 @@ export class PrismaPortfolioRepository {
   latestSnapshot() {
     return this.database.portfolioSnapshot.findFirst({
       orderBy: { observedAt: "desc" },
-      include: { account: true, holdings: { orderBy: [{ market: "asc" }, { symbol: "asc" }] } },
+      include: {
+        account: true,
+        holdings: { orderBy: [{ market: "asc" }, { symbol: "asc" }] },
+        targetConfigVersion: {
+          include: { allocations: { orderBy: { assetKey: "asc" } } },
+        },
+      },
     });
   }
+
+  async latestDashboardState() {
+    const snapshot = await this.latestSnapshot();
+    if (!snapshot) return { snapshot: null, activeTargetVersionId: null };
+    const active = await this.database.targetConfigVersion.findFirst({
+      where: { config: { accountId: snapshot.accountId }, status: "ACTIVE" },
+      select: { id: true },
+    });
+    return { snapshot, activeTargetVersionId: active?.id ?? null };
+  }
+
+  async targetSettingsState() {
+    const snapshot = await this.latestSnapshot();
+    if (!snapshot) return { snapshot: null, activeVersion: null, draftVersion: null };
+    const [activeVersion, draftVersion] = await Promise.all([
+      this.database.targetConfigVersion.findFirst({
+        where: { config: { accountId: snapshot.accountId }, status: "ACTIVE" },
+        orderBy: { version: "desc" },
+        include: { allocations: { orderBy: { assetKey: "asc" } } },
+      }),
+      this.database.targetConfigVersion.findFirst({
+        where: { config: { accountId: snapshot.accountId }, status: "DRAFT" },
+        orderBy: { version: "desc" },
+        include: { allocations: { orderBy: { assetKey: "asc" } } },
+      }),
+    ]);
+    return { snapshot, activeVersion, draftVersion };
+  }
+
+  async createTargetDraft(input: StoredTargetDraftInput) {
+    const canonical = [...input.allocations]
+      .sort((left, right) =>
+        left.assetKey < right.assetKey ? -1 : left.assetKey > right.assetKey ? 1 : 0,
+      )
+      .map((allocation) => ({
+        assetKey: allocation.assetKey,
+        label: allocation.label,
+        market: allocation.market,
+        symbol: allocation.symbol,
+        currency: allocation.currency,
+        targetBasisPoints: allocation.targetBasisPoints,
+        lowerBasisPoints: allocation.lowerBasisPoints,
+        upperBasisPoints: allocation.upperBasisPoints,
+      }));
+    const source = {
+      version: 1,
+      managedCashMinor: null,
+      sourceSnapshotId: input.sourceSnapshotId,
+      sourceSnapshotDigest: input.sourceSnapshotDigest,
+      allocations: canonical,
+    };
+    const contentHash = createHash("sha256").update(JSON.stringify(source)).digest("hex");
+
+    return this.database.$transaction(
+      async (transaction) => {
+        const latestSnapshot = await transaction.portfolioSnapshot.findFirst({
+          where: { accountId: input.accountId },
+          orderBy: { observedAt: "desc" },
+          select: { id: true, digest: true },
+        });
+        if (
+          !latestSnapshot ||
+          latestSnapshot.id !== input.sourceSnapshotId ||
+          latestSnapshot.digest !== input.sourceSnapshotDigest
+        ) {
+          return null;
+        }
+        const config = await transaction.targetConfig.upsert({
+          where: { accountId: input.accountId },
+          create: { accountId: input.accountId },
+          update: {},
+        });
+        const existing = await transaction.targetConfigVersion.findUnique({
+          where: { configId_contentHash: { configId: config.id, contentHash } },
+          include: { allocations: { orderBy: { assetKey: "asc" } } },
+        });
+        await transaction.targetConfigVersion.updateMany({
+          where: {
+            configId: config.id,
+            status: "DRAFT",
+            ...(existing ? { id: { not: existing.id } } : {}),
+          },
+          data: { status: "RETIRED" },
+        });
+        if (existing) {
+          if (existing.status === "ACTIVE" || existing.status === "DRAFT") return existing;
+          return transaction.targetConfigVersion.update({
+            where: { id: existing.id },
+            data: { status: "DRAFT" },
+            include: { allocations: { orderBy: { assetKey: "asc" } } },
+          });
+        }
+
+        const latest = await transaction.targetConfigVersion.aggregate({
+          where: { configId: config.id },
+          _max: { version: true },
+        });
+        return transaction.targetConfigVersion.create({
+          data: {
+            configId: config.id,
+            version: (latest._max.version ?? 0) + 1,
+            status: "DRAFT",
+            contentHash,
+            appVersion: "0.1.0",
+            source,
+            allocations: {
+              create: canonical.map((allocation) => ({
+                assetKey: allocation.assetKey,
+                label: allocation.label,
+                targetBasisPoints: allocation.targetBasisPoints,
+                lowerBasisPoints: allocation.lowerBasisPoints,
+                upperBasisPoints: allocation.upperBasisPoints,
+                instruments: {
+                  create: {
+                    market: allocation.market,
+                    symbol: allocation.symbol,
+                    currency: allocation.currency,
+                    withinAssetPoints: 10_000,
+                  },
+                },
+              })),
+            },
+          },
+          include: { allocations: { orderBy: { assetKey: "asc" } } },
+        });
+      },
+      { isolationLevel: "Serializable" },
+    );
+  }
+
+  activateTargetDraft(input: ActivateTargetDraftInput) {
+    return this.database.$transaction(
+      async (transaction) => {
+        const latestSnapshot = await transaction.portfolioSnapshot.findFirst({
+          where: { accountId: input.accountId },
+          orderBy: { observedAt: "desc" },
+          select: { id: true, digest: true },
+        });
+        const target = await transaction.targetConfigVersion.findFirst({
+          where: { config: { accountId: input.accountId }, version: input.version },
+          include: { allocations: { orderBy: { assetKey: "asc" } } },
+        });
+        if (
+          !latestSnapshot ||
+          !target ||
+          (target.status !== "DRAFT" && target.status !== "ACTIVE")
+        ) {
+          return null;
+        }
+        if (!targetSourceMatchesSnapshot(target.source, latestSnapshot.id, latestSnapshot.digest)) {
+          return null;
+        }
+        if (target.status === "ACTIVE") return target;
+
+        await transaction.targetConfigVersion.updateMany({
+          where: { configId: target.configId, status: "ACTIVE", id: { not: target.id } },
+          data: { status: "RETIRED" },
+        });
+        return transaction.targetConfigVersion.update({
+          where: { id: target.id },
+          data: { status: "ACTIVE" },
+          include: { allocations: { orderBy: { assetKey: "asc" } } },
+        });
+      },
+      { isolationLevel: "Serializable" },
+    );
+  }
+
+  async latestCollectionAccountId(): Promise<string | null> {
+    const latest = await this.database.collectionRun.findFirst({
+      orderBy: { startedAt: "desc" },
+      select: { accountId: true },
+    });
+    return latest?.accountId ?? null;
+  }
+
+  recentCollectionRecords(accountId: string, limit: number) {
+    return this.database.collectionRun.findMany({
+      where: { accountId },
+      take: limit,
+      orderBy: { startedAt: "desc" },
+      include: {
+        snapshot: {
+          select: {
+            observedAt: true,
+            validationStatus: true,
+            checks: { select: { ruleCode: true, outcome: true }, orderBy: { ruleCode: "asc" } },
+          },
+        },
+      },
+    });
+  }
+}
+
+function targetSourceMatchesSnapshot(
+  source: Prisma.JsonValue,
+  snapshotId: string,
+  snapshotDigest: string,
+): boolean {
+  if (source === null || Array.isArray(source) || typeof source !== "object") return false;
+  const record = source as Record<string, unknown>;
+  return record.sourceSnapshotId === snapshotId && record.sourceSnapshotDigest === snapshotDigest;
 }

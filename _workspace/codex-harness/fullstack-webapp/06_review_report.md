@@ -11,4 +11,12 @@
 - feature-first 폴더와 singleton PrismaService 구성: 통과
 - Vercel `src/main.ts` zero-config 진입점: 로컬 검증 통과, Preview 배포 확인 필요
 - collection lease fencing/heartbeat: 후속 보강 필요
-- 목표 설정 UI와 계획 생성: 후속 범위
+- 홈 외 실제 라우트와 모바일 내비게이션: 통과, 6개 SSR 경로 HTTP 200
+- 버전형 목표 설정 UI와 snapshot 고정: 통과, DRAFT/ACTIVE 분리와 ID·digest 경쟁 조건 차단
+- 수집 기록과 fail-closed 진단 화면: 통과, 현재 계좌 제한과 첫 실패 기록 포함
+- 주문 계획·원장·paper 체결·복구: 이번 범위 밖, 화면에서 안전한 빈 상태 유지
+- URL query만으로 설정·재점검 성공 표시 불가: 통과
+- `pnpm verify` format/lint/typecheck/test/build: 통과
+- 계약 5, engine 34, web 8를 포함한 전체 workspace 단위 테스트: 통과
+- 실제 브라우저 수동 320px·VoiceOver 검증: 실행 가능한 브라우저 연결이 없어 UI-5 후속으로 유지
+- 실제 PostgreSQL 동시성 통합 테스트와 6개 라우트 브라우저 E2E: 후속 보강 필요

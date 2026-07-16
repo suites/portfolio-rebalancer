@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import {
   DashboardSnapshotSchema,
   type DashboardSnapshotContract,
@@ -7,7 +9,7 @@ import {
 
 const ENGINE_INTERNAL_URL = process.env.ENGINE_INTERNAL_URL ?? "http://127.0.0.1:4100";
 
-export async function getEngineDashboard(): Promise<DashboardSnapshotContract> {
+export const getEngineDashboard = cache(async (): Promise<DashboardSnapshotContract> => {
   try {
     const current = await getStoredEngineDashboard();
     if (current.blockReason?.code !== "NO_SNAPSHOT") return current;
@@ -15,11 +17,19 @@ export async function getEngineDashboard(): Promise<DashboardSnapshotContract> {
   } catch {
     return engineUnavailableDashboard();
   }
-}
+});
 
-export async function getStoredEngineDashboard(): Promise<DashboardSnapshotContract> {
+export const getStoredEngineDashboard = cache(async (): Promise<DashboardSnapshotContract> => {
   try {
     return await requestDashboard("/internal/v1/dashboard", "GET");
+  } catch {
+    return engineUnavailableDashboard();
+  }
+});
+
+export async function refreshEngineDashboard(): Promise<DashboardSnapshotContract> {
+  try {
+    return await requestDashboard("/internal/v1/portfolio/refresh", "POST");
   } catch {
     return engineUnavailableDashboard();
   }

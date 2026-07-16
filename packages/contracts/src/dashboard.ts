@@ -11,6 +11,8 @@ export const DashboardBlockReasonSchema = z.object({
     "EMPTY_ACCOUNT",
     "EMPTY_HOLDINGS",
     "TARGET_CONFIG_MISSING",
+    "TARGET_CONFIG_STALE",
+    "MANAGED_CASH_MISSING",
     "UNMANAGED_ASSET",
     "BROKER_FETCH_FAILED",
     "DATA_INVALID",

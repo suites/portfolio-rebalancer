@@ -8,3 +8,7 @@ RawBrokerResponse, PortfolioSnapshot, HoldingSnapshot, SnapshotCheck, RuntimeLea
 - 원본 응답은 redaction 후 JSONB로 저장한다.
 - snapshot/evidence/check는 append-only이다.
 - RuntimeLease는 Vercel 수평 실행의 중복 Toss 수집을 막는다.
+- 새 테이블은 추가하지 않는다. 기존 TargetConfig 계열에 immutable version을 추가하고 이전 ACTIVE를 RETIRED로 전환한다.
+- TargetConfigVersion.source와 contentHash는 초안 원본 snapshot ID·digest를 포함한다.
+- dashboard는 최신 ACTIVE 설정을 과거 snapshot에 덮어쓰지 않고 snapshot.targetConfigVersionId가 가리키는 버전만 사용한다.
+- 주문·체결·복구 원장은 아직 없으므로 UI에서도 존재하는 것처럼 표현하지 않는다.
