@@ -1,5 +1,6 @@
 export * from "./client-order-id";
 export * from "./commission";
+export * from "./cancel-risk-gate";
 export * from "./dashboard";
 export * from "./execution-risk-gate";
 export * from "./market-readiness";
