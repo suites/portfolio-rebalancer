@@ -16,6 +16,7 @@ export type OrderTransitionActor = "EXECUTOR" | "RECONCILER" | "OPERATOR";
 
 export type OrderTransitionReasonCode =
   | "ORDER_TRANSITION_ALLOWED"
+  | "ORDER_FILL_PROGRESS_ALLOWED"
   | "ORDER_STATE_UNCHANGED"
   | "ORDER_TERMINAL_IMMUTABLE"
   | "ORDER_TRANSITION_NOT_ALLOWED"
@@ -85,8 +86,23 @@ export function evaluateOrderTransition(input: {
   readonly to: OrderState;
   readonly actor: OrderTransitionActor;
   readonly evidenceReference?: string | null;
+  readonly previousFilledQuantity?: bigint;
+  readonly nextFilledQuantity?: bigint;
 }): OrderTransitionDecision {
   if (input.from === input.to) {
+    if (
+      input.from === "PARTIAL_FILLED" &&
+      typeof input.previousFilledQuantity === "bigint" &&
+      typeof input.nextFilledQuantity === "bigint" &&
+      input.previousFilledQuantity >= 0n &&
+      input.nextFilledQuantity > input.previousFilledQuantity
+    ) {
+      return {
+        allowed: true,
+        reasonCode: "ORDER_FILL_PROGRESS_ALLOWED",
+        message: "부분체결 누계가 증가한 진행 이벤트를 기록할 수 있습니다.",
+      };
+    }
     return blocked(
       "ORDER_STATE_UNCHANGED",
       "같은 주문 상태를 중복 기록하지 않습니다.",
@@ -180,7 +196,10 @@ export function evaluateAmbiguousOrderRecovery(input: {
 }
 
 function blocked(
-  reasonCode: Exclude<OrderTransitionReasonCode, "ORDER_TRANSITION_ALLOWED">,
+  reasonCode: Exclude<
+    OrderTransitionReasonCode,
+    "ORDER_TRANSITION_ALLOWED" | "ORDER_FILL_PROGRESS_ALLOWED"
+  >,
   message: string,
 ): OrderTransitionDecision {
   return { allowed: false, reasonCode, message };

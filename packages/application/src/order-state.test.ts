@@ -27,6 +27,27 @@ describe("evaluateOrderTransition", () => {
     ).toMatchObject({ allowed: false, reasonCode: "ORDER_TRANSITION_NOT_ALLOWED" });
   });
 
+  it("PARTIAL_FILLED 동일 상태는 체결 누계가 증가한 경우에만 허용한다", () => {
+    expect(
+      evaluateOrderTransition({
+        from: "PARTIAL_FILLED",
+        to: "PARTIAL_FILLED",
+        actor: "RECONCILER",
+        previousFilledQuantity: 1n,
+        nextFilledQuantity: 2n,
+      }),
+    ).toMatchObject({ allowed: true, reasonCode: "ORDER_FILL_PROGRESS_ALLOWED" });
+    expect(
+      evaluateOrderTransition({
+        from: "PARTIAL_FILLED",
+        to: "PARTIAL_FILLED",
+        actor: "RECONCILER",
+        previousFilledQuantity: 2n,
+        nextFilledQuantity: 2n,
+      }),
+    ).toMatchObject({ allowed: false, reasonCode: "ORDER_STATE_UNCHANGED" });
+  });
+
   it("UNKNOWN_BLOCKED 복구는 운영자와 증거를 모두 요구한다", () => {
     expect(
       evaluateOrderTransition({
