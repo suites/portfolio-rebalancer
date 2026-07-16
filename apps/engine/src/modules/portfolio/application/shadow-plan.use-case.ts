@@ -31,7 +31,8 @@ import type { TossReadSource } from "../infrastructure/broker/toss-read-source.a
 import type { TossRequestAuditContext } from "../infrastructure/broker/toss-request-audit.context";
 import type {
   PrismaPortfolioRepository,
-  SealShadowRebalancePlanInput,
+  SealRebalancePlanInput,
+  StoredRebalanceMode,
 } from "../infrastructure/persistence/prisma-portfolio.repository";
 
 const PLAN_MINIMUM_ORDER_MINOR = 10_000n;
@@ -55,11 +56,21 @@ export interface CreateShadowPlanOptions {
   readonly now?: () => Date;
 }
 
-export async function createAndStoreShadowPlan(
+export interface CreateRebalancePlanOptions extends CreateShadowPlanOptions {
+  readonly mode: StoredRebalanceMode;
+}
+
+export function createAndStoreShadowPlan(
   options: CreateShadowPlanOptions,
 ): Promise<StoredRebalanceRun> {
+  return createAndStoreRebalancePlan({ ...options, mode: "SHADOW" });
+}
+
+export async function createAndStoreRebalancePlan(
+  options: CreateRebalancePlanOptions,
+): Promise<StoredRebalanceRun> {
   const clock = options.now ?? (() => new Date());
-  const startedAt = readClock(clock, "Shadow 계획 시작시각");
+  const startedAt = readClock(clock, `${options.mode} 계획 시작시각`);
   const state = await options.repository.latestDashboardState();
   const snapshot = requirePlanningSnapshot(state.snapshot, state.activeTargetVersionId);
   const target = snapshot.targetConfigVersion;
@@ -79,13 +90,15 @@ export async function createAndStoreShadowPlan(
     currentConfigVersionId: target.id,
   });
   const dedupeKey = createPlanDedupeKey({
+    mode: options.mode,
     snapshotId: snapshot.id,
     snapshotDigest: snapshot.digest,
     targetConfigVersionId: target.id,
     targetConfigContentHash: target.contentHash,
     baseInput,
   });
-  const started = await options.repository.startShadowRebalanceRun({
+  const started = await options.repository.startRebalanceRun({
+    mode: options.mode,
     accountId: snapshot.accountId,
     snapshotId: snapshot.id,
     snapshotDigest: snapshot.digest,
@@ -108,7 +121,7 @@ export async function createAndStoreShadowPlan(
 
   try {
     const result = await options.requestAuditContext.run(
-      { workflowType: "SHADOW_PLAN", correlationId: started.runId },
+      { workflowType: `${options.mode}_PLAN`, correlationId: started.runId },
       () =>
         calculatePlanWithPreflight({
           ...options,
@@ -122,7 +135,8 @@ export async function createAndStoreShadowPlan(
       started.runId,
       snapshot,
       result,
-      readClock(clock, "Shadow 계획 완료시각"),
+      options.mode,
+      readClock(clock, `${options.mode} 계획 완료시각`),
       true,
     );
     if (sealed) return sealed;
@@ -146,7 +160,8 @@ export async function createAndStoreShadowPlan(
       started.runId,
       snapshot,
       staleResult,
-      readClock(clock, "Shadow 계획 차단 완료시각"),
+      options.mode,
+      readClock(clock, `${options.mode} 계획 차단 완료시각`),
       false,
     );
     if (!staleSealed) {
@@ -167,7 +182,7 @@ export async function createAndStoreShadowPlan(
     if (error instanceof RebalancePlanError) throw error;
     throw new RebalancePlanError(
       "PLAN_BROKER_PREFLIGHT_FAILED",
-      "Shadow 계획의 조회 증거를 안전하게 확인하지 못했습니다.",
+      `${options.mode} 계획의 조회 증거를 안전하게 확인하지 못했습니다.`,
       true,
       { cause: error },
     );
@@ -600,6 +615,7 @@ async function sealResult(
   runId: string,
   snapshot: PlanningSnapshot,
   result: ShadowPlanResult,
+  mode: StoredRebalanceMode,
   completedAt: Date,
   requireCurrentIdentity: boolean,
 ): Promise<StoredRebalanceRun | null> {
@@ -611,7 +627,8 @@ async function sealResult(
     phaseOrdinals.set(order.phase, ordinal + 1);
     return { ...order, ordinal };
   });
-  const storage: SealShadowRebalancePlanInput = {
+  const storage: SealRebalancePlanInput = {
+    mode,
     runId,
     accountId: snapshot.accountId,
     snapshotId: result.snapshotId,
@@ -630,10 +647,11 @@ async function sealResult(
     completedAt,
     requireCurrentIdentity,
   };
-  return repository.sealShadowRebalancePlan(storage);
+  return repository.sealRebalancePlan(storage);
 }
 
 function createPlanDedupeKey(input: {
+  readonly mode: StoredRebalanceMode;
   readonly snapshotId: string;
   readonly snapshotDigest: string;
   readonly targetConfigVersionId: string;
@@ -643,7 +661,8 @@ function createPlanDedupeKey(input: {
   return createHash("sha256")
     .update(
       JSON.stringify({
-        version: "SHADOW_RUN_DEDUPE_V1",
+        version: "REBALANCE_RUN_DEDUPE_V1",
+        mode: input.mode,
         snapshotId: input.snapshotId,
         snapshotDigest: input.snapshotDigest,
         targetConfigVersionId: input.targetConfigVersionId,

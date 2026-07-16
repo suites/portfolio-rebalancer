@@ -53,7 +53,7 @@ export const DeferredBuyReasonCodeSchema = z.enum([
 ]);
 
 export const CreateRebalancePlanInputSchema = z.strictObject({
-  mode: z.literal("SHADOW"),
+  mode: z.enum(["SHADOW", "PAPER", "LIVE"]),
 });
 
 export const RebalancePlanOrderSchema = z.strictObject({
@@ -103,7 +103,7 @@ export const RebalanceProjectedAllocationSchema = z.strictObject({
 export const StoredRebalancePlanSchema = z.strictObject({
   runId: z.uuid(),
   planId: z.uuid(),
-  mode: z.literal("SHADOW"),
+  mode: z.enum(["SHADOW", "PAPER", "LIVE"]),
   status: z.enum(["NO_ACTION", "PLANNED", "BLOCKED"]),
   startedAt: z.iso.datetime({ offset: true }),
   completedAt: z.iso.datetime({ offset: true }),

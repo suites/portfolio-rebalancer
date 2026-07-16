@@ -24,9 +24,14 @@ describe("rebalance plan presenter", () => {
     });
   });
 
+  it("저장된 실행 모드를 Shadow로 덮어쓰지 않는다", () => {
+    const snapshot = presentRebalancePlan(storedRun("PAPER") as never);
+    expect(snapshot.latest?.mode).toBe("PAPER");
+  });
+
   it("저장 계획이 없으면 NO_PLAN을 반환한다", async () => {
     const repository = {
-      latestShadowRebalanceRun: vi.fn().mockResolvedValue(null),
+      latestRebalanceRun: vi.fn().mockResolvedValue(null),
     };
 
     await expect(getLatestRebalancePlan(repository as never)).resolves.toEqual({
@@ -45,7 +50,7 @@ describe("rebalance plan presenter", () => {
   });
 });
 
-function storedRun() {
+function storedRun(mode: "SHADOW" | "PAPER" | "LIVE" = "SHADOW") {
   return {
     id: "20000000-0000-4000-8000-000000000001",
     accountId: "20000000-0000-4000-8000-000000000002",
@@ -53,7 +58,7 @@ function storedRun() {
     snapshotDigest: "a".repeat(64),
     targetConfigVersionId: "20000000-0000-4000-8000-000000000004",
     targetConfigContentHash: "b".repeat(64),
-    mode: "SHADOW",
+    mode,
     status: "PLANNED",
     dedupeKey: "c".repeat(64),
     startedAt: new Date("2026-07-17T00:00:00.000Z"),
@@ -66,7 +71,7 @@ function storedRun() {
       runId: "20000000-0000-4000-8000-000000000001",
       snapshotId: "20000000-0000-4000-8000-000000000003",
       targetConfigVersionId: "20000000-0000-4000-8000-000000000004",
-      mode: "SHADOW",
+      mode,
       status: "PLANNED",
       canonicalVersion: "SHADOW_PLAN_V1",
       planHash: "d".repeat(64),

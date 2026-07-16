@@ -91,7 +91,7 @@ export class PortfolioController {
     if (!parsed.success) {
       throw new BadRequestException({
         code: "REBALANCE_PLAN_INPUT_INVALID",
-        message: "현재 계획 생성은 SHADOW 모드만 허용합니다.",
+        message: "계획 모드는 SHADOW, PAPER 또는 LIVE 중 하나여야 합니다.",
       });
     }
     try {

@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { TossRequestAuditContext } from "../infrastructure/broker/toss-request-audit.context";
-import type { SealShadowRebalancePlanInput } from "../infrastructure/persistence/prisma-portfolio.repository";
-import { createAndStoreShadowPlan } from "./shadow-plan.use-case";
+import type { SealRebalancePlanInput } from "../infrastructure/persistence/prisma-portfolio.repository";
+import {
+  createAndStoreRebalancePlan,
+  createAndStoreShadowPlan,
+} from "./shadow-plan.use-case";
 
 const accountId = "30000000-0000-4000-8000-000000000001";
 const snapshotId = "30000000-0000-4000-8000-000000000002";
@@ -25,8 +28,9 @@ describe("createAndStoreShadowPlan", () => {
     });
 
     expect(source.listAccounts).not.toHaveBeenCalled();
-    expect(repository.sealShadowRebalancePlan).toHaveBeenCalledWith(
+    expect(repository.sealRebalancePlan).toHaveBeenCalledWith(
       expect.objectContaining({
+        mode: "SHADOW",
         runId,
         status: "BLOCKED",
         reasonCodes: ["UNSUPPORTED_MARKET"],
@@ -49,7 +53,7 @@ describe("createAndStoreShadowPlan", () => {
     });
 
     expect(source.listAccounts).not.toHaveBeenCalled();
-    expect(repository.sealShadowRebalancePlan).toHaveBeenCalledWith(
+    expect(repository.sealRebalancePlan).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "NO_ACTION",
         reasonCodes: ["NO_REBALANCE_NEEDED"],
@@ -74,7 +78,7 @@ describe("createAndStoreShadowPlan", () => {
     });
 
     expect(source.listAccounts).not.toHaveBeenCalled();
-    expect(repository.sealShadowRebalancePlan).toHaveBeenCalledWith(
+    expect(repository.sealRebalancePlan).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "BLOCKED",
         reasonCodes: ["QUOTE_STALE"],
@@ -144,7 +148,7 @@ describe("createAndStoreShadowPlan", () => {
     expect(source.getStockWarnings).toHaveBeenCalledWith("114800");
     expect(source.getCommissionSchedule).toHaveBeenCalled();
     expect(repository.recordInstrumentValidation).toHaveBeenCalled();
-    expect(repository.sealShadowRebalancePlan).toHaveBeenCalledWith(
+    expect(repository.sealRebalancePlan).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "PLANNED",
         reasonCodes: ["BUY_PHASE_READY", "BUY_NEEDS_REMAIN"],
@@ -164,7 +168,7 @@ describe("createAndStoreShadowPlan", () => {
     const snapshot = planningSnapshot("KR_NO_ACTION");
     const existing = storedRun("NO_ACTION");
     const repository = repositoryMock(snapshot, {
-      startShadowRebalanceRun: vi
+      startRebalanceRun: vi
         .fn()
         .mockResolvedValue({ created: false, runId, status: "NO_ACTION" }),
       rebalanceRunById: vi.fn().mockResolvedValue(existing),
@@ -182,7 +186,28 @@ describe("createAndStoreShadowPlan", () => {
     ).resolves.toBe(existing);
 
     expect(source.listAccounts).not.toHaveBeenCalled();
-    expect(repository.sealShadowRebalancePlan).not.toHaveBeenCalled();
+    expect(repository.sealRebalancePlan).not.toHaveBeenCalled();
+  });
+
+  it("같은 계산 경로로 PAPER 모드 계획을 별도 실행으로 저장한다", async () => {
+    const snapshot = planningSnapshot("KR_NO_ACTION");
+    const repository = repositoryMock(snapshot);
+
+    await createAndStoreRebalancePlan({
+      mode: "PAPER",
+      repository: repository as never,
+      source: sourceMock(),
+      requestAuditContext: new TossRequestAuditContext(),
+      selectedAccountSeq: undefined,
+      now: () => now,
+    });
+
+    expect(repository.startRebalanceRun).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "PAPER" }),
+    );
+    expect(repository.sealRebalancePlan).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "PAPER", status: "NO_ACTION" }),
+    );
   });
 });
 
@@ -190,17 +215,17 @@ function repositoryMock(
   snapshot: ReturnType<typeof planningSnapshot>,
   overrides: Record<string, unknown> = {},
 ) {
-  const sealShadowRebalancePlan = vi
+  const sealRebalancePlan = vi
     .fn()
-    .mockImplementation((input: SealShadowRebalancePlanInput) =>
-      Promise.resolve(storedRun(input.status, input)),
+    .mockImplementation((input: SealRebalancePlanInput) =>
+      Promise.resolve(storedRun(input.status, input, input.mode)),
     );
   return {
     latestDashboardState: vi.fn().mockResolvedValue({
       snapshot,
       activeTargetVersionId: targetId,
     }),
-    startShadowRebalanceRun: vi.fn().mockResolvedValue({ created: true, runId, status: "RUNNING" }),
+    startRebalanceRun: vi.fn().mockResolvedValue({ created: true, runId, status: "RUNNING" }),
     currentRebalanceIdentity: vi.fn().mockResolvedValue({
       snapshotId,
       snapshotDigest: snapshot.digest,
@@ -211,7 +236,7 @@ function repositoryMock(
       targetEligibility: "ELIGIBLE",
       tradeBlockedNow: false,
     }),
-    sealShadowRebalancePlan,
+    sealRebalancePlan,
     failShadowRebalanceRun: vi.fn().mockResolvedValue(true),
     rebalanceRunById: vi.fn(),
     ...overrides,
@@ -393,7 +418,8 @@ function allocation(assetKey: string, targetBasisPoints: number, instruments: un
 
 function storedRun(
   status: "NO_ACTION" | "PLANNED" | "BLOCKED",
-  input?: SealShadowRebalancePlanInput,
+  input?: SealRebalancePlanInput,
+  mode: "SHADOW" | "PAPER" | "LIVE" = "SHADOW",
 ) {
   return {
     id: runId,
@@ -402,7 +428,7 @@ function storedRun(
     snapshotDigest: "a".repeat(64),
     targetConfigVersionId: targetId,
     targetConfigContentHash: "d".repeat(64),
-    mode: "SHADOW",
+    mode,
     status,
     dedupeKey: "e".repeat(64),
     startedAt: now,
@@ -415,7 +441,7 @@ function storedRun(
       runId,
       snapshotId,
       targetConfigVersionId: targetId,
-      mode: "SHADOW",
+      mode,
       status,
       canonicalVersion: "SHADOW_PLAN_V1",
       planHash: "f".repeat(64),

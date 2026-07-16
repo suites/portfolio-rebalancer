@@ -218,7 +218,10 @@ export interface ActivateTargetDraftInput {
   readonly version: number;
 }
 
-export interface StartShadowRebalanceRunInput {
+export type StoredRebalanceMode = "SHADOW" | "PAPER" | "LIVE";
+
+export interface StartRebalanceRunInput {
+  readonly mode: StoredRebalanceMode;
   readonly accountId: string;
   readonly snapshotId: string;
   readonly snapshotDigest: string;
@@ -228,6 +231,8 @@ export interface StartShadowRebalanceRunInput {
   readonly startedAt: Date;
   readonly policyVersion: string;
 }
+
+export type StartShadowRebalanceRunInput = Omit<StartRebalanceRunInput, "mode">;
 
 export interface StoredShadowPlanOrderInput {
   readonly candidateId: string;
@@ -247,7 +252,8 @@ export interface StoredShadowPlanOrderInput {
   readonly unallocatedMinor: bigint;
 }
 
-export interface SealShadowRebalancePlanInput {
+export interface SealRebalancePlanInput {
+  readonly mode: StoredRebalanceMode;
   readonly runId: string;
   readonly accountId: string;
   readonly snapshotId: string;
@@ -266,6 +272,8 @@ export interface SealShadowRebalancePlanInput {
   readonly completedAt: Date;
   readonly requireCurrentIdentity: boolean;
 }
+
+export type SealShadowRebalancePlanInput = Omit<SealRebalancePlanInput, "mode">;
 
 export class PrismaPortfolioRepository {
   constructor(private readonly database: DatabaseClient) {}
@@ -802,7 +810,7 @@ export class PrismaPortfolioRepository {
     return { snapshot, activeVersion, draftVersion };
   }
 
-  async startShadowRebalanceRun(input: StartShadowRebalanceRunInput) {
+  async startRebalanceRun(input: StartRebalanceRunInput) {
     return this.database.$transaction(
       async (transaction) => {
         const existing = await transaction.rebalanceRun.findUnique({
@@ -849,7 +857,7 @@ export class PrismaPortfolioRepository {
             snapshotDigest: input.snapshotDigest,
             targetConfigVersionId: input.targetConfigVersionId,
             targetConfigContentHash: input.targetConfigContentHash,
-            mode: "SHADOW",
+            mode: input.mode,
             status: "RUNNING",
             dedupeKey: input.dedupeKey,
             startedAt: input.startedAt,
@@ -862,6 +870,10 @@ export class PrismaPortfolioRepository {
       },
       { isolationLevel: "Serializable" },
     );
+  }
+
+  startShadowRebalanceRun(input: StartShadowRebalanceRunInput) {
+    return this.startRebalanceRun({ ...input, mode: "SHADOW" });
   }
 
   currentRebalanceIdentity(accountId: string) {
@@ -886,7 +898,7 @@ export class PrismaPortfolioRepository {
     });
   }
 
-  async sealShadowRebalancePlan(input: SealShadowRebalancePlanInput) {
+  async sealRebalancePlan(input: SealRebalancePlanInput) {
     return this.database.$transaction(
       async (transaction) => {
         const run = await transaction.rebalanceRun.findUnique({
@@ -936,7 +948,7 @@ export class PrismaPortfolioRepository {
             runId: input.runId,
             snapshotId: input.snapshotId,
             targetConfigVersionId: input.targetConfigVersionId,
-            mode: "SHADOW",
+            mode: input.mode,
             status: input.status,
             canonicalVersion: input.canonicalVersion,
             planHash: input.planHash,
@@ -974,6 +986,10 @@ export class PrismaPortfolioRepository {
     );
   }
 
+  sealShadowRebalancePlan(input: SealShadowRebalancePlanInput) {
+    return this.sealRebalancePlan({ ...input, mode: "SHADOW" });
+  }
+
   async failShadowRebalanceRun(
     runId: string,
     errorCode: string,
@@ -996,6 +1012,17 @@ export class PrismaPortfolioRepository {
   latestShadowRebalanceRun() {
     return this.database.rebalanceRun.findFirst({
       where: { mode: "SHADOW", plan: { isNot: null } },
+      orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+      include: rebalanceRunPlanInclude,
+    });
+  }
+
+  latestRebalanceRun(mode?: StoredRebalanceMode) {
+    return this.database.rebalanceRun.findFirst({
+      where: {
+        ...(mode ? { mode } : {}),
+        plan: { isNot: null },
+      },
       orderBy: [{ startedAt: "desc" }, { id: "desc" }],
       include: rebalanceRunPlanInclude,
     });

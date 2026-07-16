@@ -265,23 +265,25 @@ describe("NestJS engine HTTP contract", () => {
     expect(harness.portfolio.createRebalancePlan).toHaveBeenCalledWith({ mode: "SHADOW" });
   });
 
-  it("LIVE를 계획 생성 입력으로 보내도 service 호출 전에 400으로 거부한다", async () => {
+  it("PAPER와 LIVE 계획 모드도 같은 검증된 service 경계로 전달한다", async () => {
     const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
     app = harness.app;
+    harness.portfolio.createRebalancePlan.mockResolvedValue(rebalancePlanSnapshot());
 
-    const response = await harness.fastify.inject({
-      method: "POST",
-      url: "/internal/v1/rebalance-plans",
-      headers: {
-        authorization: `Bearer ${SERVICE_TOKEN}`,
-        "content-type": "application/json",
-      },
-      payload: { mode: "LIVE" },
-    });
+    for (const mode of ["PAPER", "LIVE"] as const) {
+      const response = await harness.fastify.inject({
+        method: "POST",
+        url: "/internal/v1/rebalance-plans",
+        headers: {
+          authorization: `Bearer ${SERVICE_TOKEN}`,
+          "content-type": "application/json",
+        },
+        payload: { mode },
+      });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ code: "REBALANCE_PLAN_INPUT_INVALID" });
-    expect(harness.portfolio.createRebalancePlan).not.toHaveBeenCalled();
+      expect(response.statusCode).toBe(200);
+      expect(harness.portfolio.createRebalancePlan).toHaveBeenCalledWith({ mode });
+    }
   });
 });
 

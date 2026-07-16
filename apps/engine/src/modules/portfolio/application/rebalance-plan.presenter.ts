@@ -12,7 +12,7 @@ type StoredRun = NonNullable<Awaited<ReturnType<PrismaPortfolioRepository["rebal
 export async function getLatestRebalancePlan(
   repository: PrismaPortfolioRepository,
 ): Promise<RebalancePlanSnapshotContract> {
-  const run = await repository.latestShadowRebalanceRun();
+  const run = await repository.latestRebalanceRun();
   return run ? presentRebalancePlan(run) : emptyRebalancePlanSnapshot();
 }
 
@@ -23,7 +23,7 @@ export function presentRebalancePlan(run: StoredRun): RebalancePlanSnapshotContr
   const latest: StoredRebalancePlanContract = {
     runId: run.id,
     planId: run.plan.id,
-    mode: "SHADOW",
+    mode: run.plan.mode,
     status: run.plan.status,
     startedAt: run.startedAt.toISOString(),
     completedAt: run.completedAt.toISOString(),
@@ -81,27 +81,27 @@ function emptyRebalancePlanSnapshot(): RebalancePlanSnapshotContract {
 
 function requireReturnPolicy(value: string): "BAND_EDGE" | "TARGET" {
   if (value === "BAND_EDGE" || value === "TARGET") return value;
-  throw new Error("저장된 Shadow 계획의 복귀 정책이 올바르지 않습니다.");
+  throw new Error("저장된 리밸런싱 계획의 복귀 정책이 올바르지 않습니다.");
 }
 
 function requireCanonicalVersion(value: string): "SHADOW_PLAN_V1" {
   if (value === "SHADOW_PLAN_V1") return value;
-  throw new Error("저장된 Shadow 계획의 canonical version이 올바르지 않습니다.");
+  throw new Error("저장된 리밸런싱 계획의 canonical version이 올바르지 않습니다.");
 }
 
 function requirePhase(value: string): "SELL" | "BUY" {
   if (value === "SELL" || value === "BUY") return value;
-  throw new Error("저장된 Shadow 주문 후보의 방향이 올바르지 않습니다.");
+  throw new Error("저장된 리밸런싱 주문 후보의 방향이 올바르지 않습니다.");
 }
 
 function requireStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
-    throw new Error("저장된 Shadow 계획의 이유 코드가 올바르지 않습니다.");
+    throw new Error("저장된 리밸런싱 계획의 이유 코드가 올바르지 않습니다.");
   }
   const codes: string[] = [];
   for (const item of value as unknown[]) {
     if (typeof item !== "string") {
-      throw new Error("저장된 Shadow 계획의 이유 코드가 올바르지 않습니다.");
+      throw new Error("저장된 리밸런싱 계획의 이유 코드가 올바르지 않습니다.");
     }
     codes.push(item);
   }
@@ -110,7 +110,7 @@ function requireStringArray(value: unknown): string[] {
 
 function requireJsonArray(value: unknown): never[] {
   if (!Array.isArray(value)) {
-    throw new Error("저장된 Shadow 계획의 JSON 결과가 배열이 아닙니다.");
+    throw new Error("저장된 리밸런싱 계획의 JSON 결과가 배열이 아닙니다.");
   }
   return value as never[];
 }

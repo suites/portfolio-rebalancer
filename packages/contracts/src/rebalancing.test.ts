@@ -63,11 +63,11 @@ describe("rebalancing contracts", () => {
     expect(parsed.latest?.executableOrders[0]?.notionalMinor).toBe("20000");
   });
 
-  it("계획 생성 요청은 아직 Shadow만 허용한다", () => {
-    expect(CreateRebalancePlanInputSchema.parse({ mode: "SHADOW" })).toEqual({
-      mode: "SHADOW",
-    });
-    expect(CreateRebalancePlanInputSchema.safeParse({ mode: "LIVE" }).success).toBe(false);
+  it("Shadow, Paper, Live 계획 생성 모드를 명시적으로 구분한다", () => {
+    for (const mode of ["SHADOW", "PAPER", "LIVE"] as const) {
+      expect(CreateRebalancePlanInputSchema.parse({ mode })).toEqual({ mode });
+    }
+    expect(CreateRebalancePlanInputSchema.safeParse({ mode: "AUTO" }).success).toBe(false);
   });
 
   it("부호가 잘못된 금액과 범위를 벗어난 비중을 거부한다", () => {
