@@ -45,7 +45,7 @@ pnpm db:migrate:deploy
 pnpm dev
 ```
 
-`apps/engine/.env.example`, `apps/web/.env.example`, `packages/database/.env.example`을 각각 같은 위치의 `.env.local`로 복사하고 로컬 값을 설정합니다. 토스 read-only 자격증명은 engine에만 두고 브라우저에서 `http://127.0.0.1:3000`을 엽니다. 첫 화면은 저장된 스냅샷이 없을 때 한 번 실제 계좌 수집을 시도합니다. 목표는 설정 화면에서 초안 저장과 적용을 분리합니다. 초안은 저장 당시 스냅샷 ID와 digest에 묶이므로 그 사이 계좌 데이터가 바뀌면 적용하지 않고 새 초안을 요구합니다. 적용 후 문제 해결 화면에서 새 데이터를 재점검해야 최신 스냅샷에 활성 버전이 고정됩니다. 전체 계좌번호와 토큰은 저장하거나 브라우저로 전달하지 않으며 주문을 제출하지 않습니다.
+`apps/engine/.env.example`, `apps/web/.env.example`, `packages/database/.env.example`을 각각 같은 위치의 `.env.local`로 복사하고 로컬 값을 설정합니다. 토스 read-only 자격증명은 engine에만 두고 브라우저에서 `http://127.0.0.1:13000`을 엽니다. 호스트 운영에서는 launchd가 같은 포트의 production Web과 4100 포트의 engine을 유지하고, `home-server` Caddy가 `https://stock.fredly.dev`를 Web으로 전달합니다. 첫 화면은 저장된 스냅샷이 없을 때 한 번 실제 계좌 수집을 시도합니다. 목표는 설정 화면에서 초안 저장과 적용을 분리합니다. 초안은 저장 당시 스냅샷 ID와 digest에 묶이므로 그 사이 계좌 데이터가 바뀌면 적용하지 않고 새 초안을 요구합니다. 적용 후 문제 해결 화면에서 새 데이터를 재점검해야 최신 스냅샷에 활성 버전이 고정됩니다. 전체 계좌번호와 토큰은 저장하거나 브라우저로 전달하지 않으며 주문을 제출하지 않습니다.
 
 전체 검증은 다음 명령으로 실행합니다.
 
