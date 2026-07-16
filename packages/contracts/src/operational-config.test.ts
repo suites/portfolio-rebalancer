@@ -3,7 +3,12 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
 
-import { OperationalConfigSchema } from "./operational-config";
+import {
+  ActivateOperationalConfigDraftInputSchema,
+  LivePromotionCommandSchema,
+  OperationalConfigSchema,
+  OperationalConfigSnapshotSchema,
+} from "./operational-config";
 
 const validConfig = {
   schemaVersion: "OPERATIONAL_CONFIG_V1" as const,
@@ -284,6 +289,85 @@ describe("OperationalConfigSchema", () => {
 
     expect(OperationalConfigSchema.safeParse(parsedYaml).success).toBe(true);
     expect(exampleText).not.toMatch(/client[_-]?secret|access[_-]?token|account[_-]?no/i);
+  });
+
+  it("저장 상태는 활성·초안 버전과 킬 스위치·Live 승격을 분리한다", () => {
+    const config = OperationalConfigSchema.parse(validConfig);
+    expect(
+      OperationalConfigSnapshotSchema.safeParse({
+        state: "READY",
+        activeVersion: {
+          id: "10000000-0000-4000-8000-000000000001",
+          version: 1,
+          status: "ACTIVE",
+          contentHash: "a".repeat(64),
+          createdAt: "2026-07-17T00:00:00+09:00",
+          config,
+        },
+        draftVersion: null,
+        killSwitch: "ENGAGED",
+        livePromotion: "REVOKED",
+        liveOrdersEnabled: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      OperationalConfigSnapshotSchema.safeParse({
+        state: "READY",
+        activeVersion: {
+          id: "10000000-0000-4000-8000-000000000001",
+          version: 1,
+          status: "ACTIVE",
+          contentHash: "a".repeat(64),
+          createdAt: "2026-07-17T00:00:00+09:00",
+          config,
+        },
+        draftVersion: null,
+        killSwitch: "ENGAGED",
+        livePromotion: "REVOKED",
+        liveOrdersEnabled: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("운영 설정 적용은 버전·해시·고정 문구를 모두 요구한다", () => {
+    expect(
+      ActivateOperationalConfigDraftInputSchema.safeParse({
+        version: 2,
+        contentHash: "b".repeat(64),
+        confirmation: "운영 설정을 적용합니다",
+      }).success,
+    ).toBe(true);
+    expect(
+      ActivateOperationalConfigDraftInputSchema.safeParse({
+        version: 2,
+        contentHash: "b".repeat(64),
+        confirmation: "적용",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("Live 승격과 권한 회수는 서로 다른 명시적 확인 문구를 요구한다", () => {
+    expect(
+      LivePromotionCommandSchema.safeParse({
+        state: "GRANTED",
+        reason: "Paper 검증과 계좌 허용 목록을 다시 확인했습니다.",
+        confirmation: "극소액 Live 승격",
+      }).success,
+    ).toBe(true);
+    expect(
+      LivePromotionCommandSchema.safeParse({
+        state: "GRANTED",
+        reason: "Paper 검증과 계좌 허용 목록을 다시 확인했습니다.",
+        confirmation: "Live 권한 회수",
+      }).success,
+    ).toBe(false);
+    expect(
+      LivePromotionCommandSchema.safeParse({
+        state: "REVOKED",
+        reason: "운영 점검을 위해 Live 권한을 즉시 회수합니다.",
+        confirmation: "Live 권한 회수",
+      }).success,
+    ).toBe(true);
   });
 });
 

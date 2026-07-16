@@ -185,8 +185,92 @@ export const OperationalConfigV1Schema = z
 
 export const OperationalConfigSchema = OperationalConfigV1Schema;
 
+export const OperationalConfigVersionSchema = z.strictObject({
+  id: z.uuid(),
+  version: z.number().int().positive(),
+  status: z.enum(["DRAFT", "ACTIVE"]),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  createdAt: z.iso.datetime({ offset: true }),
+  config: OperationalConfigSchema,
+});
+
+export const OperationalConfigSnapshotSchema = z
+  .strictObject({
+    state: z.enum(["READY", "EMPTY", "UNAVAILABLE"]),
+    activeVersion: OperationalConfigVersionSchema.nullable(),
+    draftVersion: OperationalConfigVersionSchema.nullable(),
+    killSwitch: z.enum(["ENGAGED", "DISENGAGED", "UNKNOWN"]),
+    livePromotion: z.enum(["GRANTED", "REVOKED", "UNKNOWN"]),
+    liveOrdersEnabled: z.boolean(),
+  })
+  .superRefine((snapshot, context) => {
+    if (snapshot.activeVersion?.status === "DRAFT") {
+      issue(
+        context,
+        ["activeVersion", "status"],
+        "활성 운영 설정 슬롯에는 ACTIVE 버전만 허용합니다.",
+      );
+    }
+    if (snapshot.draftVersion?.status === "ACTIVE") {
+      issue(
+        context,
+        ["draftVersion", "status"],
+        "운영 설정 초안 슬롯에는 DRAFT 버전만 허용합니다.",
+      );
+    }
+    if (
+      snapshot.liveOrdersEnabled &&
+      (snapshot.state !== "READY" ||
+        snapshot.activeVersion === null ||
+        snapshot.activeVersion.config.mode !== "LIVE" ||
+        !snapshot.activeVersion.config.live.enabled ||
+        snapshot.killSwitch !== "DISENGAGED" ||
+        snapshot.livePromotion !== "GRANTED")
+    ) {
+      issue(
+        context,
+        ["liveOrdersEnabled"],
+        "Live 주문 활성 상태는 ACTIVE LIVE 설정, 해제된 킬 스위치와 별도 승격을 모두 요구합니다.",
+      );
+    }
+  });
+
+export const SaveOperationalConfigDraftInputSchema = OperationalConfigSchema;
+
+export const ActivateOperationalConfigDraftInputSchema = z.strictObject({
+  version: z.number().int().positive(),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  confirmation: z.literal("운영 설정을 적용합니다"),
+});
+
+export const LivePromotionCommandSchema = z
+  .strictObject({
+    state: z.enum(["GRANTED", "REVOKED"]),
+    reason: z.string().trim().min(8).max(500),
+    confirmation: z.enum(["극소액 Live 승격", "Live 권한 회수"]),
+  })
+  .superRefine((input, context) => {
+    const expected = input.state === "GRANTED" ? "극소액 Live 승격" : "Live 권한 회수";
+    if (input.confirmation !== expected) {
+      context.addIssue({
+        code: "custom",
+        path: ["confirmation"],
+        message: `${expected} 문구를 정확히 선택해야 합니다.`,
+      });
+    }
+  });
+
 export type OperationalConfigV1Contract = z.infer<typeof OperationalConfigV1Schema>;
 export type OperationalConfigContract = z.infer<typeof OperationalConfigSchema>;
+export type OperationalConfigVersionContract = z.infer<typeof OperationalConfigVersionSchema>;
+export type OperationalConfigSnapshotContract = z.infer<typeof OperationalConfigSnapshotSchema>;
+export type SaveOperationalConfigDraftInputContract = z.infer<
+  typeof SaveOperationalConfigDraftInputSchema
+>;
+export type ActivateOperationalConfigDraftInputContract = z.infer<
+  typeof ActivateOperationalConfigDraftInputSchema
+>;
+export type LivePromotionCommandContract = z.infer<typeof LivePromotionCommandSchema>;
 
 function issue(context: z.RefinementCtx, path: PropertyKey[], message: string): void {
   context.addIssue({ code: "custom", path, message });
