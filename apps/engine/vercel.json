@@ -2,11 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nestjs",
   "regions": ["icn1"],
-  "functions": {
-    "src/main.ts": {
-      "maxDuration": 120
-    }
-  },
   "crons": [
     {
       "path": "/internal/v1/cron/portfolio",
