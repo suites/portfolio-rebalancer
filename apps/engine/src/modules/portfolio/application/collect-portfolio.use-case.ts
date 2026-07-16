@@ -44,6 +44,7 @@ export interface CollectPortfolioOptions {
 }
 
 export async function collectPortfolio(options: CollectPortfolioOptions): Promise<void> {
+  const clock = options.now ?? (() => new Date());
   const leaseOwner = randomUUID();
   const lease = await options.repository.acquireCollectionLease(leaseOwner);
   if (!lease) {
@@ -60,7 +61,7 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
         correlationId: randomUUID(),
       },
       async () => {
-        const observedAt = (options.now ?? (() => new Date()))();
+        const observedAt = readCollectionClock(clock, "수집 시작시각");
         const accounts = await options.source.listAccounts();
         const selected = selectAccount(accounts, options.selectedAccountSeq);
         await assertCollectionLease(options.repository, lease);
@@ -77,6 +78,7 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
         );
         options.requestAuditContext.attachCollectionRunId(run.id);
 
+        let terminalAt: Date | null = null;
         try {
           const targetScope = await options.repository.collectionTargetScope(account.id);
           const holdingsResponse = await options.source.getHoldings(selected.accountSeq);
@@ -107,6 +109,9 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
                 markets.map((marketCountry) => options.source.getMarketCalendar(marketCountry)),
               ),
             ]);
+          const completedAt = readCollectionClock(clock, "수집 완료시각");
+          terminalAt = completedAt;
+          assertCollectionTimeline(observedAt, completedAt);
           if (
             exchangeResponse &&
             (exchangeResponse.result.baseCurrency !== "USD" ||
@@ -171,6 +176,7 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
             runId: run.id,
             accountId: account.id,
             observedAt,
+            completedAt,
             securitiesValueMinor,
             usdKrwRate: exchangeResponse?.result.rate ?? null,
             holdings,
@@ -246,13 +252,54 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
                   "응답 데이터와 PostgreSQL 상태를 확인한 뒤 다시 수집하세요.",
                   { cause: error },
                 );
-          await options.repository.failCollection(run.id, collectionError.code, new Date());
+          await options.repository.failCollection(
+            run.id,
+            collectionError.code,
+            failureCompletedAt(clock, observedAt, terminalAt),
+          );
           throw collectionError;
         }
       },
     );
   } finally {
     await options.repository.releaseCollectionLease(lease);
+  }
+}
+
+function readCollectionClock(clock: () => Date, subject: string): Date {
+  const value = clock();
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
+    throw new CollectionError(
+      "DATA_INVALID",
+      `${subject}을 유효한 시각으로 확인하지 못했습니다.`,
+      "시스템 시계와 엔진의 clock 설정을 확인한 뒤 다시 수집하세요.",
+    );
+  }
+  return new Date(value.getTime());
+}
+
+function assertCollectionTimeline(observedAt: Date, completedAt: Date): void {
+  if (completedAt.getTime() < observedAt.getTime()) {
+    throw new CollectionError(
+      "DATA_INVALID",
+      "수집 완료시각이 수집 시작시각보다 빠릅니다.",
+      "시스템 시계가 역행하지 않는지 확인한 뒤 다시 수집하세요.",
+    );
+  }
+}
+
+function failureCompletedAt(clock: () => Date, observedAt: Date, terminalAt: Date | null): Date {
+  const minimumTime = Math.max(
+    observedAt.getTime(),
+    terminalAt && Number.isFinite(terminalAt.getTime())
+      ? terminalAt.getTime()
+      : observedAt.getTime(),
+  );
+  try {
+    const failedAt = readCollectionClock(clock, "수집 실패시각");
+    return failedAt.getTime() < minimumTime ? new Date(minimumTime) : failedAt;
+  } catch {
+    return new Date(minimumTime);
   }
 }
 

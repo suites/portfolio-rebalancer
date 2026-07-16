@@ -16,6 +16,113 @@ const collectionLease = {
 const requestAuditContext = new TossRequestAuditContext();
 
 describe("collectPortfolio", () => {
+  it("시작 시각과 모든 broker read 이후 완료 시각을 별도로 고정한다", async () => {
+    const startedAt = new Date("2026-07-16T00:00:00.000Z");
+    const completedAt = new Date("2026-07-16T00:00:02.000Z");
+    const now = vi.fn().mockReturnValueOnce(startedAt).mockReturnValueOnce(completedAt);
+    const completeCollection = vi.fn().mockResolvedValue(true);
+    const source = {
+      listAccounts: vi.fn().mockImplementation(() => {
+        expect(now).toHaveBeenCalledTimes(1);
+        return Promise.resolve([
+          { accountNo: "12345678901", accountSeq: 1, accountType: "BROKERAGE" },
+        ]);
+      }),
+      getHoldings: vi.fn().mockImplementation(() => {
+        expect(now).toHaveBeenCalledTimes(1);
+        return Promise.resolve(emptyHoldingsResponse());
+      }),
+      getBuyingPower: vi.fn().mockImplementation(() => {
+        expect(now).toHaveBeenCalledTimes(1);
+        return Promise.resolve({
+          result: { currency: "KRW" as const, cashBuyingPower: "0" },
+        });
+      }),
+      getUsdKrwRate: vi.fn(),
+      getStocks: vi.fn(),
+      getStockWarnings: vi.fn(),
+      ...neutralReadSourceStubs(),
+    };
+    const repository = {
+      acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      collectionTargetScope: vi.fn().mockResolvedValue(emptyTargetScope()),
+      heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
+      releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
+      upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
+      startCollection: vi.fn().mockResolvedValue({ id: "run-1" }),
+      completeCollection,
+      failCollection: vi.fn(),
+    };
+
+    await collectPortfolio({
+      source,
+      repository: repository as never,
+      requestAuditContext,
+      accountReferenceKey: "a".repeat(32),
+      now,
+    });
+
+    expect(now).toHaveBeenCalledTimes(2);
+    expect(repository.startCollection).toHaveBeenCalledWith(
+      "account-1",
+      startedAt,
+      expect.any(String),
+    );
+    expect(completeCollection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        observedAt: startedAt,
+        completedAt,
+      }),
+    );
+    const storedTimeline = completeCollection.mock.calls[0]?.[0] as
+      { observedAt: Date; completedAt: Date } | undefined;
+    expect(storedTimeline?.observedAt).not.toBe(startedAt);
+    expect(storedTimeline?.completedAt).not.toBe(completedAt);
+  });
+
+  it("완료 clock이 시작보다 역행하면 성공 snapshot을 저장하지 않는다", async () => {
+    const startedAt = new Date("2026-07-16T00:00:02.000Z");
+    const backwardsAt = new Date("2026-07-16T00:00:01.000Z");
+    const completeCollection = vi.fn();
+    const failCollection = vi.fn().mockResolvedValue(undefined);
+    const source = {
+      listAccounts: vi
+        .fn()
+        .mockResolvedValue([{ accountNo: "12345678901", accountSeq: 1, accountType: "BROKERAGE" }]),
+      getHoldings: vi.fn().mockResolvedValue(emptyHoldingsResponse()),
+      getBuyingPower: vi.fn().mockResolvedValue({
+        result: { currency: "KRW" as const, cashBuyingPower: "0" },
+      }),
+      getUsdKrwRate: vi.fn(),
+      getStocks: vi.fn(),
+      getStockWarnings: vi.fn(),
+      ...neutralReadSourceStubs(),
+    };
+    const repository = {
+      acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      collectionTargetScope: vi.fn().mockResolvedValue(emptyTargetScope()),
+      heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
+      releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
+      upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
+      startCollection: vi.fn().mockResolvedValue({ id: "run-1" }),
+      completeCollection,
+      failCollection,
+    };
+
+    await expect(
+      collectPortfolio({
+        source,
+        repository: repository as never,
+        requestAuditContext,
+        accountReferenceKey: "a".repeat(32),
+        now: vi.fn().mockReturnValueOnce(startedAt).mockReturnValueOnce(backwardsAt),
+      }),
+    ).rejects.toMatchObject({ code: "DATA_INVALID" });
+
+    expect(completeCollection).not.toHaveBeenCalled();
+    expect(failCollection).toHaveBeenCalledWith("run-1", "DATA_INVALID", startedAt);
+  });
+
   it("여러 계좌를 임의 선택하지 않고 보유 조회 전에 차단한다", async () => {
     const source = {
       listAccounts: vi.fn().mockResolvedValue([

@@ -579,6 +579,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
       accountId: "account-1",
       expectedTargetConfigVersionId: null,
       observedAt,
+      completedAt: new Date("2026-07-16T03:00:01.000Z"),
       securitiesValueMinor: 3_142_919n,
       usdKrwRate: "1380",
       holdings: [],
@@ -902,6 +903,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
       accountId: "account-1",
       expectedTargetConfigVersionId: "target-1",
       observedAt: new Date("2026-07-16T03:00:00.000Z"),
+      completedAt: new Date("2026-07-16T03:00:01.000Z"),
       securitiesValueMinor: 900_000n,
       usdKrwRate: null,
       holdings: [],
@@ -1067,6 +1069,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
         accountId: "account-1",
         expectedTargetConfigVersionId: null,
         observedAt: new Date("2026-07-16T03:00:00.000Z"),
+        completedAt: new Date("2026-07-16T03:00:01.000Z"),
         securitiesValueMinor: 0n,
         usdKrwRate: null,
         holdings: [],
@@ -1082,6 +1085,65 @@ describe("PrismaPortfolioRepository collection evidence", () => {
     ).resolves.toBe(false);
     expect(createMany).not.toHaveBeenCalled();
     expect(createSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("snapshot 관측 시각과 별개인 완료 시각으로 collection run을 종료한다", async () => {
+    const createSnapshot = vi.fn().mockResolvedValue({ id: "snapshot-1" });
+    const transaction = collectionTransaction(createSnapshot);
+    const repository = repositoryWithTransaction(transaction);
+    const observedAt = new Date("2026-07-16T03:00:00.000Z");
+    const completedAt = new Date("2026-07-16T03:00:02.000Z");
+
+    await repository.completeCollection({
+      ...emptyCollectionInput(),
+      observedAt,
+      completedAt,
+    });
+
+    const snapshotInput = createSnapshot.mock.calls[0]?.[0] as
+      { data: { observedAt: Date } } | undefined;
+    expect(snapshotInput?.data.observedAt).toBe(observedAt);
+    expect(transaction.collectionRun.update).toHaveBeenCalledWith({
+      where: { id: "run-1" },
+      data: {
+        status: "SUCCEEDED",
+        completedAt,
+        errorCode: null,
+      },
+    });
+  });
+
+  it.each([
+    {
+      label: "유효하지 않은 시작 시각",
+      observedAt: new Date(Number.NaN),
+      completedAt: new Date("2026-07-16T03:00:01.000Z"),
+    },
+    {
+      label: "유효하지 않은 완료 시각",
+      observedAt: new Date("2026-07-16T03:00:00.000Z"),
+      completedAt: new Date(Number.NaN),
+    },
+    {
+      label: "시작보다 빠른 완료 시각",
+      observedAt: new Date("2026-07-16T03:00:01.000Z"),
+      completedAt: new Date("2026-07-16T03:00:00.000Z"),
+    },
+  ])("$label이면 transaction 전에 차단한다", async ({ observedAt, completedAt }) => {
+    const transaction = vi.fn();
+    const database = {
+      $transaction: transaction,
+    } as unknown as DatabaseClient;
+    const repository = new PrismaPortfolioRepository(database);
+
+    await expect(
+      repository.completeCollection({
+        ...emptyCollectionInput(),
+        observedAt,
+        completedAt,
+      }),
+    ).rejects.toMatchObject({ code: "DATA_INVALID" });
+    expect(transaction).not.toHaveBeenCalled();
   });
 
   it("취득·heartbeat·해제에서 owner와 fencing token을 함께 사용한다", async () => {
@@ -1280,6 +1342,7 @@ function emptyCollectionInput() {
     accountId: "account-1",
     expectedTargetConfigVersionId: null,
     observedAt: new Date("2026-07-16T03:00:00.000Z"),
+    completedAt: new Date("2026-07-16T03:00:01.000Z"),
     securitiesValueMinor: 0n,
     usdKrwRate: null,
     holdings: [],

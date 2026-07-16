@@ -479,6 +479,7 @@ export class PrismaPortfolioRepository {
     readonly accountId: string;
     readonly expectedTargetConfigVersionId: string | null;
     readonly observedAt: Date;
+    readonly completedAt: Date;
     readonly securitiesValueMinor: bigint;
     readonly usdKrwRate: string | null;
     readonly holdings: readonly StoredHoldingInput[];
@@ -488,6 +489,7 @@ export class PrismaPortfolioRepository {
     readonly rawResponses: readonly RedactedResponseInput[];
     readonly lease: CollectionLease;
   }): Promise<boolean> {
+    assertCollectionTimeline(input.observedAt, input.completedAt);
     return this.database.$transaction(async (transaction) => {
       const activeLease = await transaction.$queryRaw<readonly { fencingToken: bigint }[]>`
         SELECT "fencing_token" AS "fencingToken"
@@ -673,7 +675,7 @@ export class PrismaPortfolioRepository {
         where: { id: input.runId },
         data: {
           status: CollectionRunStatus.SUCCEEDED,
-          completedAt: input.observedAt,
+          completedAt: input.completedAt,
           errorCode: null,
         },
       });
@@ -959,6 +961,28 @@ export class PrismaPortfolioRepository {
         },
       },
     });
+  }
+}
+
+function assertCollectionTimeline(observedAt: Date, completedAt: Date): void {
+  assertFiniteDate(observedAt, "수집 시작시각");
+  assertFiniteDate(completedAt, "수집 완료시각");
+  if (completedAt.getTime() < observedAt.getTime()) {
+    throw new CollectionError(
+      "DATA_INVALID",
+      "수집 완료시각이 수집 시작시각보다 빠릅니다.",
+      "시스템 시계와 수집 실행의 감사 시각을 확인한 뒤 다시 수집하세요.",
+    );
+  }
+}
+
+function assertFiniteDate(value: Date, subject: string): void {
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
+    throw new CollectionError(
+      "DATA_INVALID",
+      `${subject}을 유효한 시각으로 확인하지 못했습니다.`,
+      "시스템 시계와 수집 실행의 감사 시각을 확인한 뒤 다시 수집하세요.",
+    );
   }
 }
 
