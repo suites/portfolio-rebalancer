@@ -13,12 +13,12 @@ import { PortfolioService } from "./portfolio.service";
 const validInput = {
   allocations: [
     {
-      assetKey: "NASDAQ:AAPL",
+      assetKey: "US:AAPL",
       targetBasisPoints: 6_000,
       bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
     {
-      assetKey: "NYSE:BRK.B",
+      assetKey: "US:BRK.B",
       targetBasisPoints: 4_000,
       bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
@@ -36,11 +36,10 @@ describe("PortfolioService target settings", () => {
     expect(draftInput?.accountId).toBe("44444444-4444-4444-8444-444444444444");
     expect(draftInput?.sourceSnapshotId).toBe("55555555-5555-4555-8555-555555555555");
     expect(draftInput?.sourceSnapshotDigest).toBe("digest-current");
-    expect(
-      draftInput?.allocations.find(({ assetKey }) => assetKey === "NASDAQ:AAPL"),
-    ).toMatchObject({
+    expect(draftInput?.allocations.find(({ assetKey }) => assetKey === "US:AAPL")).toMatchObject({
       label: "Apple",
-      market: "NASDAQ",
+      marketCountry: "US",
+      listingMarket: null,
       symbol: "AAPL",
       targetBasisPoints: 6_000,
       lowerBasisPoints: 5_500,
@@ -54,7 +53,7 @@ describe("PortfolioService target settings", () => {
     const incomplete = {
       allocations: [
         {
-          assetKey: "NASDAQ:AAPL",
+          assetKey: "US:AAPL",
           targetBasisPoints: 10_000,
           bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
         },
@@ -118,7 +117,7 @@ function repositoryMock(options?: {
     targetConfigVersion: null,
     holdings: [
       {
-        market: "NASDAQ",
+        marketCountry: "US",
         symbol: "AAPL",
         name: "Apple",
         currency: "USD",
@@ -126,7 +125,7 @@ function repositoryMock(options?: {
         marketValueKrwMinor: 600_000n,
       },
       {
-        market: "NYSE",
+        marketCountry: "US",
         symbol: "BRK.B",
         name: "Berkshire",
         currency: "USD",

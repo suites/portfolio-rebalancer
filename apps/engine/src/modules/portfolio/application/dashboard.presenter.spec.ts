@@ -76,7 +76,7 @@ function dashboardState({ managedCashMinor }: { readonly managedCashMinor: bigin
       ],
       holdings: [
         {
-          market: "NASDAQ",
+          marketCountry: "US",
           symbol: "AAPL",
           name: "Apple",
           currency: "USD",
@@ -84,7 +84,7 @@ function dashboardState({ managedCashMinor }: { readonly managedCashMinor: bigin
           marketValueKrwMinor: 700_000n,
         },
         {
-          market: "NYSE",
+          marketCountry: "US",
           symbol: "BRK.B",
           name: "Berkshire",
           currency: "USD",
@@ -97,13 +97,13 @@ function dashboardState({ managedCashMinor }: { readonly managedCashMinor: bigin
         version: 1,
         allocations: [
           {
-            assetKey: "NASDAQ:AAPL",
+            assetKey: "US:AAPL",
             targetBasisPoints: 6_000,
             lowerBasisPoints: 5_500,
             upperBasisPoints: 6_500,
           },
           {
-            assetKey: "NYSE:BRK.B",
+            assetKey: "US:BRK.B",
             targetBasisPoints: 4_000,
             lowerBasisPoints: 3_500,
             upperBasisPoints: 4_500,

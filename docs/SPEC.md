@@ -90,6 +90,13 @@ apps/web -> apps/engine -> application -> broker ports -> domain
 
 새 증권사는 별도 어댑터 패키지에서 중립 포트를 구현하고, 지원하지 않는 기능은 capability에 선언하지 않습니다. 최소 공통분모를 넓혀 증권사 차이를 숨기지 않으며, 필수 capability가 없으면 주문 계획을 만들지 않고 한국어 오류로 차단합니다. 브로커 원본 응답과 상태는 대사·감사를 위해 보존하되 도메인 모델과 분리합니다.
 
+종목의 정규 식별자는 `broker + marketCountry + symbol`입니다. 토스 보유 응답의
+`marketCountry`는 `KR` 또는 `US`이고, 종목 기본 정보의 `market`은 `KOSPI`,
+`KOSDAQ`, `NASDAQ`, `NYSE` 같은 상장 시장이므로 같은 필드로 취급하지 않습니다.
+저장 모델은 전자를 `marketCountry`, 후자를 선택적 `listingMarket`으로 분리합니다.
+목표 키, 보유 대사와 중복 검사는 정규 식별자만 사용하고 상장 시장은 검색·표시·거래
+가능성 검증 metadata로만 사용합니다.
+
 `GET /api/v1/brokers`는 engine이 저장한 최신 스냅샷의 실제 연결 상태와 `read_only_adapter` 상태를 반환합니다. 공식 OpenAPI와 transport가 제공하는 기능 목록은 실제 계좌에 연결된 제품 capability와 다른 계약입니다. UI와 애플리케이션은 연결·어댑터 상태를 함께 확인하고, transport 목록만으로 기능을 활성화하지 않습니다.
 
 ## 5. 시스템 구성요소

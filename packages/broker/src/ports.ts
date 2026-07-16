@@ -36,7 +36,7 @@ export interface InstrumentReader {
 }
 
 export interface MarketCalendarReader {
-  getMarketSession(market: "KR" | "US"): Promise<MarketSession>;
+  getMarketSession(marketCountry: "KR" | "US"): Promise<MarketSession>;
 }
 
 export interface OrderReader {

@@ -8,9 +8,10 @@ import { PrismaPortfolioRepository } from "./prisma-portfolio.repository";
 
 const allocations = [
   {
-    assetKey: "NASDAQ:AAPL",
+    assetKey: "US:AAPL",
     label: "Apple",
-    market: "NASDAQ",
+    marketCountry: "US",
+    listingMarket: "NASDAQ",
     symbol: "AAPL",
     currency: "USD",
     targetBasisPoints: 10_000,
@@ -77,7 +78,7 @@ describe("PrismaPortfolioRepository target settings", () => {
       createHash("sha256")
         .update(
           JSON.stringify({
-            version: 2,
+            version: 3,
             managedCashMinor: null,
             sourceSnapshotId: "snapshot-1",
             sourceSnapshotDigest: "digest-1",
@@ -86,7 +87,7 @@ describe("PrismaPortfolioRepository target settings", () => {
         )
         .digest("hex"),
     );
-    expect(createInput?.data.source.version).toBe(2);
+    expect(createInput?.data.source.version).toBe(3);
     expect(createInput?.data.source.managedCashMinor).toBeNull();
     expect(createInput?.data.source.sourceSnapshotId).toBe("snapshot-1");
     expect(createInput?.data.source.sourceSnapshotDigest).toBe("digest-1");

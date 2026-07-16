@@ -19,7 +19,7 @@ describe("PortfolioScreen", () => {
       verifiedCashMinor: null,
       allocations: [
         {
-          id: "NASDAQ:AAPL",
+          id: "US:AAPL",
           label: "Apple",
           description: "NASDAQ · USD · 1주",
           valueMinor: "1000000",

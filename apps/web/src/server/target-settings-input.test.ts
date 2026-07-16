@@ -11,19 +11,19 @@ describe("target settings form parser", () => {
 
   it("반복 필드를 검증된 목표 설정 계약으로 만든다", () => {
     const formData = new FormData();
-    formData.append("assetKey", "NASDAQ:AAPL");
+    formData.append("assetKey", "US:AAPL");
     formData.append("targetPercent", "60");
-    formData.append("assetKey", "NYSE:BRK.B");
+    formData.append("assetKey", "US:BRK.B");
     formData.append("targetPercent", "40");
 
     expect(targetSettingsInputFromFormData(formData).allocations).toEqual([
       {
-        assetKey: "NASDAQ:AAPL",
+        assetKey: "US:AAPL",
         targetBasisPoints: 6_000,
         bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
       },
       {
-        assetKey: "NYSE:BRK.B",
+        assetKey: "US:BRK.B",
         targetBasisPoints: 4_000,
         bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
       },

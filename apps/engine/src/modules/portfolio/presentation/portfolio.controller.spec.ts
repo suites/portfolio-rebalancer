@@ -139,7 +139,7 @@ describe("NestJS engine HTTP contract", () => {
       payload: {
         allocations: [
           {
-            assetKey: "NASDAQ:AAPL",
+            assetKey: "US:AAPL",
             targetBasisPoints: 9_999,
           },
         ],

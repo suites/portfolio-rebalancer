@@ -9,7 +9,7 @@ import {
 } from "@portfolio-rebalancer/database";
 
 export interface StoredHoldingInput {
-  readonly market: string;
+  readonly marketCountry: string;
   readonly symbol: string;
   readonly name: string;
   readonly currency: string;
@@ -42,7 +42,8 @@ export interface CollectionLease {
 export interface StoredTargetAllocationInput {
   readonly assetKey: string;
   readonly label: string;
-  readonly market: string;
+  readonly marketCountry: string;
+  readonly listingMarket: string | null;
   readonly symbol: string;
   readonly currency: string;
   readonly targetBasisPoints: number;
@@ -264,7 +265,7 @@ export class PrismaPortfolioRepository {
       orderBy: { observedAt: "desc" },
       include: {
         account: true,
-        holdings: { orderBy: [{ market: "asc" }, { symbol: "asc" }] },
+        holdings: { orderBy: [{ marketCountry: "asc" }, { symbol: "asc" }] },
         buyingPower: { orderBy: { currency: "asc" } },
         targetConfigVersion: {
           include: { allocations: { orderBy: { assetKey: "asc" } } },
@@ -313,7 +314,8 @@ export class PrismaPortfolioRepository {
       .map((allocation) => ({
         assetKey: allocation.assetKey,
         label: allocation.label,
-        market: allocation.market,
+        marketCountry: allocation.marketCountry,
+        listingMarket: allocation.listingMarket,
         symbol: allocation.symbol,
         currency: allocation.currency,
         targetBasisPoints: allocation.targetBasisPoints,
@@ -322,7 +324,7 @@ export class PrismaPortfolioRepository {
         bandPolicy: allocation.bandPolicy,
       }));
     const source = {
-      version: 2,
+      version: 3,
       managedCashMinor: null,
       sourceSnapshotId: input.sourceSnapshotId,
       sourceSnapshotDigest: input.sourceSnapshotDigest,
@@ -392,7 +394,8 @@ export class PrismaPortfolioRepository {
                 bandPolicy: allocation.bandPolicy,
                 instruments: {
                   create: {
-                    market: allocation.market,
+                    marketCountry: allocation.marketCountry,
+                    listingMarket: allocation.listingMarket,
                     symbol: allocation.symbol,
                     currency: allocation.currency,
                     withinAssetPoints: 10_000,

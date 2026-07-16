@@ -26,6 +26,7 @@
 - 401 토큰 무효화와 429 `Retry-After`·rate-limit group·request ID 메타데이터 추출
 - 계좌 변경 메서드의 네트워크 전송 하드 차단(`TOSS_LIVE_TRADING_DISABLED`)
 - 계좌·보유·시세·호가·종목·주문 조회를 분리한 capability 기반 중립 포트
+- 종목 정규 키는 `marketCountry(KR/US) + symbol`, 상장 시장은 별도 metadata로 분리
 - Toss transport가 제공하는 read-only capability 18개와 write capability 미제공
 - NestJS 11과 Fastify adapter 기반 별도 engine, Next.js Web/BFF의 모노레포 분리
 - Prisma 7과 PostgreSQL 17 기반 계좌 참조·수집 실행·redacted 응답·불변 스냅샷

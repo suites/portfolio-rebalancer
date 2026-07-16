@@ -43,12 +43,12 @@ export async function getDashboard(
     pinnedTarget?.allocations.map((allocation) => [allocation.assetKey, allocation]) ?? [],
   );
   const allocations = snapshot.holdings.map((holding) => {
-    const id = `${holding.market}:${holding.symbol}`;
+    const id = `${holding.marketCountry}:${holding.symbol}`;
     const target = targets.get(id);
     const common = {
       id,
       label: holding.name,
-      description: `${holding.market} · ${holding.currency} · ${holding.quantity}주`,
+      description: `${holding.marketCountry} · ${holding.currency} · ${holding.quantity}주`,
       valueMinor: holding.marketValueKrwMinor.toString(),
       currentBasisPointHundredths:
         total === 0n ? 0 : Number((holding.marketValueKrwMinor * 1_000_000n) / total),

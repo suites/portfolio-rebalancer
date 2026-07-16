@@ -89,6 +89,10 @@ rankings.read                 indicators.read
 
 전체 타입 전송 계층이 있다는 것은 모든 제품 유스케이스가 완성되었다는 뜻이 아닙니다. 현재 계좌·보유자산·KRW·USD 매수 가능 금액과 필요 시 USD/KRW 환율의 실제 read-only 수집, 런타임 검증과 PostgreSQL 저장까지 연결했습니다. 매수 가능 금액은 관리 현금과 분리된 `valuationEligible=false` 증거로만 사용합니다. 다음은 아직 미구현입니다.
 
+보유 응답의 `marketCountry(KR/US)`와 종목 기본 정보의 `market(KOSPI/NASDAQ 등)`은
+의미가 다릅니다. 애플리케이션 정규 키는 `marketCountry + symbol`을 사용하고 종목
+정보의 `market`은 `listingMarket`으로 별도 저장합니다.
+
 - 나머지 조회 API를 `packages/broker`의 중립 모델로 변환하는 어댑터
 - 가격 API의 관측 시각을 이용한 주문용 freshness 검증
 - 자동 재시도·jitter, 그룹별 client-side limiter와 request ID 감사 저장

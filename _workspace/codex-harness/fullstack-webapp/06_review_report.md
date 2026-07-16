@@ -11,6 +11,7 @@
 - `pnpm verify`는 변경 후 107개 테스트를 포함해 통과했다.
 - collection fencing/heartbeat와 최신 수집 계좌 범위 고정을 완료했다.
 - 목표 입력을 서버 확정 `AUTO/MIXED_V1` 밴드로 단순화하고 policy version을 저장한다.
+- `marketCountry + symbol` 정규 키와 별도 `listingMarket` metadata를 분리했다.
 
 - 실제 주문 전송 차단 유지: 통과
 - 브라우저/Next의 Toss secret 접근 금지: 통과

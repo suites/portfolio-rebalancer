@@ -33,7 +33,7 @@ export interface OrderBookSnapshot {
 export interface BrokerInstrument {
   readonly symbol: SymbolCode;
   readonly name: string;
-  readonly market: "KR" | "US";
+  readonly marketCountry: "KR" | "US";
   readonly currency: Currency;
 }
 
@@ -45,7 +45,7 @@ export interface HoldingPosition {
 }
 
 export interface MarketSession {
-  readonly market: "KR" | "US";
+  readonly marketCountry: "KR" | "US";
   readonly status: "OPEN" | "CLOSED" | "UNKNOWN";
   readonly observedAt: IsoDateTime;
 }

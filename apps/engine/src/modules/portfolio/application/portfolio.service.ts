@@ -85,7 +85,7 @@ export class PortfolioService {
       parsed.allocations.map((allocation) => [allocation.assetKey, allocation]),
     );
     const holdings = new Map(
-      snapshot.holdings.map((holding) => [`${holding.market}:${holding.symbol}`, holding]),
+      snapshot.holdings.map((holding) => [`${holding.marketCountry}:${holding.symbol}`, holding]),
     );
     if (
       requested.size !== holdings.size ||
@@ -111,7 +111,8 @@ export class PortfolioService {
           ...allocation,
           ...band,
           label: holding.name,
-          market: holding.market,
+          marketCountry: holding.marketCountry,
+          listingMarket: null,
           symbol: holding.symbol,
           currency: holding.currency,
         };

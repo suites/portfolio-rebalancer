@@ -12,6 +12,9 @@ RuntimeLease.
   `valuationEligible=false`를 저장하며 관리 현금과 분리한다.
 - `TargetAllocation.bandPolicy` JSONB는 `AUTO/MIXED_V1` 또는 versioned CUSTOM 정책을
   확정 lower/upper와 함께 보존한다. 기존 행은 `CUSTOM/LEGACY_V1`으로 migration한다.
+- `HoldingSnapshot.marketCountry`와 `TargetInstrument.marketCountry`는 기존 `market`
+  DB 열을 정규 국가 키로 해석한다. `TargetInstrument.listingMarket`은 별도 nullable
+  metadata 열이다.
 - RuntimeLease는 Vercel 수평 실행의 중복 Toss 수집을 막는다.
 - 새 테이블은 추가하지 않는다. 기존 TargetConfig 계열에 immutable version을 추가하고 이전 ACTIVE를 RETIRED로 전환한다.
 - TargetConfigVersion.source와 contentHash는 초안 원본 snapshot ID·digest를 포함한다.

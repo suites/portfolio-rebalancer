@@ -33,6 +33,7 @@
 - Web은 보유주식 평가액, 통화별 매수 가능 금액과 검증된 관리 현금을 분리한다.
 - 목표 입력은 기본 `AUTO/MIXED_V1`이며 server domain 함수가 확정 범위를 만든다.
 - 목표 설정 버전은 밴드 정책 모드·버전과 확정 lower/upper를 함께 저장한다.
+- 보유·목표·대사 키에서 KOSPI/NASDAQ 같은 listing market을 사용하지 않는다.
 
 ```text
 Browser -> apps/web (Next.js, Vercel)

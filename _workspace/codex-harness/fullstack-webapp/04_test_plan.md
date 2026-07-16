@@ -17,6 +17,7 @@
 - 자동 밴드 0, 1, 100, 1000, 1999, 2000, 9999, 10000bp 경계
 - 상대 편차 올림, 500bp 상한과 0/10000bp clamp
 - 기본 Web form에 목표 필드만 존재하고 CUSTOM 역전 범위는 계약에서 거부
+- 같은 미국 종목은 listing market과 무관하게 `US:symbol` 하나로 식별
 
 - Toss 계좌·보유·환율 런타임 schema rejection
 - USD/KRW bigint 환산과 KRW fractional rejection

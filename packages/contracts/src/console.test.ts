@@ -4,11 +4,11 @@ import { TargetSettingsDraftInputSchema } from "./console";
 
 const validAllocations = [
   {
-    assetKey: "NASDAQ:AAPL",
+    assetKey: "US:AAPL",
     targetBasisPoints: 6_000,
   },
   {
-    assetKey: "NYSE:BRK.B",
+    assetKey: "US:BRK.B",
     targetBasisPoints: 4_000,
   },
 ];
@@ -46,7 +46,7 @@ describe("target settings contract", () => {
     const invalid = TargetSettingsDraftInputSchema.safeParse({
       allocations: [
         {
-          assetKey: "NASDAQ:AAPL",
+          assetKey: "US:AAPL",
           targetBasisPoints: 10_000,
           bandPolicy: {
             mode: "CUSTOM",

@@ -95,16 +95,17 @@ model TargetAllocation {
 }
 
 model TargetInstrument {
-  id                String @id @default(uuid()) @db.Uuid
-  allocationId      String @map("allocation_id") @db.Uuid
-  market            String
+  id                String  @id @default(uuid()) @db.Uuid
+  allocationId      String  @map("allocation_id") @db.Uuid
+  marketCountry     String  @map("market")
+  listingMarket     String? @map("listing_market")
   symbol            String
   currency          String
-  withinAssetPoints Int    @map("within_asset_points")
+  withinAssetPoints Int     @map("within_asset_points")
 
   allocation TargetAllocation @relation(fields: [allocationId], references: [id], onDelete: Restrict)
 
-  @@unique([allocationId, market, symbol])
+  @@unique([allocationId, marketCountry, symbol], map: "target_instrument_allocation_id_market_symbol_key")
   @@map("target_instrument")
 }
 
@@ -173,7 +174,7 @@ model PortfolioSnapshot {
 model HoldingSnapshot {
   id                   String @id @default(uuid()) @db.Uuid
   snapshotId           String @map("snapshot_id") @db.Uuid
-  market               String
+  marketCountry        String @map("market")
   symbol               String
   name                 String
   currency             String
@@ -186,7 +187,7 @@ model HoldingSnapshot {
 
   snapshot PortfolioSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
 
-  @@unique([snapshotId, market, symbol])
+  @@unique([snapshotId, marketCountry, symbol], map: "holding_snapshot_snapshot_id_market_symbol_key")
   @@map("holding_snapshot")
 }
 

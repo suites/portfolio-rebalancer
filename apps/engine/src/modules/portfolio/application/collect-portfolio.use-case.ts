@@ -260,7 +260,7 @@ function normalizeHolding(
       ? krwAmountToMinor(item.marketValue.amount)
       : usdAmountToKrwMinor(item.marketValue.amount, usdKrwRate as string);
   return {
-    market: item.marketCountry,
+    marketCountry: item.marketCountry,
     symbol: item.symbol,
     name: item.name,
     currency: item.currency,

@@ -36,9 +36,9 @@ export async function getTargetSettings(
     requiresCollection:
       activeVersion !== null && activeVersion.id !== snapshot.targetConfigVersionId,
     assets: snapshot.holdings.map((holding) => ({
-      assetKey: `${holding.market}:${holding.symbol}`,
+      assetKey: `${holding.marketCountry}:${holding.symbol}`,
       label: holding.name,
-      description: `${holding.market} · ${holding.currency} · ${holding.quantity}주`,
+      description: `${holding.marketCountry} · ${holding.currency} · ${holding.quantity}주`,
       currentBasisPointHundredths:
         total === 0n ? 0 : Number((holding.marketValueKrwMinor * 1_000_000n) / total),
     })),
