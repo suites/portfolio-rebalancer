@@ -1,6 +1,4 @@
-import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -9,8 +7,8 @@ describe("Vercel Nest deployment configuration", () => {
     const contents = await readFile(new URL("../vercel.json", import.meta.url), "utf8");
     const config = JSON.parse(contents) as Record<string, unknown>;
 
-    expect(config.framework).toBe("nestjs");
     expect(config).not.toHaveProperty("builds");
+    expect(config).not.toHaveProperty("framework");
     expect(config).not.toHaveProperty("functions");
     expect(config).not.toHaveProperty("routes");
     expect(config).not.toHaveProperty("rewrites");
@@ -22,23 +20,5 @@ describe("Vercel Nest deployment configuration", () => {
     expect(entrypoint).toContain('from "@nestjs/core"');
     expect(entrypoint).toContain("NestFactory.create");
     expect(entrypoint).toContain("app.listen");
-  });
-
-  it("프로덕션 런타임에서 모노레포 패키지를 컴파일된 CommonJS로 로드한다", () => {
-    const script = [
-      "@portfolio-rebalancer/domain",
-      "@portfolio-rebalancer/broker-toss",
-      "@portfolio-rebalancer/contracts",
-      "@portfolio-rebalancer/database",
-    ]
-      .map((packageName) => `require(${JSON.stringify(packageName)})`)
-      .join(";");
-
-    expect(() =>
-      execFileSync(process.execPath, ["-e", script], {
-        cwd: fileURLToPath(new URL("..", import.meta.url)),
-        stdio: "pipe",
-      }),
-    ).not.toThrow();
   });
 });

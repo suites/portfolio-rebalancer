@@ -105,14 +105,9 @@ apps/engine/src/
 
 같은 Git 저장소에서 `apps/web`과 `apps/engine`을 각각 Vercel Project로 가져옵니다. PostgreSQL은 `portfolio-rebalancer-engine`에 연결한 Vercel Marketplace Supabase를 기본 운영 경로로 사용합니다. Integration이 자동 주입하는 pooled `POSTGRES_PRISMA_URL`은 runtime, direct `POSTGRES_URL_NON_POOLING`은 Prisma migration에 사용하며 기존 `DATABASE_URL`과 `DATABASE_DIRECT_URL`은 로컬·호환 fallback으로 유지합니다.
 
-engine 프로젝트의 Root Directory는 `apps/engine`으로 지정하고 외부 workspace source 포함을 활성화합니다. Framework는 `apps/engine/vercel.json`의 `nestjs`로 고정하며 Build Command와 Output Directory는 override하지 않습니다. `src/main.ts`는 일반 Nest 애플리케이션과 동일하게 `NestFactory.create()`와 하나의 `app.listen()` 경로만 사용합니다. Vercel zero-config가 이 진입점을 자동 배포하므로 `vercel.json`에서 handler, rewrite 또는 `functions` glob을 선언하지 않습니다. Vercel이 제공하는 `PORT`를 `ENGINE_PORT`보다 우선하고, 실행 시간과 메모리는 Fluid Compute와 충돌하지 않도록 Dashboard의 Functions 설정에서 관리합니다.
+engine 프로젝트의 Root Directory는 `apps/engine`으로 지정하고 외부 workspace source 포함을 활성화합니다. Framework, Build Command와 Output Directory는 override하지 않습니다. `src/main.ts`는 일반 Nest 애플리케이션과 동일하게 `NestFactory.create()`와 하나의 `app.listen()` 경로만 사용합니다. Vercel zero-config가 NestJS와 이 진입점을 자동 감지하므로 `vercel.json`에는 서울 리전과 Cron만 선언합니다. Vercel이 제공하는 `PORT`를 `ENGINE_PORT`보다 우선하고, 실행 시간과 메모리는 Fluid Compute와 충돌하지 않도록 Dashboard의 Functions 설정에서 관리합니다.
 
-engine의 독립 production 산출물도 같은 CommonJS 진입점에서 만듭니다. Nest CLI와 workspace alias를 지정한 webpack build는 내부 TypeScript 패키지를 포함한 `dist/main.cjs`를 생성하고 외부 npm 의존성은 번들에 중복하지 않습니다. Vercel zero-config 빌드에서는 workspace 패키지의 production export가 사전 컴파일한 CommonJS `dist`를 가리키므로 함수 파일 추적과 Node 실행 시 TypeScript 원본에 의존하지 않습니다. 개발 조건은 계속 각 패키지의 `src/index.ts`를 사용합니다.
-
-```bash
-pnpm --filter @portfolio-rebalancer/engine build
-pnpm --filter @portfolio-rebalancer/engine start:prod
-```
+engine은 별도 webpack 번들을 만들지 않습니다. 로컬에서는 `tsx`로 실행하고, 배포에서는 Vercel의 NestJS zero-config 변환을 사용합니다. Vercel 함수 추적에 필요한 workspace 패키지만 배포 빌드 전에 CommonJS `dist`로 컴파일합니다.
 
 토스증권은 허용 IP를 요구하므로 engine 프로젝트에서 Vercel Pro Static IPs 또는 Enterprise Secure Compute를 활성화해야 합니다. 해당 IP를 토스증권에 등록한 뒤에만 `TOSS_EGRESS_ALLOWLIST_CONFIRMED=true`를 설정하세요. 일반 Vercel 동적 출구 IP에서는 실제 수집이 코드에서 차단됩니다.
 

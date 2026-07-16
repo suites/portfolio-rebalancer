@@ -5,12 +5,9 @@
   "type": "commonjs",
   "scripts": {
     "prebuild": "pnpm -w build:engine-deps",
-    "build": "pnpm typecheck && nest build --builder webpack --webpackPath webpack.config.cjs",
-    "dev": "pnpm start:dev",
+    "build": "tsc --noEmit",
+    "dev": "tsx watch --conditions=development src/main.ts",
     "start": "tsx --conditions=development src/main.ts",
-    "start:dev": "tsx watch --conditions=development src/main.ts",
-    "start:prod": "node dist/main.cjs",
-    "pretest": "pnpm -w build:engine-deps",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit"
@@ -30,10 +27,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11.0.24",
-    "@nestjs/schematics": "^11.1.0",
     "@nestjs/testing": "^11.1.28",
-    "ts-loader": "^9.6.2",
     "tsx": "4.23.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"

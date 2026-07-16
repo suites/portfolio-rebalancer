@@ -3,7 +3,7 @@
   "compilerOptions": {
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "lib": ["ES2023"],
     "verbatimModuleSyntax": false,
     "types": ["node"]
   },
