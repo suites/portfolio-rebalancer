@@ -117,6 +117,7 @@ model BrokerAccount {
   livePromotions    LivePromotionEvent[]
   riskEvidence      ExecutionRiskEvidence[]
   preSubmitEvidence PreSubmitEvidence[]
+  operationalConfig OperationalConfig?
 
   @@unique([broker, externalRefHmac])
   @@map("broker_account")
@@ -607,23 +608,76 @@ model RebalancePlanOrder {
   @@map("rebalance_plan_order")
 }
 
-model LivePromotionEvent {
-  id                       String             @id @default(uuid()) @db.Uuid
-  accountId                String             @map("account_id") @db.Uuid
-  version                  Int
-  state                    LivePromotionState
-  operationalConfigSha256  String             @map("operational_config_sha256") @db.Char(64)
-  accountAllowlistHmac     String             @map("account_allowlist_hmac") @db.Char(64)
-  maxSingleOrderGrossMinor BigInt             @map("max_single_order_gross_minor")
-  maxDailyGrossMinor       BigInt             @map("max_daily_gross_minor")
-  tinyLiveMaxGrossMinor    BigInt             @map("tiny_live_max_gross_minor")
-  actor                    String
-  reason                   String
-  occurredAt               DateTime           @default(now()) @map("occurred_at") @db.Timestamptz(6)
-  createdAt                DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+model OperationalConfig {
+  id        String   @id @default(uuid()) @db.Uuid
+  accountId String   @unique(map: "operational_config_account_id_key") @map("account_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  account      BrokerAccount           @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  riskEvidence ExecutionRiskEvidence[]
+  account     BrokerAccount                 @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  versions    OperationalConfigVersion[]
+  activations OperationalConfigActivation[]
+
+  @@map("operational_config")
+}
+
+model OperationalConfigVersion {
+  id               String   @id @default(uuid()) @db.Uuid
+  configId         String   @map("config_id") @db.Uuid
+  version          Int
+  schemaVersion    String   @map("schema_version")
+  canonicalContent String   @map("canonical_content") @db.Text
+  contentHash      String   @map("content_hash") @db.Char(64)
+  payload          Json     @db.JsonB
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  config         OperationalConfig            @relation(fields: [configId], references: [id], onDelete: Restrict)
+  activation     OperationalConfigActivation?
+  livePromotions LivePromotionEvent[]
+  riskEvidence   ExecutionRiskEvidence[]
+
+  @@unique([configId, version], map: "operational_config_version_config_version_key")
+  @@unique([configId, contentHash], map: "operational_config_version_config_hash_key")
+  @@index([configId, createdAt(sort: Desc)])
+  @@map("operational_config_version")
+}
+
+model OperationalConfigActivation {
+  id                         String   @id @default(uuid()) @db.Uuid
+  configId                   String   @map("config_id") @db.Uuid
+  version                    Int
+  operationalConfigVersionId String   @unique(map: "operational_config_activation_config_version_id_key") @map("operational_config_version_id") @db.Uuid
+  actor                      String
+  confirmationVersion        String   @map("confirmation_version")
+  occurredAt                 DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  createdAt                  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  config                   OperationalConfig        @relation(fields: [configId], references: [id], onDelete: Restrict)
+  operationalConfigVersion OperationalConfigVersion @relation(fields: [operationalConfigVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([configId, version], map: "operational_config_activation_config_version_key")
+  @@index([configId, occurredAt(sort: Desc)])
+  @@map("operational_config_activation")
+}
+
+model LivePromotionEvent {
+  id                         String             @id @default(uuid()) @db.Uuid
+  accountId                  String             @map("account_id") @db.Uuid
+  version                    Int
+  state                      LivePromotionState
+  operationalConfigSha256    String             @map("operational_config_sha256") @db.Char(64)
+  operationalConfigVersionId String?            @map("operational_config_version_id") @db.Uuid
+  accountAllowlistHmac       String             @map("account_allowlist_hmac") @db.Char(64)
+  maxSingleOrderGrossMinor   BigInt             @map("max_single_order_gross_minor")
+  maxDailyGrossMinor         BigInt             @map("max_daily_gross_minor")
+  tinyLiveMaxGrossMinor      BigInt             @map("tiny_live_max_gross_minor")
+  actor                      String
+  reason                     String
+  occurredAt                 DateTime           @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  createdAt                  DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  account                  BrokerAccount             @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  operationalConfigVersion OperationalConfigVersion? @relation(fields: [operationalConfigVersionId], references: [id], onDelete: Restrict)
+  riskEvidence             ExecutionRiskEvidence[]
 
   @@unique([accountId, version], map: "live_promotion_event_account_version_key")
   @@index([accountId, occurredAt(sort: Desc)])
@@ -638,6 +692,7 @@ model ExecutionRiskEvidence {
   promotionEventId           String   @map("promotion_event_id") @db.Uuid
   operationalConfigCanonical String   @map("operational_config_canonical") @db.Text
   operationalConfigSha256    String   @map("operational_config_sha256") @db.Char(64)
+  operationalConfigVersionId String?  @map("operational_config_version_id") @db.Uuid
   accountAllowlistHmac       String   @map("account_allowlist_hmac") @db.Char(64)
   checks                     Json     @db.JsonB
   evaluatedAt                DateTime @map("evaluated_at") @db.Timestamptz(6)
@@ -648,6 +703,7 @@ model ExecutionRiskEvidence {
   planVersionRecord        RebalancePlanVersion           @relation(fields: [planId, planVersion], references: [planId, version], onDelete: Restrict)
   account                  BrokerAccount                  @relation(fields: [accountId], references: [id], onDelete: Restrict)
   promotionEvent           LivePromotionEvent             @relation(fields: [promotionEventId], references: [id], onDelete: Restrict)
+  operationalConfigVersion OperationalConfigVersion?      @relation(fields: [operationalConfigVersionId], references: [id], onDelete: Restrict)
   preSubmitEvidence        PreSubmitEvidence[]
   submissionAuthorizations OrderSubmissionAuthorization[]
 
@@ -757,6 +813,8 @@ model OrderLedger {
   consumedApprovals       ManualOrderApproval[]         @relation("ConsumedApprovalOrder")
   brokerActions           BrokerOrderAction[]
   brokerEvidence          BrokerOrderResponseEvidence[]
+  cancelAuthorizations    CancelOperatorAuthorization[]
+  cancelDispatchClaims    OrderCancelDispatchClaim[]
   reservationEvidence     PreSubmitEvidence?            @relation(fields: [reservationEvidenceId], references: [id], onDelete: Restrict)
   submissionAuthorization OrderSubmissionAuthorization?
   dispatchClaim           OrderDispatchClaim?
@@ -806,6 +864,7 @@ model BrokerOrderAction {
   brokerActionOrderId    String                @map("broker_action_order_id")
   brokerStatusRaw        String                @map("broker_status_raw")
   authorizationId        String                @unique(map: "broker_order_action_authorization_id_key") @map("authorization_id")
+  cancelDispatchClaimId  String?               @unique(map: "broker_order_action_cancel_dispatch_claim_id_key") @map("cancel_dispatch_claim_id") @db.Uuid
   canonicalRequestDigest String                @map("canonical_request_digest") @db.Char(64)
   requestId              String?               @map("request_id")
   httpStatus             Int                   @map("http_status")
@@ -816,8 +875,9 @@ model BrokerOrderAction {
   observedAt             DateTime              @map("observed_at") @db.Timestamptz(6)
   createdAt              DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  order        OrderLedger        @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  stateHistory OrderStateHistory?
+  order               OrderLedger               @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  cancelDispatchClaim OrderCancelDispatchClaim? @relation(fields: [cancelDispatchClaimId], references: [id], onDelete: Restrict)
+  stateHistory        OrderStateHistory?
 
   @@unique([orderId, brokerActionOrderId], map: "broker_order_action_order_action_id_key")
   @@index([orderId, observedAt(sort: Desc)])
@@ -829,6 +889,7 @@ model BrokerOrderResponseEvidence {
   orderId                  String                  @map("order_id") @db.Uuid
   evidenceKind             BrokerOrderEvidenceKind @map("evidence_kind")
   dispatchClaimId          String?                 @map("dispatch_claim_id") @db.Uuid
+  cancelDispatchClaimId    String?                 @unique(map: "broker_order_response_evidence_cancel_dispatch_claim_id_key") @map("cancel_dispatch_claim_id") @db.Uuid
   brokerOrderId            String?                 @map("broker_order_id")
   brokerStatusRaw          String?                 @map("broker_status_raw")
   normalizationVersion     String                  @map("normalization_version")
@@ -843,9 +904,10 @@ model BrokerOrderResponseEvidence {
   observedAt               DateTime                @map("observed_at") @db.Timestamptz(6)
   createdAt                DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  order         OrderLedger         @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  stateHistory  OrderStateHistory?
-  dispatchClaim OrderDispatchClaim? @relation(fields: [dispatchClaimId], references: [id], onDelete: Restrict)
+  order               OrderLedger               @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  stateHistory        OrderStateHistory?
+  dispatchClaim       OrderDispatchClaim?       @relation(fields: [dispatchClaimId], references: [id], onDelete: Restrict)
+  cancelDispatchClaim OrderCancelDispatchClaim? @relation(fields: [cancelDispatchClaimId], references: [id], onDelete: Restrict)
 
   @@unique([orderId, evidenceKind, bodySha256], map: "broker_order_response_evidence_identity_key")
   @@index([orderId, observedAt(sort: Desc)])
@@ -931,6 +993,62 @@ model OrderDispatchClaim {
   @@index([planId, planVersion, planOrderId])
   @@index([authorizationExpiresAt])
   @@map("order_dispatch_claim")
+}
+
+model CancelOperatorAuthorization {
+  id                     String    @id @default(uuid()) @db.Uuid
+  orderId                String    @map("order_id") @db.Uuid
+  authorizationId        String    @unique(map: "cancel_operator_authorization_authorization_id_key") @map("authorization_id")
+  actor                  String
+  action                 String
+  confirmationVersion    String    @map("confirmation_version")
+  canonicalContent       String    @map("canonical_content") @db.Text
+  canonicalRequestDigest String    @map("canonical_request_digest") @db.Char(64)
+  authorizationDigest    String    @unique(map: "cancel_operator_authorization_digest_key") @map("authorization_digest") @db.Char(64)
+  authorizedAt           DateTime  @map("authorized_at") @db.Timestamptz(6)
+  expiresAt              DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt             DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order         OrderLedger               @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  dispatchClaim OrderCancelDispatchClaim?
+
+  @@index([orderId, expiresAt])
+  @@map("cancel_operator_authorization")
+}
+
+model OrderCancelDispatchClaim {
+  id                            String           @id @default(uuid()) @db.Uuid
+  cancelOperatorAuthorizationId String           @unique(map: "order_cancel_dispatch_claim_operator_authorization_id_key") @map("cancel_operator_authorization_id") @db.Uuid
+  orderId                       String           @unique(map: "order_cancel_dispatch_claim_order_id_key") @map("order_id") @db.Uuid
+  authorizationId               String           @unique(map: "order_cancel_dispatch_claim_authorization_id_key") @map("authorization_id")
+  planId                        String           @map("plan_id") @db.Uuid
+  planVersion                   Int              @map("plan_version")
+  planOrderId                   String           @map("plan_order_id") @db.Uuid
+  logicalOrderId                String           @map("logical_order_id") @db.Uuid
+  canonicalRequest              String           @map("canonical_request") @db.Text
+  claimEnvelopeDigest           String           @map("claim_envelope_digest") @db.Char(64)
+  authorizedRequestDigest       String           @map("authorized_request_digest") @db.Char(64)
+  clientOrderId                 String           @map("client_order_id") @db.Char(36)
+  brokerAccountReferenceHmac    String           @map("broker_account_reference_hmac") @db.Char(64)
+  brokerOrderId                 String           @map("broker_order_id")
+  ledgerState                   OrderLedgerState @map("ledger_state")
+  operatorAuthorizationDigest   String           @map("operator_authorization_digest") @db.Char(64)
+  authorizationIssuedAt         DateTime         @map("authorization_issued_at") @db.Timestamptz(6)
+  authorizationExpiresAt        DateTime         @map("authorization_expires_at") @db.Timestamptz(6)
+  claimedAt                     DateTime         @default(now()) @map("claimed_at") @db.Timestamptz(6)
+  intentAuditedAt               DateTime         @map("intent_audited_at") @db.Timestamptz(6)
+  dispatchStartedAt             DateTime         @map("dispatch_started_at") @db.Timestamptz(6)
+
+  cancelOperatorAuthorization CancelOperatorAuthorization  @relation(fields: [cancelOperatorAuthorizationId], references: [id], onDelete: Restrict)
+  order                       OrderLedger                  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  brokerAction                BrokerOrderAction?
+  brokerEvidence              BrokerOrderResponseEvidence?
+
+  @@index([orderId, claimedAt(sort: Desc)])
+  @@index([planId, planVersion, planOrderId])
+  @@index([authorizationExpiresAt])
+  @@map("order_cancel_dispatch_claim")
 }
 
 model ManualOrderApproval {

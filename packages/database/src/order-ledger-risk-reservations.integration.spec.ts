@@ -422,23 +422,20 @@ integrationDescribe("order ledger and risk reservation PostgreSQL integration", 
         ],
       });
 
-      const rejectedCancelEvidenceId = await insertBrokerResponseEvidence(client, {
-        orderId: firstOrder.id,
-        evidenceKind: "CANCEL_ATTEMPT",
-        brokerOrderId: "broker-live-1",
-        brokerStatusRaw: "CANCEL_REJECTED",
-      });
-      await expectRejectedSql(client, () =>
-        insertState(client, firstOrder.id, 3, "REJECTED", {
-          brokerOrderId: "broker-live-1",
-          brokerStatusRaw: "CANCEL_REJECTED",
-          brokerResponseEvidenceId: rejectedCancelEvidenceId,
-        }),
+      const cancelClaim = await insertCancelAuditClaim(
+        client,
+        fixture,
+        fixture.orders[0]!,
+        firstOrder,
+        "broker-live-1",
       );
       const acceptedCancelActionId = await insertBrokerAction(client, {
         orderId: firstOrder.id,
         originalBrokerOrderId: "broker-live-1",
         brokerActionOrderId: "broker-live-cancel-child-1",
+        cancelDispatchClaimId: cancelClaim.id,
+        authorizationId: cancelClaim.authorizationId,
+        canonicalRequestDigest: cancelClaim.authorizedRequestDigest,
       });
       const canceledEvidenceId = await insertBrokerResponseEvidence(client, {
         orderId: firstOrder.id,
@@ -454,7 +451,8 @@ integrationDescribe("order ledger and risk reservation PostgreSQL integration", 
       });
       expect(
         await client.query(
-          `SELECT "normalized_state"::TEXT, "broker_order_id", "broker_action_order_id"
+          `SELECT "normalized_state"::TEXT, "broker_order_id", "broker_action_order_id",
+             "broker_action_cancel_dispatch_claim_id"
            FROM public."order_ledger_current_state"
            WHERE "order_id" = $1`,
           [firstOrder.id],
@@ -465,6 +463,7 @@ integrationDescribe("order ledger and risk reservation PostgreSQL integration", 
             normalized_state: "CANCELED",
             broker_order_id: "broker-live-1",
             broker_action_order_id: "broker-live-cancel-child-1",
+            broker_action_cancel_dispatch_claim_id: cancelClaim.id,
           },
         ],
       });
@@ -478,7 +477,7 @@ integrationDescribe("order ledger and risk reservation PostgreSQL integration", 
       );
       await expectRejectedSql(client, () =>
         client.query(`DELETE FROM public."broker_order_response_evidence" WHERE "id" = $1`, [
-          rejectedCancelEvidenceId,
+          canceledEvidenceId,
         ]),
       );
     } finally {
@@ -1264,7 +1263,7 @@ async function insertApproval(
   const id = randomUUID();
   const actor = "integration-operator";
   const confirmationVersion = "LIVE_ORDER_CONFIRMATION_V1";
-  const createdAt = new Date();
+  const createdAt = new Date(Date.now() - 250);
   const expiresAt = new Date(createdAt.getTime() + (options.ttlMilliseconds ?? 5 * 60 * 1_000));
   const canonicalContent = JSON.stringify({
     version: confirmationVersion,
@@ -1296,25 +1295,150 @@ async function insertApproval(
   return id;
 }
 
+async function insertCancelAuditClaim(
+  client: PoolClient,
+  fixture: SealedPlanFixture,
+  planOrder: PlanOrderFixture,
+  order: LedgerOrderFixture,
+  brokerOrderId: string,
+): Promise<{
+  readonly id: string;
+  readonly authorizationId: string;
+  readonly authorizedRequestDigest: string;
+}> {
+  const operatorAuthorizationId = randomUUID();
+  const authorizationId = `cancel-auth-${randomUUID()}`;
+  const actor = "integration-operator";
+  const authorizedAt = new Date(Date.now() - 100);
+  const expiresAt = new Date(authorizedAt.getTime() + 20_000);
+  const authorizedRequestDigest = sha256Hex(
+    JSON.stringify({
+      version: "LIVE_ORDER_REQUEST_V1",
+      action: "CANCEL",
+      planId: fixture.planId,
+      planOrderId: planOrder.id,
+      logicalOrderId: order.logicalOrderId,
+      accountId: fixture.accountId,
+      brokerAccountReference: "synthetic-live-account-reference",
+      clientOrderId: order.clientOrderId,
+      brokerOrderId,
+      economicTerms: null,
+    }),
+  );
+  const operatorCanonical = JSON.stringify({
+    version: "CANCEL_OPERATOR_AUTHORIZATION_V1",
+    authorizationId,
+    actor,
+    action: "CANCEL",
+    orderIdentity: {
+      planId: fixture.planId,
+      planOrderId: planOrder.id,
+      logicalOrderId: order.logicalOrderId,
+      accountId: fixture.accountId,
+      clientOrderId: order.clientOrderId,
+      brokerOrderId,
+    },
+    canonicalRequestDigest: authorizedRequestDigest,
+    authorizedAt: authorizedAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    evidenceReference: operatorAuthorizationId,
+  });
+  const operatorAuthorizationDigest = sha256Hex(operatorCanonical);
+  await client.query(
+    `INSERT INTO public."cancel_operator_authorization" (
+       "id", "order_id", "authorization_id", "actor", "action",
+       "confirmation_version", "canonical_content", "canonical_request_digest",
+       "authorization_digest", "authorized_at", "expires_at"
+     ) VALUES ($1, $2, $3, $4, 'CANCEL', 'CANCEL_ORDER_CONFIRMATION_V1',
+       $5, $6, $7, $8, $9)`,
+    [
+      operatorAuthorizationId,
+      order.id,
+      authorizationId,
+      actor,
+      operatorCanonical,
+      authorizedRequestDigest,
+      operatorAuthorizationDigest,
+      authorizedAt,
+      expiresAt,
+    ],
+  );
+
+  const id = randomUUID();
+  const canonicalRequest = JSON.stringify({
+    version: "ORDER_CANCEL_DISPATCH_CLAIM_V1",
+    cancelDispatchClaimId: id,
+    cancelOperatorAuthorizationId: operatorAuthorizationId,
+    authorizationId,
+    planId: fixture.planId,
+    planVersion: planOrder.planVersion,
+    planOrderId: planOrder.id,
+    logicalOrderId: order.logicalOrderId,
+    accountId: fixture.accountId,
+    clientOrderId: order.clientOrderId,
+    canonicalIntentSha256: order.intentSha256,
+    authorizedRequestDigest,
+    brokerAccountReferenceHmac: fixture.accountExternalRefHmac,
+    brokerOrderId,
+    ledgerState: "PENDING",
+    operatorAuthorizationDigest,
+    authorizationIssuedAt: authorizedAt.toISOString(),
+    authorizationExpiresAt: expiresAt.toISOString(),
+  });
+  await client.query(
+    `INSERT INTO public."order_cancel_dispatch_claim" (
+       "id", "cancel_operator_authorization_id", "order_id", "authorization_id",
+       "plan_id", "plan_version", "plan_order_id", "logical_order_id",
+       "canonical_request", "claim_envelope_digest", "authorized_request_digest",
+       "client_order_id", "broker_account_reference_hmac", "broker_order_id",
+       "ledger_state", "operator_authorization_digest", "authorization_issued_at",
+       "authorization_expires_at", "intent_audited_at", "dispatch_started_at"
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+       'PENDING', $15, $16, $17, statement_timestamp(), statement_timestamp())`,
+    [
+      id,
+      operatorAuthorizationId,
+      order.id,
+      authorizationId,
+      fixture.planId,
+      planOrder.planVersion,
+      planOrder.id,
+      order.logicalOrderId,
+      canonicalRequest,
+      sha256Hex(canonicalRequest),
+      authorizedRequestDigest,
+      order.clientOrderId,
+      fixture.accountExternalRefHmac,
+      brokerOrderId,
+      operatorAuthorizationDigest,
+      authorizedAt,
+      expiresAt,
+    ],
+  );
+  return { id, authorizationId, authorizedRequestDigest };
+}
+
 async function insertBrokerAction(
   client: PoolClient,
   input: {
     readonly orderId: string;
     readonly originalBrokerOrderId: string;
     readonly brokerActionOrderId: string;
+    readonly cancelDispatchClaimId: string;
+    readonly authorizationId: string;
+    readonly canonicalRequestDigest: string;
     readonly actionKind?: "CANCEL" | "REPLACE";
   },
 ): Promise<string> {
   const id = randomUUID();
-  const authorizationId = `action-auth-${randomUUID()}`;
   await client.query(
     `INSERT INTO public."broker_order_action" (
        "id", "order_id", "action_kind", "original_broker_order_id",
        "broker_action_order_id", "broker_status_raw", "authorization_id",
-       "canonical_request_digest", "request_id", "http_status", "write_outcome",
-       "redacted_body", "redaction_version", "observed_at"
+       "cancel_dispatch_claim_id", "canonical_request_digest", "request_id",
+       "http_status", "write_outcome", "redacted_body", "redaction_version", "observed_at"
      ) VALUES ($1, $2, $3::public."BrokerOrderActionKind", $4, $5, 'REQUEST_ACCEPTED',
-       $6, $7, 'request-action', 202, 'ACKNOWLEDGED', $8::JSONB,
+       $6, $7, $8, 'request-action', 202, 'ACKNOWLEDGED', $9::JSONB,
        'ORDER_REDACTION_V1', statement_timestamp())`,
     [
       id,
@@ -1322,8 +1446,9 @@ async function insertBrokerAction(
       input.actionKind ?? "CANCEL",
       input.originalBrokerOrderId,
       input.brokerActionOrderId,
-      authorizationId,
-      sha256Hex(authorizationId),
+      input.authorizationId,
+      input.cancelDispatchClaimId,
+      input.canonicalRequestDigest,
       JSON.stringify({
         orderId: input.brokerActionOrderId,
         status: "REQUEST_ACCEPTED",
@@ -1449,6 +1574,25 @@ async function insertLivePreSubmitEvidence(
     schemaVersion: "OPERATIONAL_CONFIG_V1",
     mode: "LIVE",
     killSwitch: false,
+    freshness: {
+      quote: {
+        planMaxAgeSeconds: 30,
+        preSubmitMaxAgeSeconds: 30,
+        futureToleranceSeconds: 5,
+      },
+      calendar: { maxAgeSeconds: 86_400, futureToleranceSeconds: 5 },
+    },
+    limits: {
+      minimumOrderGrossMinor: "10000",
+      feeBufferMinor: "5000",
+      maxSingleOrderGrossMinor: "100000",
+      maxDailyGrossMinor: "300000",
+      maxDailyTurnoverBasisPoints: 500,
+      maxAbsolutePriceChangeBasisPoints: 1_000,
+      maxInstrumentWeightBasisPoints: 3000,
+      maxAssetClassWeightBasisPoints: 7000,
+      maxRiskyWeightBasisPoints: 8000,
+    },
     live: {
       enabled: true,
       manualApprovalRequired: true,
@@ -1457,17 +1601,41 @@ async function insertLivePreSubmitEvidence(
       orderType: "LIMIT",
       timeInForce: "DAY",
       accountAllowlistHmacs: [fixture.accountExternalRefHmac],
-      maxSingleOrderGrossMinor: 100_000,
-      maxDailyGrossMinor: 300_000,
-      tinyLiveMaxGrossMinor: 50_000,
+      approvalTtlSeconds: 300,
+      maxSingleOrderGrossMinor: "100000",
+      maxDailyGrossMinor: "300000",
+      tinyLiveMaxGrossMinor: "50000",
     },
-    freshness: {
-      quote: { preSubmitMaxAgeSeconds: 30, futureToleranceSeconds: 5 },
-      calendar: { maxAgeSeconds: 86_400, futureToleranceSeconds: 5 },
-    },
-    limits: { maxAbsolutePriceChangeBasisPoints: 1_000 },
   });
   const operationalConfigSha256 = sha256Hex(operationalConfig);
+  const operationalConfigId = randomUUID();
+  const operationalConfigVersionId = randomUUID();
+  await client.query(
+    `INSERT INTO public."operational_config" ("id", "account_id")
+     VALUES ($1, $2)`,
+    [operationalConfigId, fixture.accountId],
+  );
+  await client.query(
+    `INSERT INTO public."operational_config_version" (
+       "id", "config_id", "version", "schema_version", "canonical_content",
+       "content_hash", "payload"
+     ) VALUES ($1, $2, 1, 'OPERATIONAL_CONFIG_V1', $3, $4, $5::JSONB)`,
+    [
+      operationalConfigVersionId,
+      operationalConfigId,
+      operationalConfig,
+      operationalConfigSha256,
+      operationalConfig,
+    ],
+  );
+  await client.query(
+    `INSERT INTO public."operational_config_activation" (
+       "config_id", "version", "operational_config_version_id", "actor",
+       "confirmation_version"
+     ) VALUES ($1, 1, $2, 'integration-operator',
+       'OPERATIONAL_CONFIG_ACTIVATION_V1')`,
+    [operationalConfigId, operationalConfigVersionId],
+  );
   const revokedPromotionId = randomUUID();
   const grantedPromotionId = randomUUID();
 
@@ -1478,9 +1646,10 @@ async function insertLivePreSubmitEvidence(
     await client.query(
       `INSERT INTO public."live_promotion_event" (
          "id", "account_id", "version", "state", "operational_config_sha256",
-         "account_allowlist_hmac", "max_single_order_gross_minor", "max_daily_gross_minor",
+         "operational_config_version_id", "account_allowlist_hmac",
+         "max_single_order_gross_minor", "max_daily_gross_minor",
          "tiny_live_max_gross_minor", "actor", "reason"
-       ) VALUES ($1, $2, $3, $4::public."LivePromotionState", $5, $6,
+       ) VALUES ($1, $2, $3, $4::public."LivePromotionState", $5, $6, $7,
          100000, 300000, 50000, 'integration-operator', 'integration-test')`,
       [
         id,
@@ -1488,6 +1657,7 @@ async function insertLivePreSubmitEvidence(
         version,
         state,
         operationalConfigSha256,
+        operationalConfigVersionId,
         fixture.accountExternalRefHmac,
       ],
     );
@@ -1498,8 +1668,9 @@ async function insertLivePreSubmitEvidence(
     `INSERT INTO public."execution_risk_evidence" (
        "id", "plan_id", "plan_version", "account_id", "promotion_event_id",
        "operational_config_canonical", "operational_config_sha256",
-       "account_allowlist_hmac", "checks", "evaluated_at", "expires_at"
-     ) VALUES ($1, $2, 1, $3, $4, $5, $6, $7, $8::JSONB, $9, $10)`,
+       "operational_config_version_id", "account_allowlist_hmac",
+       "checks", "evaluated_at", "expires_at"
+     ) VALUES ($1, $2, 1, $3, $4, $5, $6, $7, $8, $9::JSONB, $10, $11)`,
     [
       executionRiskEvidenceId,
       fixture.planId,
@@ -1507,6 +1678,7 @@ async function insertLivePreSubmitEvidence(
       grantedPromotionId,
       operationalConfig,
       operationalConfigSha256,
+      operationalConfigVersionId,
       fixture.accountExternalRefHmac,
       JSON.stringify(passedChecks(EXECUTION_RISK_CHECK_CODES)),
       evaluatedAt,
