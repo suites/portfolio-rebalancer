@@ -19,6 +19,12 @@ export function money(currency: Currency, amount: string): Money {
   };
 }
 
+export function nonNegativeMoney(currency: Currency, amount: string): Money {
+  const value = money(currency, amount);
+  if (value.minor < 0n) throw new Error("금액은 음수일 수 없습니다.");
+  return value;
+}
+
 export function addMoney(left: Money, right: Money): Money {
   assertSameCurrency(left, right);
   return { currency: left.currency, minor: left.minor + right.minor };
