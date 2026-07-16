@@ -8,7 +8,7 @@
     "build": "pnpm typecheck && nest build --builder webpack --webpackPath webpack.config.cjs",
     "dev": "pnpm start:dev",
     "start": "tsx --conditions=development src/main.ts",
-    "start:dev": "tsx --conditions=development watch src/main.ts",
+    "start:dev": "tsx watch --conditions=development src/main.ts",
     "start:prod": "node dist/main.cjs",
     "pretest": "pnpm -w build:engine-deps",
     "test": "vitest run",
