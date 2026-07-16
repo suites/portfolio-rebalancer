@@ -97,9 +97,11 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
           }
         />
         <SummaryCard
-          label="실주문"
-          value="차단"
-          description="주문 원장과 실행기는 연결되지 않았습니다"
+          label="목표 범위 밖"
+          value={`${outOfBandAllocations.length}개`}
+          description={
+            outOfBandAllocations.length > 0 ? "목표 비중을 확인해 주세요" : "모두 목표 범위 안"
+          }
         />
       </section>
 
@@ -146,19 +148,14 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
             <Link className={styles.actionLink} href={action.href}>
               {action.linkLabel}
             </Link>
-            <p className={styles.safeNote}>{action.safeNote}</p>
           </Surface>
 
           <Surface className={styles.activity} aria-labelledby="activity-title">
             <h2 id="activity-title">최근 상태</h2>
             <ol>
               <li>
-                <strong>토스증권 계좌 스냅샷</strong>
-                <span>{observedAt} · PostgreSQL 저장 데이터</span>
-              </li>
-              <li>
-                <strong>실주문 연결 차단 유지</strong>
-                <span>계획·원장·멱등성 검증 미연결</span>
+                <strong>계좌 정보 업데이트</strong>
+                <span>{observedAt}</span>
               </li>
             </ol>
           </Surface>
@@ -212,7 +209,6 @@ function getActionCopy(snapshot: DashboardSnapshotContract): {
   description: string;
   href: string;
   linkLabel: string;
-  safeNote: string;
 } {
   if (snapshot.conclusion === "NO_ACTION") {
     return {
@@ -220,16 +216,14 @@ function getActionCopy(snapshot: DashboardSnapshotContract): {
       description: "모든 자산이 설정된 허용 범위 안에 있습니다.",
       href: "/portfolio",
       linkLabel: "포트폴리오 상세 보기",
-      safeNote: "이 링크는 조회 화면으로 이동하며 주문을 제출하지 않습니다.",
     };
   }
   if (snapshot.conclusion === "REBALANCE_REQUIRED") {
     return {
       title: "목표 비중을 확인해 주세요",
-      description: "범위를 벗어난 자산과 주문 없는 안전 검사를 확인할 수 있습니다.",
+      description: "범위를 벗어난 자산과 필요한 점검 항목을 확인할 수 있습니다.",
       href: "/rebalancing",
       linkLabel: "리밸런싱 점검 보기",
-      safeNote: "저장된 주문 계획이 없으므로 실행은 허용되지 않습니다.",
     };
   }
   const settingsRequired = ["TARGET_CONFIG_MISSING", "UNMANAGED_ASSET"].includes(
@@ -240,6 +234,5 @@ function getActionCopy(snapshot: DashboardSnapshotContract): {
     description: "문제·보호 조치·다음 행동을 실제 상태에서 확인하세요.",
     href: settingsRequired ? "/settings" : "/troubleshooting",
     linkLabel: settingsRequired ? "목표 설정 열기" : "차단 원인 해결하기",
-    safeNote: "차단 상태에서는 새 주문과 수동 재제출을 허용하지 않습니다.",
   };
 }

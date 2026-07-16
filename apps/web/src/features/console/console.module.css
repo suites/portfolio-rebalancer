@@ -30,6 +30,10 @@
   display: grid;
   gap: 1.125rem;
 }
+.pageStack {
+  display: grid;
+  gap: 1.125rem;
+}
 .grid2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -39,7 +43,7 @@
 .grid3 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 1.125rem;
 }
 .surface {
   padding: var(--card-padding);
@@ -54,6 +58,7 @@
   font-size: 1rem;
 }
 .surface > p {
+  margin: 0.75rem 0 0;
   color: var(--color-text-secondary);
 }
 
@@ -233,7 +238,6 @@
 }
 
 .callout {
-  margin-bottom: 1.125rem;
   padding: 1rem 1.25rem;
   border-radius: var(--radius-md);
   background: var(--color-primary-soft);
@@ -334,6 +338,10 @@
 
 @media (max-width: 620px) {
   .pageHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .sectionHeader {
     align-items: flex-start;
     flex-direction: column;
   }

@@ -14,3 +14,8 @@ Storybook 이전의 최소 계약은 Vitest 정적 렌더링 테스트로 유지
 - app shell: desktop, tablet, 390px와 320px
 
 행동·안전·접근성은 `docs/WEB_UI.md`, 구현 상태는 `docs/TODO.md`, 토큰과 컴포넌트 사용은 `packages/ui`를 기준으로 합니다.
+
+## 이번 작업
+
+- `docs/WEB_UI.md`에 공통 최상위 간격과 구현 설명을 제품 문구로 노출하지 않는 규칙을 추가했습니다.
+- `docs/TODO.md`에 콘솔 간격·문구 개선 완료 상태를 기록했습니다.

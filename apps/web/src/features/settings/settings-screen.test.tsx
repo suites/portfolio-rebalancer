@@ -44,7 +44,7 @@ describe("SettingsScreen", () => {
 
     const html = renderToStaticMarkup(<SettingsScreen settings={settings} status="invalid" />);
 
-    expect(html).toContain("설정 엔진에 연결할 수 없습니다.");
+    expect(html).toContain("설정 정보를 불러올 수 없습니다.");
     expect(html).not.toContain("목표 초안을 저장하지 못했습니다.");
   });
 });
