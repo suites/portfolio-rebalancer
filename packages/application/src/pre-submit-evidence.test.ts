@@ -1,5 +1,7 @@
 import type {
+  AccountId,
   BrokerId,
+  BrokerOrderSummary,
   BrokerReadResult,
   IsoDate,
   IsoDateTime,
@@ -14,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import { evaluatePreSubmitOrderEvidence } from "./pre-submit-evidence";
 
 const symbol = "005930" as SymbolCode;
+const accountId = "11111111-1111-4111-8111-111111111111" as AccountId;
 const now = new Date("2026-07-16T10:00:10+09:00");
 
 describe("evaluatePreSubmitOrderEvidence", () => {
@@ -27,6 +30,7 @@ describe("evaluatePreSubmitOrderEvidence", () => {
         plannedGrossMinor: 20_000n,
         reservedGrossMinor: 26_000n,
       },
+      validUntil: new Date("2026-07-16T10:00:35+09:00"),
     });
   });
 
@@ -81,10 +85,81 @@ describe("evaluatePreSubmitOrderEvidence", () => {
       ]),
     );
   });
+
+  it("오래된 매도 가능 수량과 브로커 미체결 주문 충돌을 함께 차단한다", () => {
+    const input = fixture();
+    const result = evaluatePreSubmitOrderEvidence({
+      ...input,
+      brokerOpenOrders: read(
+        [
+          {
+            brokerOrderId: "existing-order-1",
+            marketCountry: "KR",
+            symbol,
+            side: "BUY",
+            status: "PENDING",
+            quantity: decimal("1"),
+          } satisfies BrokerOrderSummary,
+        ],
+        "getOrders",
+        "2026-07-16T10:00:06+09:00",
+      ),
+      sellableQuantity: read(
+        {
+          accountId,
+          marketCountry: "KR",
+          symbol,
+          quantity: decimal("2"),
+        },
+        "getSellableQuantity",
+        "2026-07-16T09:59:00+09:00",
+      ),
+      pretradeMaxAgeMs: 30_000,
+    });
+
+    expect(result.canSubmit).toBe(false);
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "CONFLICTING_BROKER_OPEN_ORDER_EXISTS" }),
+        expect.objectContaining({ code: "SELLABLE_QUANTITY_STALE" }),
+      ]),
+    );
+  });
+
+  it("매수는 최신 매수 가능 금액과 비용 포함 필요액을 별도로 검증한다", () => {
+    const input = fixture();
+    const result = evaluatePreSubmitOrderEvidence({
+      ...input,
+      order: { ...input.order, side: "BUY" },
+      sellableQuantity: null,
+      buyingPower: read(
+        {
+          accountId,
+          currency: "KRW",
+          cashBuyingPower: decimal("19999"),
+        },
+        "getBuyingPower",
+        "2026-07-16T10:00:06+09:00",
+      ),
+      requiredBuyingPowerMinor: 20_010n,
+    });
+
+    expect(result.canSubmit).toBe(false);
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "BUYING_POWER_FRESH", outcome: "PASSED" }),
+        expect.objectContaining({
+          code: "BUYING_POWER_INSUFFICIENT_OR_INVALID",
+          outcome: "BLOCKED",
+        }),
+      ]),
+    );
+  });
 });
 
 function fixture() {
   return {
+    accountId,
     order: {
       marketCountry: "KR" as const,
       currency: "KRW" as const,
@@ -116,9 +191,39 @@ function fixture() {
       "2026-07-16T10:00:06+09:00",
     ),
     calendar: read(calendar(), "getKrMarketCalendar", "2026-07-16T09:00:00+09:00"),
+    instrumentTradeEvidence: read(
+      {
+        validationId: "validation-1",
+        marketCountry: "KR" as const,
+        symbol,
+        tradeBlockedNow: false,
+        requiresOrderRevalidation: false,
+        observedAt: "2026-07-16T10:00:05+09:00" as IsoDateTime,
+      },
+      "getStockWarnings",
+      "2026-07-16T10:00:06+09:00",
+    ),
+    brokerOpenOrders: read<readonly BrokerOrderSummary[]>(
+      [],
+      "getOrders",
+      "2026-07-16T10:00:06+09:00",
+    ),
+    buyingPower: null,
+    sellableQuantity: read(
+      {
+        accountId,
+        marketCountry: "KR" as const,
+        symbol,
+        quantity: decimal("2"),
+      },
+      "getSellableQuantity",
+      "2026-07-16T10:00:06+09:00",
+    ),
+    requiredBuyingPowerMinor: null,
     now,
     quoteMaxAgeMs: 30_000,
     calendarMaxAgeMs: 86_400_000,
+    pretradeMaxAgeMs: 30_000,
     futureToleranceMs: 2_000,
     maxAbsolutePriceChangeBasisPoints: 100n,
   };

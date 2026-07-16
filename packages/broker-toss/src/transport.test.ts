@@ -6,6 +6,7 @@ import {
   createTossManagedFetch,
   getTossResponseAuditReference,
   getTossResponseMetadata,
+  TossRequestAuditError,
 } from "./transport";
 
 describe("createTimedFetch", () => {
@@ -327,10 +328,19 @@ describe("createTossManagedFetch", () => {
       },
     });
 
-    await expect(
-      managedFetch("https://openapi.tossinvest.com/api/v1/accounts"),
-    ).rejects.toMatchObject({
-      code: "TOSS_REQUEST_AUDIT_FAILED",
+    let caught: unknown;
+    try {
+      await managedFetch("https://openapi.tossinvest.com/api/v1/accounts");
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(TossRequestAuditError);
+    const auditError = caught as TossRequestAuditError;
+    expect(auditError.code).toBe("TOSS_REQUEST_AUDIT_FAILED");
+    expect(auditError.response?.status).toBe(200);
+    expect(auditError.metadata).toMatchObject({
+      operationId: "getAccounts",
+      httpStatus: 200,
     });
     expect(fetchMock).toHaveBeenCalledOnce();
   });

@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { TOSS_OPERATIONS, TOSS_OPENAPI_VERSION } from "./generated/operations";
-import { TOSS_TRANSPORT_DESCRIPTOR } from "./descriptor";
+import { TOSS_AUTHORIZED_LIVE_ORDER_DESCRIPTOR, TOSS_TRANSPORT_DESCRIPTOR } from "./descriptor";
 import { TossOpenApiClient, TossReadApi, TossTradingApi } from "./client";
+import * as publicBrokerTossApi from "./index";
 
 describe("Toss OpenAPI parity", () => {
   it("공식 v1.2.4의 전체 30개 operation을 포함한다", () => {
@@ -26,6 +27,14 @@ describe("Toss OpenAPI parity", () => {
     expect(TOSS_TRANSPORT_DESCRIPTOR.capabilities).toContain("pretrade.commissions");
     expect(TOSS_TRANSPORT_DESCRIPTOR.capabilities).not.toContain("orders.write");
     expect(TOSS_TRANSPORT_DESCRIPTOR.capabilities).not.toContain("orders.conditional.write");
+    expect(TOSS_AUTHORIZED_LIVE_ORDER_DESCRIPTOR.capabilities).toEqual(
+      new Set(["orders.read", "orders.write"]),
+    );
+  });
+
+  it("권한 검사를 우회하는 raw HTTP transport를 package root에 노출하지 않는다", () => {
+    expect("TossLiveOrderHttpTransport" in publicBrokerTossApi).toBe(false);
+    expect("TossLiveOrderAdapter" in publicBrokerTossApi).toBe(true);
   });
 
   it("모든 업무 operation을 호출 가능한 명시적 메서드로 제공한다", () => {

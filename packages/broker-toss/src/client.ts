@@ -13,6 +13,12 @@ import {
 import { TOSS_OPENAPI_VERSION, TOSS_OPERATIONS } from "./generated/operations";
 import type { operations, paths } from "./generated/schema";
 import {
+  TossLiveOrderAdapter,
+  TossLiveOrderHttpTransport,
+  type TossLiveOrderAdapterOptions,
+  type TossLiveOrderTransport,
+} from "./live-order-adapter";
+import {
   assertTossResponse,
   createTimedFetch,
   createTossManagedFetch,
@@ -37,6 +43,7 @@ export class TossOpenApiClient {
   readonly operations = TOSS_OPERATIONS;
   readonly read: TossReadApi;
   readonly trading: TossTradingApi;
+  readonly #liveOrderTransport: TossLiveOrderTransport;
 
   constructor(credentials: TossCredentials, options: TossOpenApiOptions = {}) {
     const timedFetch = createTimedFetch(
@@ -79,8 +86,28 @@ export class TossOpenApiClient {
     };
     client.use(authMiddleware, responseMiddleware);
     const pathClient = wrapAsPathBasedClient(client);
+    const liveOrderClient = createClient<paths>({
+      baseUrl: TOSS_OPENAPI_ORIGIN,
+      fetch: fetchImplementation,
+    });
+    liveOrderClient.use(authMiddleware, {
+      onResponse({ response }) {
+        if (response.status === 401) tokenProvider.invalidate();
+      },
+    });
+    const liveOrderPathClient = wrapAsPathBasedClient(liveOrderClient);
     this.read = new TossReadApi(pathClient);
     this.trading = new TossTradingApi(pathClient);
+    this.#liveOrderTransport = new TossLiveOrderHttpTransport(liveOrderPathClient);
+  }
+
+  /**
+   * Creates the only account-mutating adapter exposed by this client. The raw
+   * TossTradingApi remains hard-blocked and the adapter still requires a minted,
+   * one-shot authorization for every write.
+   */
+  createLiveOrderAdapter(options: TossLiveOrderAdapterOptions = {}): TossLiveOrderAdapter {
+    return new TossLiveOrderAdapter(this.#liveOrderTransport, options);
   }
 }
 

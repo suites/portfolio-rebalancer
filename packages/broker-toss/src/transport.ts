@@ -98,12 +98,20 @@ export class TossOperationMetadataError extends Error {
 
 export class TossRequestAuditError extends Error {
   readonly code = "TOSS_REQUEST_AUDIT_FAILED";
+  readonly response: Response | null;
+  readonly metadata: TossResponseMetadata | null;
 
-  constructor(options: { readonly cause: unknown }) {
+  constructor(options: {
+    readonly cause: unknown;
+    readonly response?: Response | null;
+    readonly metadata?: TossResponseMetadata | null;
+  }) {
     super(
       "토스증권 요청 감사 기록을 저장하지 못해 후속 처리를 차단했습니다. 저장소 상태를 확인한 뒤 다시 점검하세요.",
-      options,
+      { cause: options.cause },
     );
+    this.response = options.response ?? null;
+    this.metadata = options.metadata ?? null;
   }
 }
 
@@ -245,7 +253,11 @@ async function executeManagedRequest(
       options.now(),
     );
     responseMetadata.set(response, metadata);
-    const auditReference = await emitMetadata(options.onResponseMetadata, metadata);
+    const auditReference = await emitMetadata(
+      options.onResponseMetadata,
+      metadata,
+      response.clone(),
+    );
     if (auditReference !== null) {
       responseAuditReferences.set(response, auditReference);
     }
@@ -357,6 +369,7 @@ function operationPathPattern(path: string): RegExp {
 async function emitMetadata(
   callback: TossManagedFetchOptions["onResponseMetadata"],
   metadata: TossResponseMetadata,
+  response: Response | null = null,
 ): Promise<string | null> {
   if (!callback) return null;
   try {
@@ -367,7 +380,7 @@ async function emitMetadata(
     }
     return reference;
   } catch (cause) {
-    throw new TossRequestAuditError({ cause });
+    throw new TossRequestAuditError({ cause, response, metadata });
   }
 }
 
