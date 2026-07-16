@@ -345,7 +345,7 @@ function calendarState(
   return classifyMarketCalendarReadiness({
     calendar,
     metadata: {
-      ...metadata("2026-07-16T07:55:00+09:00" as IsoDateTime),
+      ...metadata("2026-07-16T07:55:00+09:00"),
       operationId: calendar.marketCountry === "KR" ? "getKrMarketCalendar" : "getUsMarketCalendar",
       rateLimitGroup: "MARKET_INFO",
       receivedAt:

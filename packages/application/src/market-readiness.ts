@@ -371,7 +371,7 @@ function parsePolicy(policy: ReadinessTimePolicy): ParsedPolicy | null {
 }
 
 function allowedSessionKindsAreValid(kinds: readonly MarketSessionKind[]): boolean {
-  return Array.isArray(kinds) && kinds.every((kind) => SESSION_KINDS.includes(kind));
+  return kinds.every((kind) => SESSION_KINDS.includes(kind));
 }
 
 /**
