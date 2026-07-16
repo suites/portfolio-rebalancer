@@ -11,6 +11,14 @@ describe("Toss OpenAPI parity", () => {
     expect(TOSS_OPERATIONS.filter(({ method }) => method === "GET")).toHaveLength(23);
     expect(TOSS_OPERATIONS.filter(({ mutatesAccount }) => mutatesAccount)).toHaveLength(6);
     expect(new Set(TOSS_OPERATIONS.map(({ operationId }) => operationId)).size).toBe(30);
+    expect(
+      TOSS_OPERATIONS.filter(
+        ({ path, rateLimitGroup }) => path !== "/oauth2/token" && rateLimitGroup === null,
+      ),
+    ).toHaveLength(0);
+    expect(
+      TOSS_OPERATIONS.find(({ operationId }) => operationId === "issueOAuth2Token")?.rateLimitGroup,
+    ).toBe("AUTH");
   });
 
   it("활성 capability에는 조회 기능만 포함하고 주문 쓰기를 제외한다", () => {
@@ -146,7 +154,7 @@ describe("Toss create-order type contract", () => {
 });
 
 describe("Toss read transport", () => {
-  it("rate limit 응답을 재시도 정보가 있는 비밀 안전 오류로 변환한다", async () => {
+  it("read GET의 짧은 429만 Retry-After 이후 한 번 재시도한다", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -172,18 +180,166 @@ describe("Toss read transport", () => {
             "x-request-id": "synthetic-request-id",
           },
         }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ result: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
       );
+    const sleep = vi.fn<(milliseconds: number) => Promise<void>>().mockResolvedValue();
+    const responseMetadata: unknown[] = [];
     const api = new TossOpenApiClient(
       { clientId: "synthetic-client", clientSecret: "synthetic-secret" },
-      { fetch: fetchMock },
+      {
+        fetch: fetchMock,
+        sleep,
+        random: () => 0.5,
+        retryJitterMaxMs: 100,
+        onResponseMetadata: (metadata) => {
+          responseMetadata.push(metadata);
+        },
+      },
+    );
+
+    await expect(api.read.getAccounts()).resolves.toBeDefined();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledExactlyOnceWith(3_050);
+    expect(responseMetadata).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operationId: "getAccounts",
+          staticRateLimitGroup: "ACCOUNT",
+          attempt: 1,
+          outcome: "HTTP_ERROR",
+          httpStatus: 429,
+          requestId: "synthetic-request-id",
+          retryAfterSeconds: 3,
+        }),
+        expect.objectContaining({
+          operationId: "getAccounts",
+          staticRateLimitGroup: "ACCOUNT",
+          attempt: 2,
+          outcome: "SUCCESS",
+          httpStatus: 200,
+        }),
+      ]),
+    );
+  });
+
+  it("긴 Retry-After는 기다리지 않고 static group과 공식 rate fields를 보존한다", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: "synthetic-token",
+            token_type: "Bearer",
+            expires_in: 3600,
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: "do-not-expose-upstream-body" }), {
+          status: 429,
+          headers: {
+            "content-type": "application/json",
+            "retry-after": "31",
+            "x-ratelimit-limit": "10",
+            "x-ratelimit-remaining": "0",
+            "x-ratelimit-reset": "2",
+            "x-ratelimit-group": "UNOFFICIAL_WRONG_GROUP",
+            "x-request-id": "official-request-id",
+            "x-toss-request-id": "legacy-request-id",
+          },
+        }),
+      );
+    const sleep = vi.fn<(milliseconds: number) => Promise<void>>().mockResolvedValue();
+    const api = new TossOpenApiClient(
+      { clientId: "synthetic-client", clientSecret: "synthetic-secret" },
+      { fetch: fetchMock, sleep },
     );
 
     await expect(api.read.getAccounts()).rejects.toMatchObject({
       code: "TOSS_API_RESPONSE_ERROR",
       httpStatus: 429,
       rateLimitGroup: "ACCOUNT",
-      requestId: "synthetic-request-id",
-      retryAfterSeconds: 3,
+      staticRateLimitGroup: "ACCOUNT",
+      unofficialRateLimitGroup: "UNOFFICIAL_WRONG_GROUP",
+      operationId: "getAccounts",
+      attempt: 1,
+      requestId: "official-request-id",
+      rateLimitLimit: 10,
+      rateLimitRemaining: 0,
+      rateLimitResetSeconds: 2,
+      retryAfterSeconds: 31,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("공식 응답 헤더와 시도 시각을 비밀 없는 callback metadata로 전달한다", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: "synthetic-token",
+            token_type: "Bearer",
+            expires_in: 3600,
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ result: [] }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": "official-request-id",
+            "x-ratelimit-limit": "20",
+            "x-ratelimit-remaining": "19",
+            "x-ratelimit-reset": "1",
+            "x-ratelimit-group": "AUXILIARY_ONLY",
+          },
+        }),
+      );
+    const metadata: unknown[] = [];
+    const api = new TossOpenApiClient(
+      { clientId: "synthetic-client", clientSecret: "synthetic-secret" },
+      {
+        fetch: fetchMock,
+        now: () => Date.parse("2026-07-16T00:00:00.000Z"),
+        onResponseMetadata: (entry) => {
+          metadata.push(entry);
+        },
+      },
+    );
+
+    await api.read.getAccounts();
+
+    expect(metadata).toContainEqual({
+      operationId: "getAccounts",
+      staticRateLimitGroup: "ACCOUNT",
+      attempt: 1,
+      startedAt: "2026-07-16T00:00:00.000Z",
+      receivedAt: "2026-07-16T00:00:00.000Z",
+      outcome: "SUCCESS",
+      httpStatus: 200,
+      requestId: "official-request-id",
+      rateLimitLimit: 20,
+      rateLimitRemaining: 19,
+      rateLimitResetSeconds: 1,
+      retryAfterSeconds: null,
+      legacyRequestId: null,
+      unofficialRateLimitGroup: "AUXILIARY_ONLY",
     });
   });
 

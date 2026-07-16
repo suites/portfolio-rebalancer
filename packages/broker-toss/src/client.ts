@@ -12,13 +12,24 @@ import {
 } from "./auth/token-provider";
 import { TOSS_OPENAPI_VERSION, TOSS_OPERATIONS } from "./generated/operations";
 import type { operations, paths } from "./generated/schema";
-import { assertTossResponse, createTimedFetch } from "./transport";
+import {
+  assertTossResponse,
+  createTimedFetch,
+  createTossManagedFetch,
+  type TossManagedFetchOptions,
+} from "./transport";
 
 type Options<OperationId extends keyof operations> = FetchOptions<operations[OperationId]>;
 
 export interface TossOpenApiOptions {
   readonly fetch?: typeof globalThis.fetch;
   readonly requestTimeoutMs?: number;
+  readonly now?: TossManagedFetchOptions["now"];
+  readonly sleep?: TossManagedFetchOptions["sleep"];
+  readonly random?: TossManagedFetchOptions["random"];
+  readonly maxRetryAfterMs?: TossManagedFetchOptions["maxRetryAfterMs"];
+  readonly retryJitterMaxMs?: TossManagedFetchOptions["retryJitterMaxMs"];
+  readonly onResponseMetadata?: TossManagedFetchOptions["onResponseMetadata"];
 }
 
 export class TossOpenApiClient {
@@ -28,11 +39,26 @@ export class TossOpenApiClient {
   readonly trading: TossTradingApi;
 
   constructor(credentials: TossCredentials, options: TossOpenApiOptions = {}) {
-    const fetchImplementation = createTimedFetch(
+    const timedFetch = createTimedFetch(
       options.fetch ?? globalThis.fetch,
       options.requestTimeoutMs ?? 10_000,
     );
-    const tokenProvider = new TossTokenProvider(credentials, { fetch: fetchImplementation });
+    const fetchImplementation = createTossManagedFetch(timedFetch, {
+      ...(options.now ? { now: options.now } : {}),
+      ...(options.sleep ? { sleep: options.sleep } : {}),
+      ...(options.random ? { random: options.random } : {}),
+      ...(options.maxRetryAfterMs !== undefined
+        ? { maxRetryAfterMs: options.maxRetryAfterMs }
+        : {}),
+      ...(options.retryJitterMaxMs !== undefined
+        ? { retryJitterMaxMs: options.retryJitterMaxMs }
+        : {}),
+      ...(options.onResponseMetadata ? { onResponseMetadata: options.onResponseMetadata } : {}),
+    });
+    const tokenProvider = new TossTokenProvider(credentials, {
+      fetch: fetchImplementation,
+      ...(options.now ? { now: options.now } : {}),
+    });
     const client = createClient<paths>({
       baseUrl: TOSS_OPENAPI_ORIGIN,
       fetch: fetchImplementation,

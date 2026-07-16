@@ -13,6 +13,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "sync:openapi": "node scripts/sync-openapi.mjs",
+    "check:openapi": "node scripts/sync-openapi.mjs --source openapi/openapi.json --check",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit"

@@ -10,6 +10,7 @@ export const TOSS_OPERATIONS = [
     path: "/oauth2/token",
     summary: "OAuth2 액세스 토큰 발급",
     tag: "Auth",
+    rateLimitGroup: "AUTH",
     mutatesAccount: false,
   },
   {
@@ -18,6 +19,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/orderbook",
     summary: "호가 조회",
     tag: "Market Data",
+    rateLimitGroup: "MARKET_DATA",
     mutatesAccount: false,
   },
   {
@@ -26,6 +28,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/prices",
     summary: "현재가 조회",
     tag: "Market Data",
+    rateLimitGroup: "MARKET_DATA",
     mutatesAccount: false,
   },
   {
@@ -34,6 +37,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/trades",
     summary: "최근 체결 내역 조회",
     tag: "Market Data",
+    rateLimitGroup: "MARKET_DATA",
     mutatesAccount: false,
   },
   {
@@ -42,6 +46,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/price-limits",
     summary: "상/하한가 조회",
     tag: "Market Data",
+    rateLimitGroup: "MARKET_DATA",
     mutatesAccount: false,
   },
   {
@@ -50,6 +55,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/candles",
     summary: "캔들 차트 조회",
     tag: "Market Data",
+    rateLimitGroup: "MARKET_DATA_CHART",
     mutatesAccount: false,
   },
   {
@@ -58,6 +64,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/stocks",
     summary: "종목 기본 정보 조회",
     tag: "Stock Info",
+    rateLimitGroup: "STOCK",
     mutatesAccount: false,
   },
   {
@@ -66,6 +73,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/stocks/{symbol}/warnings",
     summary: "매수 유의사항 조회",
     tag: "Stock Info",
+    rateLimitGroup: "STOCK",
     mutatesAccount: false,
   },
   {
@@ -74,6 +82,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/exchange-rate",
     summary: "환율 조회",
     tag: "Market Info",
+    rateLimitGroup: "MARKET_INFO",
     mutatesAccount: false,
   },
   {
@@ -82,6 +91,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/market-calendar/KR",
     summary: "국내 장 운영 정보 조회",
     tag: "Market Info",
+    rateLimitGroup: "MARKET_INFO",
     mutatesAccount: false,
   },
   {
@@ -90,6 +100,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/market-calendar/US",
     summary: "해외 장 운영 정보 조회",
     tag: "Market Info",
+    rateLimitGroup: "MARKET_INFO",
     mutatesAccount: false,
   },
   {
@@ -98,6 +109,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/rankings",
     summary: "주식 랭킹 조회",
     tag: "Ranking",
+    rateLimitGroup: "RANKING",
     mutatesAccount: false,
   },
   {
@@ -106,6 +118,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/market-indicators/prices",
     summary: "시장 지표 현재가 조회",
     tag: "Market Indicators",
+    rateLimitGroup: "MARKET_INDICATOR",
     mutatesAccount: false,
   },
   {
@@ -114,6 +127,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/market-indicators/{symbol}/candles",
     summary: "시장 지표 캔들 차트 조회",
     tag: "Market Indicators",
+    rateLimitGroup: "MARKET_INDICATOR_CHART",
     mutatesAccount: false,
   },
   {
@@ -122,6 +136,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/market-indicators/{symbol}/investor-trading",
     summary: "투자자별 매매대금 조회",
     tag: "Market Indicators",
+    rateLimitGroup: "MARKET_INDICATOR",
     mutatesAccount: false,
   },
   {
@@ -130,6 +145,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/accounts",
     summary: "계좌 목록 조회",
     tag: "Account",
+    rateLimitGroup: "ACCOUNT",
     mutatesAccount: false,
   },
   {
@@ -138,6 +154,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/holdings",
     summary: "보유 주식 조회",
     tag: "Asset",
+    rateLimitGroup: "ASSET",
     mutatesAccount: false,
   },
   {
@@ -146,6 +163,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/orders",
     summary: "주문 목록 조회",
     tag: "Order History",
+    rateLimitGroup: "ORDER_HISTORY",
     mutatesAccount: false,
   },
   {
@@ -154,6 +172,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/orders",
     summary: "주문 생성",
     tag: "Order",
+    rateLimitGroup: "ORDER",
     mutatesAccount: true,
   },
   {
@@ -162,6 +181,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/orders/{orderId}",
     summary: "주문 상세 조회",
     tag: "Order History",
+    rateLimitGroup: "ORDER_HISTORY",
     mutatesAccount: false,
   },
   {
@@ -170,6 +190,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/orders/{orderId}/modify",
     summary: "주문 정정",
     tag: "Order",
+    rateLimitGroup: "ORDER",
     mutatesAccount: true,
   },
   {
@@ -178,6 +199,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/orders/{orderId}/cancel",
     summary: "주문 취소",
     tag: "Order",
+    rateLimitGroup: "ORDER",
     mutatesAccount: true,
   },
   {
@@ -186,6 +208,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/conditional-orders",
     summary: "조건주문 생성",
     tag: "Conditional Order",
+    rateLimitGroup: "CONDITIONAL_ORDER",
     mutatesAccount: true,
   },
   {
@@ -194,6 +217,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/conditional-orders",
     summary: "조건주문 목록 조회",
     tag: "Conditional Order History",
+    rateLimitGroup: "CONDITIONAL_ORDER_HISTORY",
     mutatesAccount: false,
   },
   {
@@ -202,6 +226,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/conditional-orders/{conditionalOrderId}",
     summary: "조건주문 상세 조회",
     tag: "Conditional Order History",
+    rateLimitGroup: "CONDITIONAL_ORDER_HISTORY",
     mutatesAccount: false,
   },
   {
@@ -210,6 +235,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/conditional-orders/{conditionalOrderId}",
     summary: "조건주문 취소",
     tag: "Conditional Order",
+    rateLimitGroup: "CONDITIONAL_ORDER",
     mutatesAccount: true,
   },
   {
@@ -218,6 +244,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/conditional-orders/{conditionalOrderId}/modify",
     summary: "조건주문 수정",
     tag: "Conditional Order",
+    rateLimitGroup: "CONDITIONAL_ORDER",
     mutatesAccount: true,
   },
   {
@@ -226,6 +253,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/buying-power",
     summary: "매수 가능 금액 조회",
     tag: "Order Info",
+    rateLimitGroup: "ORDER_INFO",
     mutatesAccount: false,
   },
   {
@@ -234,6 +262,7 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/sellable-quantity",
     summary: "판매 가능 수량 조회",
     tag: "Order Info",
+    rateLimitGroup: "ORDER_INFO",
     mutatesAccount: false,
   },
   {
@@ -242,9 +271,11 @@ export const TOSS_OPERATIONS = [
     path: "/api/v1/commissions",
     summary: "매매 수수료 조회",
     tag: "Order Info",
+    rateLimitGroup: "ORDER_INFO",
     mutatesAccount: false,
   },
 ] as const;
 
 export type TossOperation = (typeof TOSS_OPERATIONS)[number];
 export type TossOperationId = TossOperation["operationId"];
+export type TossRateLimitGroup = NonNullable<TossOperation["rateLimitGroup"]>;
