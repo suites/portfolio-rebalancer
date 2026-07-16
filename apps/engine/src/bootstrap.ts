@@ -5,11 +5,14 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 
 import { AppModule } from "./app.module";
 
-export async function createEngineApplication(): Promise<NestFastifyApplication> {
-  const adapter = new FastifyAdapter({
+export function createEngineFastifyAdapter(): FastifyAdapter {
+  return new FastifyAdapter({
     logger: { redact: ["req.headers.authorization"] },
   });
-  return NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
+}
+
+export async function createEngineApplication(): Promise<NestFastifyApplication> {
+  return NestFactory.create<NestFastifyApplication>(AppModule, createEngineFastifyAdapter(), {
     abortOnError: true,
   });
 }
