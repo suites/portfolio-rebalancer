@@ -6,14 +6,15 @@
 - [x] 패키지 구조와 의존성 방향 정의
 - [x] 포맷터, 린터, 단위 테스트 구성
 - [x] V8 테스트 coverage 실행 의존성과 workspace 명령 구성
-- [ ] 설정 스키마와 예제 설정 작성
+- [x] 버전형 strict 운영 설정 스키마와 검증되는 예제 설정 작성
 - [x] 첫 운영 시장을 한국 정규 연속매매·지정가로 고정하는 ADR 작성
 - [x] Web, engine, Prisma migration별 `.env.local` 로딩 규칙과 `.gitignore` 구성
 - [x] Vercel Supabase Integration의 pooled runtime URL과 direct migration URL 자동 인식
 - [ ] 오류 코드와 구조화 로그 형식 정의
 - [x] 실제 read-only 자격증명과 PostgreSQL을 사용하는 Quick Start 작성
 - [ ] `setup`, `doctor`, `check`, `plan`, `run`, `status` CLI 골격 구현
-- [ ] 완전한 `config.example.yaml`과 안내형 설정 흐름 작성
+- [x] 완전한 `config.example.yaml`과 운영 설정 레퍼런스 작성
+- [ ] `setup` UI/CLI가 손편집 없이 운영 설정을 생성·검증·저장하도록 구현
 - [ ] 한국어 결과 상태와 오류 행동 지침 형식 정의
 
 ## Phase 1 — 순수 도메인 계산
@@ -180,7 +181,7 @@
 ## 문서 백로그
 
 - [x] 기술 스택과 합성 데이터 Web GUI 로컬 개발 가이드 작성
-- [ ] 설정 레퍼런스 작성
+- [x] 설정 레퍼런스 작성
 - [ ] 토스증권 어댑터 오류 매핑 문서 작성
 - [ ] 데이터 모델과 ER 다이어그램 추가
 - [ ] paper 체결 모델의 가정과 한계 문서화

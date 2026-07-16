@@ -42,6 +42,8 @@
 - Prisma 7과 PostgreSQL 17 기반 계좌 참조·수집 실행·redacted 응답·불변 스냅샷
 - Vercel web/engine 별도 Project, 평일 09:00 KST Cron과 PostgreSQL collection lease
 - heartbeat와 fencing token 최종 재검증으로 만료된 수집기의 늦은 스냅샷 저장 차단
+- `OPERATIONAL_CONFIG_V1` strict 계약과 직접 파싱되는 완전한 `config.example.yaml`
+- PAPER 기본값, 데이터 신선도·거래 한도·비중 상한·킬 스위치와 제한적 KR live 승격 조건의 교차 검증
 
 이 범위는 실제 주문 기능이 아닙니다. 토스증권에는 확인된 별도 sandbox/paper 서버가 없으므로 향후 paper 체결은 애플리케이션 내부에서 구현합니다.
 
@@ -60,6 +62,8 @@ pnpm dev
 ```
 
 `apps/engine/.env.example`, `apps/web/.env.example`, `packages/database/.env.example`을 각각 같은 위치의 `.env.local`로 복사하고 로컬 값을 설정합니다. 토스 read-only 자격증명은 engine에만 두고 브라우저에서 `http://127.0.0.1:13000`을 엽니다. 호스트 운영에서는 launchd가 같은 포트의 production Web과 4100 포트의 engine을 유지하고, `home-server` Caddy가 `https://stock.fredly.dev`를 Web으로 전달합니다. 첫 화면은 저장된 스냅샷이 없을 때 한 번 실제 계좌 수집을 시도합니다. 설정 화면에서 관리 현금을 포트폴리오 평가에서 제외하거나 관리할 원화 금액을 직접 입력하고, 각 현재 보유종목을 안전자산·핵심 공격자산·위성 공격자산 중 한 곳에 배치한 뒤 네 자산군 목표 합계를 100%로 맞춥니다. 미보유 종목은 종목명으로 로컬 검증 카탈로그를 검색하거나 국내 6자리 코드·미국 티커로 Toss에 정확 검증을 요청합니다. 검색·검증은 설정을 저장하지 않으며, 사용자가 추가한 미보유 종목은 제거할 수 있지만 현재 보유종목은 목표에서 뺄 수 없습니다. 미보유 종목이 들어간 자산군은 `균등 배분`을 명시적으로 선택해야 합니다. 목표 저장과 적용은 분리되며 초안은 저장 당시 스냅샷 ID와 digest 및 미보유 종목의 검증 ID에 묶입니다. 그 사이 계좌 데이터가 바뀌면 적용하지 않고 새 초안을 요구합니다. 적용 후 문제 해결 화면에서 새 데이터를 재점검해야 최신 스냅샷에 활성 버전과 관리 현금 정책이 함께 고정됩니다. 전체 계좌번호와 토큰은 저장하거나 브라우저로 전달하지 않으며 주문을 제출하지 않습니다.
+
+루트의 `config.example.yaml`은 향후 `setup` UI/CLI가 생성할 운영 정책의 계약 예제입니다. 사용자가 YAML을 일상적으로 손편집하는 흐름은 목표가 아니며, 현재는 계약과 예제 검증만 구현되어 런타임 설정 로더나 주문 실행을 활성화하지 않습니다. PAPER 기본값, quote·캘린더 신선도, 주문별·일별 한도, 회전율·비중 상한, 킬 스위치와 제한적 한국 live 승격 조건은 [운영 설정 레퍼런스](docs/CONFIG.md)를 참고하세요.
 
 전체 검증은 다음 명령으로 실행합니다.
 
@@ -143,7 +147,7 @@ Production engine에는 Supabase Integration의 `POSTGRES_PRISMA_URL`, `POSTGRES
 - 브라우저에서 증권사 API를 직접 호출하거나 비밀정보를 전달하지 않습니다.
 - 실제 주문은 별도 설계 검토, 원장·멱등성·한도·복구와 명시적 승인 조건이 모두 구현되기 전까지 활성화하지 않습니다.
 
-향후 운영 인터페이스는 `setup`, `doctor`, `check`, `plan`, `run`, `status`, `explain`, `recover`로 내부 복잡성을 숨깁니다. 이 CLI와 실제 계좌 흐름은 아직 구현되지 않았으며 [구현 계획](docs/TODO.md)에서 추적합니다.
+향후 운영 인터페이스는 `setup`, `doctor`, `check`, `plan`, `run`, `status`, `explain`, `recover`로 내부 복잡성을 숨깁니다. 운영 설정의 strict 계약과 예제는 구현되었지만 이를 질문형으로 생성·저장하는 setup UI/CLI와 실제 주문 흐름은 아직 구현되지 않았으며 [구현 계획](docs/TODO.md)에서 추적합니다.
 
 ## 디자인 기준
 
@@ -161,6 +165,7 @@ Production engine에는 Supabase Integration의 `POSTGRES_PRISMA_URL`, `POSTGRES
 - [시스템 명세](docs/SPEC.md)
 - [구현 계획](docs/TODO.md)
 - [Web GUI 설계](docs/WEB_UI.md)
+- [운영 설정 레퍼런스](docs/CONFIG.md)
 - [토스증권 API 연동](docs/API_TOSS.md)
 - [아키텍처 결정 기록](docs/adr/0001-typescript-hexagonal-monorepo.md)
 - [NestJS engine 결정 기록](docs/adr/0002-nestjs-engine-on-vercel.md)

@@ -1,0 +1,55 @@
+# 이 파일은 setup UI/CLI가 생성할 운영 설정의 예시입니다.
+# 금액은 KRW minor unit 정수 문자열이며 현재 KRW에서는 "1"이 1원입니다.
+# 실제 계좌 식별자나 토스 API 비밀정보를 이 파일에 넣지 마세요.
+
+schemaVersion: OPERATIONAL_CONFIG_V1
+mode: PAPER
+
+# true이면 Paper와 Live 모두 신규 주문 실행을 차단합니다.
+killSwitch: true
+
+freshness:
+  quote:
+    # 계획 생성에 사용할 수 있는 quote의 최대 나이입니다.
+    planMaxAgeSeconds: 30
+    # 주문 제출 직전에는 더 최신 quote를 요구합니다.
+    preSubmitMaxAgeSeconds: 5
+    # 로컬 시각보다 미래로 관측된 quote를 허용할 최대 오차입니다.
+    futureToleranceSeconds: 2
+  calendar:
+    # 시장 세션 판단에 사용할 캘린더의 최대 나이입니다.
+    maxAgeSeconds: 86400
+    # 로컬 시각보다 미래로 관측된 캘린더를 허용할 최대 오차입니다.
+    futureToleranceSeconds: 2
+
+limits:
+  minimumOrderGrossMinor: "10000"
+  feeBufferMinor: "5000"
+  maxSingleOrderGrossMinor: "100000"
+  maxDailyGrossMinor: "500000"
+  maxDailyTurnoverBasisPoints: 500
+  # 직전 계획 시세 대비 주문 직전 가격의 최대 절대 변동 폭입니다.
+  maxAbsolutePriceChangeBasisPoints: 100
+  maxInstrumentWeightBasisPoints: 3000
+  maxAssetClassWeightBasisPoints: 7000
+  maxRiskyWeightBasisPoints: 8000
+
+live:
+  # false가 기본입니다. true만으로 LIVE 모드가 활성화되지는 않습니다.
+  enabled: false
+
+  # 첫 live 승격 범위는 한국 정규 연속매매의 지정가 DAY 주문으로 고정됩니다.
+  marketCountry: KR
+  allowedSession: REGULAR_MARKET
+  orderType: LIMIT
+  timeInForce: DAY
+
+  # setup이 사용자가 승인한 계좌 참조의 64자리 SHA-256 HMAC만 채웁니다.
+  accountAllowlistHmacs: []
+  manualApprovalRequired: true
+  approvalTtlSeconds: 300
+
+  # 일반 한도보다 같거나 작아야 하며 V1 hard cap은 각각 10만원/30만원/5만원입니다.
+  maxSingleOrderGrossMinor: "10000"
+  maxDailyGrossMinor: "20000"
+  tinyLiveMaxGrossMinor: "10000"
