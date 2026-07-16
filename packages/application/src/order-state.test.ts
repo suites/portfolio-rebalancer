@@ -13,6 +13,9 @@ describe("evaluateOrderTransition", () => {
     expect(
       evaluateOrderTransition({ from: "PARTIAL_FILLED", to: "FILLED", actor: "RECONCILER" }),
     ).toMatchObject({ allowed: true });
+    expect(
+      evaluateOrderTransition({ from: "PARTIAL_FILLED", to: "REJECTED", actor: "RECONCILER" }),
+    ).toMatchObject({ allowed: true });
   });
 
   it("종료 상태와 허용되지 않은 역방향 전이를 차단한다", () => {
