@@ -1,17 +1,16 @@
 # Security Review
 
-## P1 — 단일 루트 env는 배포 권한 경계를 무너뜨릴 수 있음
+## P1 — Production 필수 secret이 bootstrap optional
 
-Web 프로젝트가 루트 env 전체를 읽도록 맞추면 Toss 자격증명, DB URL, cron secret까지 Web Function에 주입된다. Web에는 Engine URL과 서비스 토큰만 제공한다.
+`DATABASE_URL`만 Vercel에서 필수다. Service token, Cron secret, Toss credential과 account reference key가 없어도 public health는 성공하므로 배포는 정상처럼 보이지만 실제 endpoint는 401 또는 수집 차단 상태가 될 수 있다. Production readiness 검사가 필요하다.
 
-## P1 — Engine URL 검증 없이 Bearer token 전송
+## P2 — Account reference key 재사용
 
-Web은 설정된 `ENGINE_INTERNAL_URL`로 서비스 토큰을 보낸다. 운영에서는 HTTPS와 허용된 Engine origin을 검증하고 외부 origin 및 redirect를 거부해야 한다.
+`ACCOUNT_REFERENCE_KEY`가 없으면 Toss client secret을 HMAC key로 재사용한다. Production에서는 별도 32바이트 이상 key를 필수로 둔다.
 
-## P2 — 환경 간 자격증명 분리 필요
+## 확인된 안전 요소
 
-Production과 Preview의 Engine token 및 DB를 분리하고, 일반 Preview에는 운영 Toss 자격증명을 주입하지 않는다. `DATABASE_DIRECT_URL`은 migration CI만 소유한다.
-
-## P2 — 로컬 secret 파일 권한
-
-현재 `.env` 권한은 0644다. 개인 개발 환경에서도 0600을 권장한다.
+- Cron과 Web service token Guard가 분리되어 있다.
+- Toss egress 확인값이 없으면 Vercel 수집은 fail closed 한다.
+- 파일시스템 쓰기, 상주 scheduler, child process 의존은 없다.
+- 실제 주문 전송은 계속 차단되어 있다.

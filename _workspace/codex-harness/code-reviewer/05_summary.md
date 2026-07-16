@@ -1,12 +1,17 @@
 # Review Summary
 
-현재 루트 `.env` 하나는 초기 로컬 개발에는 편하지만 실제 로딩 방식과 Vercel의 최소 권한 모델에 맞지 않는다.
+판정: Engine 코드는 Vercel NestJS zero-config에 맞지만 현재 설정 그대로 운영 배포가 확정됐다고 보기는 어렵다.
 
-권고:
+최초 배포 전 우선 보강:
 
-1. Web, Engine, migration의 3개 스코프로 분리한다.
-2. Web에는 Engine URL과 서비스 토큰만 둔다.
-3. Engine에는 runtime secret과 pooled DB URL만 둔다.
-4. Direct DB URL은 migration CI에만 둔다.
-5. Preview에는 운영 Toss/DB credential을 주입하지 않는다.
-6. 분리 구현 시 빈 문자열 처리, Engine origin 검증, production 필수값 검증을 함께 보강한다.
+1. Dashboard Root Directory를 `apps/engine`으로 선택한다.
+2. `apps/engine/vercel.json`에 `framework: nestjs`를 명시한다.
+3. Fluid compute와 충돌할 수 있는 `memory` 설정을 제거하고 Dashboard에서 설정한다.
+4. `PORT` 호환성과 workspace Prisma 생성은 실제 Vercel Preview build로 검증한다.
+
+운영 안정성 후속 보강:
+
+1. 수집 lease heartbeat와 fencing 검사를 구현한다.
+2. Production 필수 환경변수 readiness를 추가한다.
+3. 별도 `ACCOUNT_REFERENCE_KEY`를 필수화한다.
+4. Preview 배포 후 `/internal/v1/health`, 인증 endpoint, Cron endpoint를 smoke test한다.

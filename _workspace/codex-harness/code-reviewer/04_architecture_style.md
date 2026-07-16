@@ -1,9 +1,21 @@
-# Architecture and Usability
+# Architecture and Deployment Settings
 
-권장 환경변수 소유권은 3개 경계다.
+현재 구조는 NestJS zero-config의 기본 조건을 충족한다.
 
-1. `apps/web/.env.local`: `ENGINE_INTERNAL_URL`, `ENGINE_SERVICE_TOKEN`
-2. `apps/engine/.env.local`: Toss 자격증명, 계좌 선택값, pooled `DATABASE_URL`, 서비스/cron key, egress 확인값
-3. `packages/database/.env.local` 또는 CI secret: migration 전용 `DATABASE_DIRECT_URL`
+- 진입점: `apps/engine/src/main.ts`
+- 서버 시작: `app.listen(...)`
+- adapter: NestJS Fastify
+- 배포 단위: 전체 Nest 앱을 하나의 Vercel Function으로 변환
+- workspace: pnpm workspace와 명시적인 내부 package dependency
+- Prisma Client: database workspace postinstall에서 생성
+- Cron: `/internal/v1/cron/portfolio`, 평일 00:00 UTC
 
-각 위치에 최소 키만 담은 `.env.example`을 둔다. 브라우저 공개용 `NEXT_PUBLIC_*`에는 비밀정보를 두지 않는다. Production과 Preview는 Vercel 프로젝트 및 환경 단위로 별도 값을 사용한다.
+권장 Dashboard 설정:
+
+1. Root Directory: `apps/engine`
+2. Include source files outside Root Directory: Enabled
+3. Framework: NestJS 또는 repo config의 `framework: nestjs`
+4. Build Command: 자동 감지, override 없음
+5. Output Directory: 비움, `dist` 지정 금지
+6. Install Command: 자동 감지
+7. Node.js: 22.x
