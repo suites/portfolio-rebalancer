@@ -43,6 +43,26 @@ enum BrokerResponseValidationOutcome {
   SCHEMA_ERROR
 }
 
+enum RebalanceMode {
+  SHADOW
+  PAPER
+  LIVE
+}
+
+enum RebalanceRunStatus {
+  RUNNING
+  NO_ACTION
+  PLANNED
+  BLOCKED
+  FAILED
+}
+
+enum RebalancePlanStatus {
+  NO_ACTION
+  PLANNED
+  BLOCKED
+}
+
 model BrokerAccount {
   id              String   @id @default(uuid()) @db.Uuid
   broker          String
@@ -55,6 +75,7 @@ model BrokerAccount {
   targetConfig   TargetConfig?
   collectionRuns CollectionRun[]
   snapshots      PortfolioSnapshot[]
+  rebalanceRuns  RebalanceRun[]
 
   @@unique([broker, externalRefHmac])
   @@map("broker_account")
@@ -82,9 +103,11 @@ model TargetConfigVersion {
   cashPolicy  Json               @map("cash_policy") @db.JsonB
   createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  config      TargetConfig        @relation(fields: [configId], references: [id], onDelete: Restrict)
-  allocations TargetAllocation[]
-  snapshots   PortfolioSnapshot[]
+  config         TargetConfig        @relation(fields: [configId], references: [id], onDelete: Restrict)
+  allocations    TargetAllocation[]
+  snapshots      PortfolioSnapshot[]
+  rebalanceRuns  RebalanceRun[]
+  rebalancePlans RebalancePlan[]
 
   @@unique([configId, version])
   @@unique([configId, contentHash])
@@ -312,6 +335,8 @@ model PortfolioSnapshot {
   prices              PriceSnapshot[]
   marketCalendars     MarketCalendarSnapshot[]
   checks              SnapshotCheck[]
+  rebalanceRuns       RebalanceRun[]
+  rebalancePlans      RebalancePlan[]
 
   @@index([accountId, observedAt(sort: Desc)])
   @@map("portfolio_snapshot")
@@ -413,4 +438,85 @@ model RuntimeLease {
 
   @@index([expiresAt])
   @@map("runtime_lease")
+}
+
+model RebalanceRun {
+  id                      String             @id @default(uuid()) @db.Uuid
+  accountId               String             @map("account_id") @db.Uuid
+  snapshotId              String             @map("snapshot_id") @db.Uuid
+  snapshotDigest          String             @map("snapshot_digest") @db.Char(64)
+  targetConfigVersionId   String             @map("target_config_version_id") @db.Uuid
+  targetConfigContentHash String             @map("target_config_content_hash") @db.Char(64)
+  mode                    RebalanceMode
+  status                  RebalanceRunStatus @default(RUNNING)
+  dedupeKey               String             @unique @map("dedupe_key") @db.Char(64)
+  startedAt               DateTime           @map("started_at") @db.Timestamptz(6)
+  completedAt             DateTime?          @map("completed_at") @db.Timestamptz(6)
+  appVersion              String             @map("app_version")
+  policyVersion           String             @map("policy_version")
+  errorCode               String?            @map("error_code")
+
+  account             BrokerAccount       @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  snapshot            PortfolioSnapshot   @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  targetConfigVersion TargetConfigVersion @relation(fields: [targetConfigVersionId], references: [id], onDelete: Restrict)
+  plan                RebalancePlan?
+
+  @@index([accountId, startedAt(sort: Desc)])
+  @@index([snapshotId, mode])
+  @@map("rebalance_run")
+}
+
+model RebalancePlan {
+  id                    String              @id @default(uuid()) @db.Uuid
+  runId                 String              @unique @map("run_id") @db.Uuid
+  snapshotId            String              @map("snapshot_id") @db.Uuid
+  targetConfigVersionId String              @map("target_config_version_id") @db.Uuid
+  mode                  RebalanceMode
+  status                RebalancePlanStatus
+  canonicalVersion      String              @map("canonical_version")
+  planHash              String              @map("plan_hash") @db.Char(64)
+  returnPolicy          String              @map("return_policy")
+  totalValueMinor       BigInt?             @map("total_value_minor")
+  reasonCodes           Json                @map("reason_codes") @db.JsonB
+  canonicalContent      String              @map("canonical_content") @db.Text
+  assetDecisions        Json                @map("asset_decisions") @db.JsonB
+  deferredBuyNeeds      Json                @map("deferred_buy_needs") @db.JsonB
+  projectedAllocations  Json                @map("projected_allocations") @db.JsonB
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  run                 RebalanceRun         @relation(fields: [runId], references: [id], onDelete: Restrict)
+  snapshot            PortfolioSnapshot    @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  targetConfigVersion TargetConfigVersion  @relation(fields: [targetConfigVersionId], references: [id], onDelete: Restrict)
+  orders              RebalancePlanOrder[]
+
+  @@unique([snapshotId, targetConfigVersionId, mode, planHash], map: "rebalance_plan_identity_key")
+  @@index([createdAt(sort: Desc)])
+  @@map("rebalance_plan")
+}
+
+model RebalancePlanOrder {
+  id               String   @id @default(uuid()) @db.Uuid
+  planId           String   @map("plan_id") @db.Uuid
+  candidateId      String   @map("candidate_id")
+  phase            String
+  ordinal          Int
+  assetClassId     String   @map("asset_class_id")
+  instrumentKey    String   @map("instrument_key")
+  marketCountry    String   @map("market_country")
+  currency         String
+  symbol           String
+  side             String
+  orderType        String   @map("order_type")
+  timeInForce      String   @map("time_in_force")
+  quantity         BigInt
+  limitPriceMinor  BigInt   @map("limit_price_minor")
+  notionalMinor    BigInt   @map("notional_minor")
+  unallocatedMinor BigInt   @map("unallocated_minor")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  plan RebalancePlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@unique([planId, candidateId], map: "rebalance_plan_order_plan_candidate_key")
+  @@unique([planId, phase, ordinal], map: "rebalance_plan_order_plan_phase_ordinal_key")
+  @@map("rebalance_plan_order")
 }
