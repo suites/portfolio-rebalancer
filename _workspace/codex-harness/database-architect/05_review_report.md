@@ -15,3 +15,15 @@
 - rate metadata non-negative 및 remaining <= limit: 적용
 - append-only UPDATE/DELETE trigger: migration contract test 추가
 - Toss callback wiring: 별도 transport 통합 slice로 의도적으로 제외
+
+## Market snapshot payload provenance review
+
+상태: 통과.
+
+- partial application 이후 migration 재실행: 동일 SQL 2회 재실행 통과
+- valid price/calendar evidence insert: 통과
+- wrong price, symbol, currency, provider timestamp, calendar date, received timestamp fail closed: 통과
+- TEMP shadow relation 무효화: 통과
+- current immutable evidence table의 ALWAYS row/TRUNCATE guard 확인: 통과
+- fresh PostgreSQL 17: 15개 migration 전체 deploy 통과
+- 실제 PostgreSQL integration: 4 files, 7 tests 통과

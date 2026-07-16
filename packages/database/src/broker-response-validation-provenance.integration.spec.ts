@@ -323,12 +323,21 @@ async function insertValidation(
   outcome: "PASSED" | "SCHEMA_ERROR",
   safeErrorCode: string | null,
 ): Promise<void> {
+  const redactedBody = validationBody(operationId);
   await client.query(
     `INSERT INTO "broker_response_validation" (
        "request_attempt_id", "operation_id", "outcome", "redacted_body",
        "body_sha256", "safe_error_code", "validated_at"
-     ) VALUES ($1, $2, $3, '{}'::JSONB, $4, $5, $6)`,
-    [attemptId, operationId, outcome, "c".repeat(64), safeErrorCode, "2026-07-17T00:00:02.000Z"],
+     ) VALUES ($1, $2, $3, $4::JSONB, $5, $6, $7)`,
+    [
+      attemptId,
+      operationId,
+      outcome,
+      JSON.stringify(redactedBody),
+      "c".repeat(64),
+      safeErrorCode,
+      "2026-07-17T00:00:02.000Z",
+    ],
   );
 }
 
@@ -343,7 +352,7 @@ async function insertPrice(
        "snapshot_id", "request_attempt_id", "market_country", "symbol", "currency",
        "last_price", "provider_observed_at", "received_at"
      ) VALUES ($1, $2, 'KR', $3, 'KRW', '70000', $4, $5)`,
-    [snapshotId, attemptId, symbol, "2026-07-17T00:00:01.000Z", "2026-07-17T00:00:02.000Z"],
+    [snapshotId, attemptId, symbol, "2026-07-17T00:00:01.000Z", "2026-07-17T00:00:01.000Z"],
   );
 }
 
@@ -367,7 +376,30 @@ async function insertKrCalendar(
         nextBusinessDay: { date: "2026-07-20", sessions: [] },
       }),
       "d".repeat(64),
-      "2026-07-17T00:00:02.000Z",
+      "2026-07-17T00:00:01.000Z",
     ],
   );
+}
+
+function validationBody(operationId: string): unknown {
+  if (operationId === "getPrices") {
+    return {
+      result: ["005930", "000660", "035420", "051910", "068270", "105560"].map((symbol) => ({
+        symbol,
+        timestamp: "2026-07-17T00:00:01.000Z",
+        lastPrice: "70000",
+        currency: "KRW",
+      })),
+    };
+  }
+  if (operationId === "getKrMarketCalendar" || operationId === "getUsMarketCalendar") {
+    return {
+      result: {
+        today: { date: "2026-07-17" },
+        previousBusinessDay: { date: "2026-07-16" },
+        nextBusinessDay: { date: "2026-07-20" },
+      },
+    };
+  }
+  return {};
 }

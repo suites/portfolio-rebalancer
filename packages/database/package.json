@@ -17,7 +17,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "postinstall": "prisma generate",
     "test": "vitest run --passWithNoTests",
-    "test:integration": "vitest run --passWithNoTests src/broker-response-validation-provenance.integration.spec.ts src/legacy-market-snapshot-quarantine.integration.spec.ts",
+    "test:integration": "vitest run --passWithNoTests src/broker-response-validation-provenance.integration.spec.ts src/legacy-market-snapshot-quarantine.integration.spec.ts src/collection-run-terminal-timeline.integration.spec.ts src/market-snapshot-payload-provenance.integration.spec.ts",
     "test:coverage": "vitest run --coverage",
     "typecheck": "prisma generate && tsc --noEmit"
   },
