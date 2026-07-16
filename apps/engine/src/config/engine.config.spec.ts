@@ -11,6 +11,23 @@ describe("engine configuration", () => {
     expect(() => loadEngineConfig({ VERCEL: "1" })).toThrow("DATABASE_URL");
   });
 
+  it("Vercel에서는 platform PORT를 engine 포트보다 우선한다", () => {
+    const config = loadEngineConfig({
+      VERCEL: "1",
+      PORT: "4321",
+      ENGINE_PORT: "4100",
+      DATABASE_URL: "postgresql://example.invalid/portfolio",
+    });
+
+    expect(config.ENGINE_PORT).toBe(4321);
+  });
+
+  it("로컬에서는 Vercel PORT 대신 engine 포트를 사용한다", () => {
+    const config = loadEngineConfig({ PORT: "4321", ENGINE_PORT: "4100" });
+
+    expect(config.ENGINE_PORT).toBe(4100);
+  });
+
   it("고정 출구 IP 확인 전 Vercel 수집을 차단한다", () => {
     const config = loadEngineConfig({
       VERCEL: "1",

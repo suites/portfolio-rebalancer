@@ -105,6 +105,8 @@ apps/engine/src/
 
 같은 Git 저장소에서 `apps/web`과 `apps/engine`을 각각 Vercel Project로 가져옵니다. PostgreSQL은 Vercel Marketplace의 Neon을 기본 운영 경로로 사용하며 pooled `DATABASE_URL`은 runtime, direct `DATABASE_DIRECT_URL`은 Prisma migration에 사용합니다.
 
+engine 프로젝트의 Root Directory는 `apps/engine`으로 지정하고 외부 workspace source 포함을 활성화합니다. Framework는 `apps/engine/vercel.json`의 `nestjs`로 고정하며 Build Command와 Output Directory는 override하지 않습니다. Vercel이 제공하는 `PORT`를 로컬 `ENGINE_PORT`보다 우선하고, Function 메모리는 Fluid Compute와 충돌하지 않도록 Dashboard의 Functions 설정에서 관리합니다.
+
 토스증권은 허용 IP를 요구하므로 engine 프로젝트에서 Vercel Pro Static IPs 또는 Enterprise Secure Compute를 활성화해야 합니다. 해당 IP를 토스증권에 등록한 뒤에만 `TOSS_EGRESS_ALLOWLIST_CONFIRMED=true`를 설정하세요. 일반 Vercel 동적 출구 IP에서는 실제 수집이 코드에서 차단됩니다.
 
 Production engine에는 `TOSSINVEST_CLIENT_ID`, `TOSSINVEST_CLIENT_SECRET`, `DATABASE_URL`, `ENGINE_SERVICE_TOKEN`, `CRON_SECRET`을 민감 환경변수로 설정합니다. web에는 `ENGINE_INTERNAL_URL`과 같은 `ENGINE_SERVICE_TOKEN`만 설정합니다. Preview에는 운영 토스 키를 주입하지 않는 것을 기본으로 합니다.

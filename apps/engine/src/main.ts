@@ -5,6 +5,9 @@ import type { EngineConfig } from "./config/engine.config";
 const app = await createEngineApplication();
 const config = app.get<EngineConfig>(ENGINE_CONFIG);
 
-if (config.VERCEL !== "1") app.enableShutdownHooks();
-
-await app.listen(config.ENGINE_PORT, config.ENGINE_HOST);
+if (config.VERCEL === "1") {
+  await app.listen(config.ENGINE_PORT);
+} else {
+  app.enableShutdownHooks();
+  await app.listen(config.ENGINE_PORT, config.ENGINE_HOST);
+}

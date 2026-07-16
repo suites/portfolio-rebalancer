@@ -22,6 +22,10 @@ export type EngineConfig = z.infer<typeof EnvironmentSchema>;
 export function loadEngineConfig(environment: NodeJS.ProcessEnv): EngineConfig {
   const result = EnvironmentSchema.safeParse({
     ...environment,
+    ENGINE_PORT:
+      environment.VERCEL === "1"
+        ? (environment.PORT ?? environment.ENGINE_PORT)
+        : environment.ENGINE_PORT,
     DATABASE_URL:
       environment.DATABASE_URL ??
       (environment.VERCEL === "1"

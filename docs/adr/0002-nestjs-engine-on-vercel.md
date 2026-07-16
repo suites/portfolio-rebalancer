@@ -14,7 +14,9 @@
 - DB client 생성과 종료는 singleton `PrismaService`가 관리하고 `PrismaModule`이 이를 내보냅니다. 스키마, Client 생성과 migration의 기준은 `packages/database/prisma`입니다.
 - portfolio 내부는 `presentation`, `application`, `domain`, `infrastructure`로 나누고 HTTP 계층은 NestJS 11의 Controller, Guard와 singleton Provider로 구성합니다.
 - HTTP adapter는 Fastify 5를 유지합니다.
-- Vercel이 자동 감지하는 `src/main.ts`에서 Nest 애플리케이션을 시작합니다.
+- Vercel이 감지하는 `src/main.ts`에서 Nest 애플리케이션을 시작하고 `vercel.json`의 framework slug를 `nestjs`로 고정합니다.
+- Vercel 런타임에서는 platform `PORT`를 로컬 `ENGINE_PORT`보다 우선하고 host를 강제하지 않습니다. 로컬 실행은 기존 `ENGINE_HOST`와 `ENGINE_PORT`를 유지합니다.
+- Fluid Compute의 Function 메모리는 `vercel.json`이 아니라 Vercel Dashboard의 Functions 설정에서 관리합니다.
 - 토스 클라이언트는 첫 수집 시 lazy singleton으로 생성해 OAuth 캐시를 warm instance에서 재사용합니다.
 - Prisma client와 repository는 애플리케이션 singleton이며 요청 종료 시 disconnect하지 않습니다.
 - service token과 Cron secret은 서로 다른 Guard로 검증합니다.

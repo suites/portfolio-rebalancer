@@ -1,10 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nestjs",
   "regions": ["icn1"],
   "functions": {
     "src/main.ts": {
-      "maxDuration": 120,
-      "memory": 1024
+      "maxDuration": 120
     }
   },
   "crons": [
