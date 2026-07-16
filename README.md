@@ -107,7 +107,7 @@ apps/engine/src/
 
 engine 프로젝트의 Root Directory는 `apps/engine`으로 지정하고 외부 workspace source 포함을 활성화합니다. Framework는 `apps/engine/vercel.json`의 `nestjs`로 고정하며 Build Command와 Output Directory는 override하지 않습니다. `src/main.ts`는 일반 Nest 애플리케이션과 동일하게 `NestFactory.create()`와 하나의 `app.listen()` 경로만 사용합니다. Vercel zero-config가 이 진입점을 자동 배포하므로 `vercel.json`에서 handler, rewrite 또는 `functions` glob을 선언하지 않습니다. Vercel이 제공하는 `PORT`를 `ENGINE_PORT`보다 우선하고, 실행 시간과 메모리는 Fluid Compute와 충돌하지 않도록 Dashboard의 Functions 설정에서 관리합니다.
 
-engine의 독립 production 산출물도 같은 진입점에서 만듭니다. Nest CLI와 workspace alias를 지정한 webpack build는 내부 TypeScript 패키지를 포함한 `dist/main.cjs`를 생성하고 외부 npm 의존성은 번들에 중복하지 않습니다.
+engine의 독립 production 산출물도 같은 CommonJS 진입점에서 만듭니다. Nest CLI와 workspace alias를 지정한 webpack build는 내부 TypeScript 패키지를 포함한 `dist/main.cjs`를 생성하고 외부 npm 의존성은 번들에 중복하지 않습니다. CommonJS package 경계는 Vercel이 변환한 extensionless Nest import도 Node가 일관되게 해석하도록 보장합니다.
 
 ```bash
 pnpm --filter @portfolio-rebalancer/engine build

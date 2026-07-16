@@ -2,7 +2,7 @@
   "name": "@portfolio-rebalancer/engine",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "build": "pnpm typecheck && nest build --builder webpack --webpackPath webpack.config.cjs",
     "dev": "pnpm start:dev",

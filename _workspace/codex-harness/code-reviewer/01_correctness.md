@@ -15,3 +15,7 @@
 ## 해결 — Vercel builder 타입 이식성
 
 engine tsconfig에 DOM Fetch API lib를 명시하고 `CollectionResult`를 property 존재 검사로 좁혀 Vercel builder의 별도 TypeScript 단계에서도 안정적으로 해석되게 했다.
+
+## 해결 — Vercel 변환 산출물의 ESM import 해석
+
+Vercel runtime에서 extensionless `./app.module` ESM import가 `ERR_MODULE_NOT_FOUND`를 발생시켰다. engine package를 CommonJS 경계로 고정하고 공식 Nest 형태의 `void bootstrap()`을 사용해 Vercel 변환과 독립 build의 Node 해석 규칙을 일치시켰다.

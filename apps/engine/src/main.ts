@@ -21,4 +21,4 @@ async function bootstrap(): Promise<void> {
   await app.listen(config.ENGINE_PORT, config.ENGINE_HOST);
 }
 
-await bootstrap();
+void bootstrap();
