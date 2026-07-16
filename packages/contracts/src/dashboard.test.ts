@@ -5,14 +5,17 @@ import { DashboardSnapshotSchema } from "./dashboard";
 describe("DashboardSnapshotSchema", () => {
   it("브라우저 계약에서 범위를 벗어난 basis points를 거부한다", () => {
     const result = DashboardSnapshotSchema.safeParse({
-      mode: "PAPER",
-      dataSource: "SYNTHETIC",
-      brokerConnection: "NOT_CONNECTED",
+      state: "READY",
+      mode: "SHADOW",
+      dataSource: "TOSS",
+      brokerConnection: "CONNECTED",
       accountLabel: "**** 4821",
       observedAt: "2026-07-16T09:00:00+09:00",
       conclusion: "NO_ACTION",
       totalValueMinor: "1000",
       verifiedCashMinor: null,
+      blockReason: null,
+      liveOrdersEnabled: false,
       allocations: [
         {
           id: "core",
@@ -29,5 +32,41 @@ describe("DashboardSnapshotSchema", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("목표가 없는 실제 보유자산은 미설정 상태로만 허용한다", () => {
+    const result = DashboardSnapshotSchema.safeParse({
+      state: "BLOCKED",
+      mode: "SHADOW",
+      dataSource: "TOSS",
+      brokerConnection: "CONNECTED",
+      accountLabel: "**** 4821",
+      observedAt: "2026-07-16T09:00:00+09:00",
+      conclusion: "BLOCKED",
+      totalValueMinor: "1000",
+      verifiedCashMinor: null,
+      blockReason: {
+        code: "TARGET_CONFIG_MISSING",
+        problem: "목표 비중이 설정되지 않았습니다.",
+        protectiveAction: "주문 계획을 차단했습니다.",
+        nextAction: "목표 비중을 설정하세요.",
+      },
+      liveOrdersEnabled: false,
+      allocations: [
+        {
+          id: "KR:005930",
+          label: "삼성전자",
+          description: "KR · KRW",
+          valueMinor: "1000",
+          currentBasisPointHundredths: 1_000_000,
+          targetBasisPoints: null,
+          lowerBasisPoints: null,
+          upperBasisPoints: null,
+          bandStatus: "TARGET_NOT_CONFIGURED",
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
   });
 });

@@ -22,4 +22,22 @@ describe("AllocationBand", () => {
     expect(markup).toContain("현재 22.000%, 목표 15.0%, 허용 범위 11.3%에서 18.8%");
     expect(markup).toContain("리밸런싱 검토 필요");
   });
+
+  it("목표 미설정 보유자산을 가짜 목표 없이 표시한다", () => {
+    const markup = renderToStaticMarkup(
+      <AllocationBand
+        label="삼성전자"
+        description="KR · KRW"
+        currentBasisPointHundredths={1_000_000}
+        targetBasisPoints={null}
+        lowerBasisPoints={null}
+        upperBasisPoints={null}
+        bandStatus="TARGET_NOT_CONFIGURED"
+      />,
+    );
+
+    expect(markup).toContain("목표 미설정");
+    expect(markup).toContain("주문 계획 차단");
+    expect(markup).toContain("현재 100.000%, 목표 비중 미설정");
+  });
 });

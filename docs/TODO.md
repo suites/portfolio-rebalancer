@@ -8,9 +8,9 @@
 - [x] V8 테스트 coverage 실행 의존성과 workspace 명령 구성
 - [ ] 설정 스키마와 예제 설정 작성
 - [ ] 첫 운영 시장을 한국으로 고정하는 ADR 작성
-- [ ] 비밀정보 로딩 규칙과 `.gitignore` 구성
+- [x] 비밀정보 로딩 규칙과 `.gitignore` 구성
 - [ ] 오류 코드와 구조화 로그 형식 정의
-- [x] 자격증명 없이 실행되는 demo fixture와 Quick Start 작성
+- [x] 실제 read-only 자격증명과 PostgreSQL을 사용하는 Quick Start 작성
 - [ ] `setup`, `doctor`, `check`, `plan`, `run`, `status` CLI 골격 구현
 - [ ] 완전한 `config.example.yaml`과 안내형 설정 흐름 작성
 - [ ] 한국어 결과 상태와 오류 행동 지침 형식 정의
@@ -35,10 +35,11 @@
 
 ## Phase 2 — 상태 저장소
 
-- [ ] SQLite 스키마와 마이그레이션 구성
-- [ ] 실행, 스냅샷, 계획, 주문, 상태 이력 테이블 구현
+- [x] Prisma/PostgreSQL 스키마와 초기 migration 구성
+- [ ] 실행, 계획, 주문과 상태 이력 테이블 확장
+- [x] 수집 실행, redacted 원본 응답과 불변 스냅샷 테이블 구현
 - [ ] 설정 해시와 애플리케이션 버전 저장
-- [ ] 계좌 단위 실행 잠금 구현
+- [x] 전역 Toss 수집 lease와 fencing token 구현
 - [ ] 단일 호스트 lease, heartbeat 및 stale lock 복구 구현
 - [ ] `logical_order_id` UNIQUE 제약 구현
 - [ ] 일일 거래한도 예약과 주문 계획 저장을 하나의 트랜잭션으로 구현
@@ -69,26 +70,26 @@
 
 ### Phase 3B — 운영 가능한 조회 어댑터
 
-- [ ] secret store에서 OAuth 자격증명을 로딩하는 운영 구성
-- [ ] 계좌 및 보유 주식 조회
+- [x] Vercel 민감 환경변수에서 OAuth 자격증명을 로딩하는 운영 구성
+- [x] 계좌 및 보유 주식 조회
 - [ ] 가격, 종목, 시장 캘린더 조회
-- [ ] KRW/USD 환율 조회는 미국 시장 후속 범위로 분리
+- [x] 미국 보유자산이 있을 때 USD/KRW 환율 조회와 bigint 환산
 - [ ] 매수 가능 금액과 매도 가능 수량 조회
 - [ ] 평가용 현금 source of truth와 buying power의 차이를 실계좌 표본으로 검증
 - [x] 검증된 관리 현금 부재 시 거래 결론 차단 테스트
 - [ ] 수수료 및 종목 경고 조회
-- [ ] 응답 스키마 검증
+- [x] 계좌·보유·환율 응답 스키마 검증
 - [x] rate-limit과 request ID 응답 헤더 메타데이터 추출
 - [ ] 그룹별 client-side limiter 구현
 - [ ] 429 백오프와 jitter 구현
 - [x] timeout, 네트워크, 4xx와 5xx 안전 오류 분류
 - [ ] request ID 감사 로그 저장
-- [ ] 고정 출구 IP 운영 방식 결정
+- [x] Vercel Static IPs 또는 Secure Compute 기반 고정 출구 IP 방식 결정
 - [ ] `doctor`에서 토큰, 허용 IP, 계좌 및 조회 API를 주문 없이 점검
 
 ## Phase 4 — Shadow 모드
 
-- [ ] 실제 조회 데이터로 불변 스냅샷 생성
+- [x] 실제 조회 데이터로 불변 PostgreSQL 스냅샷 생성
 - [ ] 데이터 freshness 규칙 적용
 - [ ] 설정 외 자산 탐지 및 차단
 - [ ] 주문 없이 리밸런싱 계획 생성

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["icn1"],
+  "functions": {
+    "src/index.ts": {
+      "maxDuration": 120,
+      "memory": 1024
+    }
+  },
+  "crons": [
+    {
+      "path": "/internal/v1/cron/portfolio",
+      "schedule": "0 0 * * 1-5"
+    }
+  ]
+}

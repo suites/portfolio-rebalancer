@@ -1,0 +1,214 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TargetConfigStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum CollectionRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum SnapshotValidationStatus {
+  VERIFIED
+  BLOCKED
+}
+
+enum CheckOutcome {
+  PASSED
+  BLOCKED
+}
+
+model BrokerAccount {
+  id              String   @id @default(uuid()) @db.Uuid
+  broker          String
+  externalRefHmac String   @map("external_ref_hmac") @db.Char(64)
+  maskedNumber    String   @map("masked_number")
+  accountTypeRaw  String   @map("account_type_raw")
+  firstSeenAt     DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+  lastSeenAt      DateTime @map("last_seen_at") @db.Timestamptz(6)
+
+  targetConfig   TargetConfig?
+  collectionRuns CollectionRun[]
+  snapshots      PortfolioSnapshot[]
+
+  @@unique([broker, externalRefHmac])
+  @@map("broker_account")
+}
+
+model TargetConfig {
+  id        String   @id @default(uuid()) @db.Uuid
+  accountId String   @unique @map("account_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  account  BrokerAccount         @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  versions TargetConfigVersion[]
+
+  @@map("target_config")
+}
+
+model TargetConfigVersion {
+  id          String             @id @default(uuid()) @db.Uuid
+  configId    String             @map("config_id") @db.Uuid
+  version     Int
+  status      TargetConfigStatus @default(DRAFT)
+  contentHash String             @map("content_hash") @db.Char(64)
+  appVersion  String             @map("app_version")
+  source      Json               @db.JsonB
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  config      TargetConfig       @relation(fields: [configId], references: [id], onDelete: Restrict)
+  allocations TargetAllocation[]
+  snapshots   PortfolioSnapshot[]
+
+  @@unique([configId, version])
+  @@unique([configId, contentHash])
+  @@map("target_config_version")
+}
+
+model TargetAllocation {
+  id                String @id @default(uuid()) @db.Uuid
+  configVersionId   String @map("config_version_id") @db.Uuid
+  assetKey          String @map("asset_key")
+  label             String
+  targetBasisPoints Int    @map("target_basis_points")
+  lowerBasisPoints  Int    @map("lower_basis_points")
+  upperBasisPoints  Int    @map("upper_basis_points")
+
+  configVersion TargetConfigVersion @relation(fields: [configVersionId], references: [id], onDelete: Restrict)
+  instruments   TargetInstrument[]
+
+  @@unique([configVersionId, assetKey])
+  @@map("target_allocation")
+}
+
+model TargetInstrument {
+  id                String @id @default(uuid()) @db.Uuid
+  allocationId      String @map("allocation_id") @db.Uuid
+  market            String
+  symbol            String
+  currency          String
+  withinAssetPoints Int    @map("within_asset_points")
+
+  allocation TargetAllocation @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+
+  @@unique([allocationId, market, symbol])
+  @@map("target_instrument")
+}
+
+model CollectionRun {
+  id            String              @id @default(uuid()) @db.Uuid
+  accountId     String              @map("account_id") @db.Uuid
+  status        CollectionRunStatus @default(RUNNING)
+  startedAt     DateTime            @map("started_at") @db.Timestamptz(6)
+  completedAt   DateTime?           @map("completed_at") @db.Timestamptz(6)
+  appVersion    String              @map("app_version")
+  adapterVersion String             @map("adapter_version")
+  errorCode     String?             @map("error_code")
+
+  account      BrokerAccount        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  rawResponses RawBrokerResponse[]
+  snapshot     PortfolioSnapshot?
+
+  @@index([accountId, startedAt(sort: Desc)])
+  @@map("collection_run")
+}
+
+model RawBrokerResponse {
+  id               String   @id @default(uuid()) @db.Uuid
+  collectionRunId  String   @map("collection_run_id") @db.Uuid
+  operationId      String   @map("operation_id")
+  ordinal          Int
+  requestId        String?  @map("request_id")
+  httpStatus       Int      @map("http_status")
+  receivedAt       DateTime @map("received_at") @db.Timestamptz(6)
+  redactedBody     Json     @map("redacted_body") @db.JsonB
+  bodySha256       String   @map("body_sha256") @db.Char(64)
+  redactionVersion String   @map("redaction_version")
+
+  collectionRun CollectionRun @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
+
+  @@unique([collectionRunId, operationId, ordinal])
+  @@index([requestId])
+  @@map("raw_broker_response")
+}
+
+model PortfolioSnapshot {
+  id                    String                   @id @default(uuid()) @db.Uuid
+  collectionRunId       String                   @unique @map("collection_run_id") @db.Uuid
+  accountId             String                   @map("account_id") @db.Uuid
+  targetConfigVersionId String?                  @map("target_config_version_id") @db.Uuid
+  observedAt            DateTime                 @map("observed_at") @db.Timestamptz(6)
+  persistedAt           DateTime                 @default(now()) @map("persisted_at") @db.Timestamptz(6)
+  validationStatus      SnapshotValidationStatus @map("validation_status")
+  baseCurrency          String                   @map("base_currency")
+  managedCashMinor      BigInt?                  @map("managed_cash_minor")
+  totalValueMinor       BigInt                   @map("total_value_minor")
+  usdKrwRate            String?                  @map("usd_krw_rate")
+  digest                String                   @db.Char(64)
+
+  collectionRun       CollectionRun        @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
+  account             BrokerAccount        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  targetConfigVersion TargetConfigVersion? @relation(fields: [targetConfigVersionId], references: [id], onDelete: Restrict)
+  holdings            HoldingSnapshot[]
+  checks              SnapshotCheck[]
+
+  @@index([accountId, observedAt(sort: Desc)])
+  @@map("portfolio_snapshot")
+}
+
+model HoldingSnapshot {
+  id                   String @id @default(uuid()) @db.Uuid
+  snapshotId           String @map("snapshot_id") @db.Uuid
+  market               String
+  symbol               String
+  name                 String
+  currency             String
+  quantity             String
+  lastPrice            String @map("last_price")
+  averagePurchasePrice String @map("average_purchase_price")
+  marketValue          String @map("market_value")
+  marketValueKrwMinor  BigInt @map("market_value_krw_minor")
+  rawPayload           Json   @map("raw_payload") @db.JsonB
+
+  snapshot PortfolioSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+
+  @@unique([snapshotId, market, symbol])
+  @@map("holding_snapshot")
+}
+
+model SnapshotCheck {
+  id         String       @id @default(uuid()) @db.Uuid
+  snapshotId String       @map("snapshot_id") @db.Uuid
+  ruleCode   String       @map("rule_code")
+  subjectKey String       @default("PORTFOLIO") @map("subject_key")
+  outcome    CheckOutcome
+  detail     Json         @db.JsonB
+  checkedAt  DateTime     @map("checked_at") @db.Timestamptz(6)
+
+  snapshot PortfolioSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+
+  @@unique([snapshotId, ruleCode, subjectKey])
+  @@map("snapshot_check")
+}
+
+model RuntimeLease {
+  key          String   @id
+  owner        String   @db.Uuid
+  acquiredAt   DateTime @map("acquired_at") @db.Timestamptz(6)
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+  fencingToken BigInt   @default(1) @map("fencing_token")
+
+  @@index([expiresAt])
+  @@map("runtime_lease")
+}

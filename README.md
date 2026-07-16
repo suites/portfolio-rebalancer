@@ -2,12 +2,13 @@
 
 `portfolio-rebalancer`는 사람이 승인한 장기 목표 비중을 결정론적으로 점검하고, 불확실한 상황에서는 거래하지 않는 개인용 자산배분 시스템입니다. 시장 예측이나 종목 추천보다 계산 재현성, 장애 안전성, 주문 멱등성과 감사 가능성을 우선합니다.
 
-> 현재 상태: 첫 번째 읽기 전용 수직 슬라이스가 구현되었습니다. 합성 포트폴리오 스냅샷을 순수 도메인 계산기로 평가하고, 검증된 서버 계약을 통해 반응형 Web GUI에 표시합니다. 토스증권 공식 OpenAPI 전체를 타입 안전한 전송 계층으로 동기화했지만, 실제 계좌 조회·상태 저장·paper 체결·실거래는 아직 연결하지 않았습니다. 실거래 쓰기 전송은 코드에서 하드 차단됩니다.
+> 현재 상태: 토스증권 실제 계좌·보유자산을 읽어 Prisma/PostgreSQL의 불변 스냅샷으로 저장하고, 별도 engine API를 통해 Web GUI에 표시하는 shadow 수직 슬라이스가 구현되었습니다. 목표 비중과 검증된 관리 현금은 아직 설정할 수 없으므로 리밸런싱 계획과 주문은 차단됩니다. 실거래 쓰기 전송도 코드에서 계속 하드 차단됩니다.
 
 ## 지금 확인할 수 있는 것
 
 - Next.js App Router 기반의 반응형 운영 화면
-- 합성 데이터·브로커 미연결을 명시한 Paper 안전 상태와 금액 숨김
+- 토스증권 실제 보유자산, 마스킹 계좌와 수집 시각을 표시하는 Shadow 화면
+- 목표 비중 미설정 상태를 가짜 목표 없이 표시하고 주문 계획 차단
 - 현재·목표·허용 범위와 서버 판정 상태를 함께 쓰는 비중 밴드
 - `bigint` 교차곱으로 1bp 미만 이탈까지 감지하는 부동소수점 없는 포트폴리오 비중 계산
 - Zod로 검증하는 서버-클라이언트 대시보드 계약
@@ -21,6 +22,9 @@
 - 계좌 변경 메서드의 네트워크 전송 하드 차단(`TOSS_LIVE_TRADING_DISABLED`)
 - 계좌·보유·시세·호가·종목·주문 조회를 분리한 capability 기반 중립 포트
 - Toss transport가 제공하는 read-only capability 18개와 write capability 미제공
+- Fastify 기반 별도 engine과 Next.js Web/BFF의 모노레포 분리
+- Prisma 7과 PostgreSQL 17 기반 계좌 참조·수집 실행·redacted 응답·불변 스냅샷
+- Vercel web/engine 별도 Project, 평일 09:00 KST Cron과 PostgreSQL collection lease
 
 이 범위는 실제 주문 기능이 아닙니다. 토스증권에는 확인된 별도 sandbox/paper 서버가 없으므로 향후 paper 체결은 애플리케이션 내부에서 구현합니다.
 
@@ -33,10 +37,12 @@
 
 ```bash
 pnpm install
+docker compose up -d postgres
+pnpm db:migrate:deploy
 pnpm dev
 ```
 
-브라우저에서 `http://127.0.0.1:3000`을 엽니다. 개발 서버와 production start는 모두 `127.0.0.1`에만 바인딩됩니다. 화면은 자격증명이나 실제 계좌 없이 합성 데이터로 동작하며 주문을 제출하지 않습니다.
+루트 `.env`에 토스 read-only 자격증명을 넣고 브라우저에서 `http://127.0.0.1:3000`을 엽니다. 첫 화면은 저장된 스냅샷이 없을 때 한 번 실제 계좌 수집을 시도합니다. 전체 계좌번호와 토큰은 저장하거나 브라우저로 전달하지 않으며 주문을 제출하지 않습니다.
 
 전체 검증은 다음 명령으로 실행합니다.
 
@@ -64,17 +70,27 @@ pnpm toss:sync
 
 ```text
 apps/
-└── web/                 Next.js Web GUI와 서버 전용 조합 계층
+├── web/                 Next.js Web GUI와 engine BFF
+└── engine/              Fastify API, Toss 수집과 Vercel Cron 진입점
 packages/
 ├── domain/              bigint 기반 값 객체와 순수 비중 계산
 ├── broker/              증권사 중립 모델, capability와 좁은 포트
 ├── broker-toss/         고정 OpenAPI, 생성 타입, OAuth와 Toss 전송 계층
 ├── application/         유스케이스와 화면용 스냅샷 조합
 ├── contracts/           서버 경계의 Zod 계약
+├── database/            Prisma schema, migration과 PostgreSQL client
 └── ui/                  primitive·semantic·component 토큰과 공통 컴포넌트
 ```
 
-의존성은 도메인 안쪽을 향합니다. 브라우저는 토스증권 API나 비밀정보에 접근하지 않고, 서버가 애플리케이션 서비스로 만든 검증된 계약만 받습니다. 다른 증권사는 `packages/broker`의 capability와 포트를 구현하는 별도 어댑터로 추가합니다. 자세한 결정은 [아키텍처 결정 기록](docs/adr/0001-typescript-hexagonal-monorepo.md)에 있습니다.
+의존성은 도메인 안쪽을 향합니다. 브라우저와 Next.js는 토스증권 자격증명이나 Prisma에 접근하지 않고, engine이 만든 검증된 계약만 받습니다. 다른 증권사는 `packages/broker`의 capability와 포트를 구현하는 별도 어댑터로 추가합니다. 자세한 결정은 [아키텍처 결정 기록](docs/adr/0001-typescript-hexagonal-monorepo.md)에 있습니다.
+
+## Vercel 운영
+
+같은 Git 저장소에서 `apps/web`과 `apps/engine`을 각각 Vercel Project로 가져옵니다. PostgreSQL은 Vercel Marketplace의 Neon을 기본 운영 경로로 사용하며 pooled `DATABASE_URL`은 runtime, direct `DATABASE_DIRECT_URL`은 Prisma migration에 사용합니다.
+
+토스증권은 허용 IP를 요구하므로 engine 프로젝트에서 Vercel Pro Static IPs 또는 Enterprise Secure Compute를 활성화해야 합니다. 해당 IP를 토스증권에 등록한 뒤에만 `TOSS_EGRESS_ALLOWLIST_CONFIRMED=true`를 설정하세요. 일반 Vercel 동적 출구 IP에서는 실제 수집이 코드에서 차단됩니다.
+
+Production engine에는 `TOSSINVEST_CLIENT_ID`, `TOSSINVEST_CLIENT_SECRET`, `DATABASE_URL`, `ENGINE_SERVICE_TOKEN`, `CRON_SECRET`을 민감 환경변수로 설정합니다. web에는 `ENGINE_INTERNAL_URL`과 같은 `ENGINE_SERVICE_TOKEN`만 설정합니다. Preview에는 운영 토스 키를 주입하지 않는 것을 기본으로 합니다.
 
 ## 안전 원칙
 
@@ -98,7 +114,7 @@ packages/
 - 토큰 호환 진입점: `design/tokens.css`
 - 초기 상태·레이아웃 탐색물: `prototype/index.html`
 
-프로토타입은 참고용이며 실제 금융 계산이나 주문 판단을 수행하지 않습니다. 현재 생산 화면도 합성 데이터만 사용합니다.
+프로토타입은 참고용이며 실제 금융 계산이나 주문 판단을 수행하지 않습니다. 생산 화면은 엔진이 PostgreSQL에 저장한 토스증권 실계좌 스냅샷만 사용하며, 목표 설정이 없으면 주문 계획을 차단합니다.
 
 ## 문서
 
@@ -111,9 +127,9 @@ packages/
 
 ## 개발 단계
 
-1. 순수 계산과 읽기 전용 합성 데이터 수직 슬라이스
-2. 설정 검증, 저장소와 감사 가능한 스냅샷
-3. 토스증권 조회 API를 연결한 shadow 모드
+1. 순수 계산과 읽기 전용 합성 데이터 수직 슬라이스 (완료)
+2. Prisma/PostgreSQL 저장소와 감사 가능한 실계좌 스냅샷 (완료)
+3. 토스증권 조회 API를 연결한 shadow 모드 (완료)
 4. 자체 모의 체결기를 사용하는 paper 모드
 5. 위험 차단, 주문 원장, 멱등성과 장애 복구
 6. 모든 승격 조건과 별도 검토를 통과한 뒤 제한적 실거래 검토

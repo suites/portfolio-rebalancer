@@ -15,7 +15,8 @@
   "dependencies": {
     "@portfolio-rebalancer/broker": "workspace:*",
     "@portfolio-rebalancer/domain": "workspace:*",
-    "openapi-fetch": "0.17.0"
+    "openapi-fetch": "0.17.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "openapi-typescript": "7.13.0",

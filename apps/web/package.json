@@ -11,9 +11,6 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@portfolio-rebalancer/application": "workspace:*",
-    "@portfolio-rebalancer/broker": "workspace:*",
-    "@portfolio-rebalancer/broker-toss": "workspace:*",
     "@portfolio-rebalancer/contracts": "workspace:*",
     "@portfolio-rebalancer/ui": "workspace:*",
     "geist": "1.7.2",

@@ -87,13 +87,12 @@ rankings.read                 indicators.read
 | Order                     |    3 | 일반 주문 생성·정정·취소               |
 | Conditional Order         |    3 | 조건주문 생성·수정·취소                |
 
-전체 타입 전송 계층이 있다는 것은 실제 계좌 흐름이 완성되었다는 뜻이 아닙니다. 현재 완료된 것은 공식 요청·응답 타입과 호출 표면입니다. 다음은 아직 미구현입니다.
+전체 타입 전송 계층이 있다는 것은 모든 제품 유스케이스가 완성되었다는 뜻이 아닙니다. 현재 계좌·보유자산·필요 시 USD/KRW 환율의 실제 read-only 수집, 런타임 검증과 PostgreSQL 저장까지 연결했습니다. 다음은 아직 미구현입니다.
 
-- read-only 자격증명으로 실제 계좌 응답을 수집하고 합성 fixture로 정제하는 과정
-- 토스 원본 응답을 `packages/broker`의 중립 모델로 변환하는 어댑터
-- 런타임 응답 스키마 검증과 페이지네이션의 중립 모델 변환
+- 나머지 조회 API를 `packages/broker`의 중립 모델로 변환하는 어댑터
+- 가격 API의 관측 시각을 이용한 주문용 freshness 검증
 - 자동 재시도·jitter, 그룹별 client-side limiter와 request ID 감사 저장
-- 스냅샷·계획·주문 원장과 SQLite 마이그레이션
+- 계획·주문 원장과 PostgreSQL migration 확장
 - paper 체결기, 주문 대사와 복구
 - live 주문 승인 구성
 
@@ -108,7 +107,7 @@ rankings.read                 indicators.read
 - client별 유효 access token은 1개: 새로 발급하면 이전 토큰이 무효화됨
 - 허용 IP에 없는 출구 IP는 차단됨
 
-현재 `TossTokenProvider`는 토큰을 프로세스 메모리에만 저장하고 만료 30초 전부터 새 토큰을 요구합니다. 동시에 여러 요청이 갱신을 요구해도 single-flight로 발급을 한 번만 수행하며, 토큰 요청은 10초 후 중단합니다. 업무 API에서 `401`을 받으면 캐시 토큰을 즉시 무효화해 다음 호출에서 다시 발급합니다. 영구 캐시나 refresh token은 사용하지 않습니다.
+현재 `TossTokenProvider`는 Vercel Function 인스턴스 메모리에만 토큰을 저장하고 만료 30초 전부터 새 토큰을 요구합니다. 동시에 여러 요청이 갱신을 요구해도 single-flight로 발급을 한 번만 수행하며, PostgreSQL collection lease가 여러 Function 인스턴스의 동시 수집도 차단합니다. 토큰 요청은 10초 후 중단하고 업무 API에서 `401`을 받으면 캐시 토큰을 즉시 무효화합니다. 영구 캐시나 refresh token은 사용하지 않습니다.
 
 `clientId`, `clientSecret`과 access token은 서버에만 둡니다. HTML, 브라우저 계약, 로그와 fixture에 포함하지 않습니다. 인증 오류 메시지에 자격증명이 포함돼도 알려진 자격증명 값을 `[REDACTED]`로 바꾸는 회귀 테스트가 있습니다. 전체 로그·응답 마스킹은 향후 공통 오류 계층에서 추가 검증해야 합니다.
 
@@ -133,7 +132,7 @@ rankings.read                 indicators.read
 
 ## 6. 주문 안전 경계
 
-토스증권에는 확인된 별도 sandbox/paper 주문 서버가 없습니다. 따라서 현재 기본 모드와 Web GUI는 합성 데이터 기반 `paper`이며, `TossTradingApi`는 다음 6개 operation의 타입과 명시적 메서드를 노출하되 `TOSS_LIVE_TRADING_DISABLED` 오류로 네트워크 요청 전에 무조건 차단합니다. 안전한 executor와 ledger가 설계되기 전에는 이 차단을 해제하는 경로가 전혀 없습니다.
+토스증권에는 확인된 별도 sandbox/paper 주문 서버가 없습니다. 현재 기본 모드와 Web GUI는 실제 조회 데이터를 사용하는 읽기 전용 `shadow`이며, `TossTradingApi`는 다음 6개 operation의 타입과 명시적 메서드를 노출하되 `TOSS_LIVE_TRADING_DISABLED` 오류로 네트워크 요청 전에 무조건 차단합니다. 안전한 executor와 ledger가 설계되기 전에는 이 차단을 해제하는 경로가 전혀 없습니다.
 
 - 일반 주문 생성, 정정, 취소
 - 조건주문 생성, 수정, 취소
@@ -164,14 +163,23 @@ rankings.read                 indicators.read
 
 애플리케이션은 필요한 capability를 먼저 검사합니다. 예를 들어 `orders.write` 또는 `pretrade.sellable-quantity`가 없는 증권사는 조회 화면에는 사용할 수 있어도 주문 계획 실행에는 사용할 수 없습니다.
 
-## 8. 현재 내부 Web API
+## 8. 현재 engine 및 Web API
 
-첫 수직 슬라이스에는 상태 확인용 GET route만 있습니다.
+Fastify engine은 다음 내부 route를 제공합니다. dashboard와 refresh는 `ENGINE_SERVICE_TOKEN`, Cron은 별도 `CRON_SECRET`으로 보호합니다.
+
+- `GET /internal/v1/health`
+- `GET /internal/v1/dashboard`
+- `POST /internal/v1/portfolio/refresh`
+- `GET /internal/v1/cron/portfolio`: Vercel Cron, 평일 00:00 UTC/09:00 KST
+
+Web BFF는 다음 route를 제공합니다.
 
 - `GET /api/v1/system/health`: 서버 상태, 기본 paper 모드, live 비활성 여부
-- `GET /api/v1/brokers`: 토스 고정 OpenAPI 버전, operation 수, `transport_only` 어댑터 상태, 미연결 상태, transport read-only capability와 live 비활성 여부
+- `GET /api/v1/brokers`: 실제 engine 연결, 마지막 관측 시각과 read-only adapter 상태
 
-두 route는 주문을 생성하거나 토스증권에 접속하지 않습니다. 화면 데이터는 현재 서버 전용 합성 스냅샷을 `DashboardSnapshotSchema`로 검증해 전달합니다.
+Web route는 주문을 생성하거나 브라우저에 engine 비밀정보를 전달하지 않습니다. 첫 화면은 저장된 스냅샷이 없을 때만 engine refresh를 호출하며 결과를 `DashboardSnapshotSchema`로 검증합니다.
+
+Vercel의 기본 출구 IP는 동적입니다. Production engine은 Pro Static IPs 또는 Enterprise Secure Compute를 활성화하고 해당 IP를 토스증권에 allowlist한 뒤 `TOSS_EGRESS_ALLOWLIST_CONFIRMED=true`를 설정해야 합니다. Preview에는 운영 토스 자격증명을 주입하지 않습니다.
 
 ## 9. 검증
 

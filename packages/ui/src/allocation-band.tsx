@@ -4,10 +4,10 @@ export interface AllocationBandProps {
   readonly label: string;
   readonly description: string;
   readonly currentBasisPointHundredths: number;
-  readonly targetBasisPoints: number;
-  readonly lowerBasisPoints: number;
-  readonly upperBasisPoints: number;
-  readonly bandStatus: "IN_RANGE" | "OUTSIDE_BAND";
+  readonly targetBasisPoints: number | null;
+  readonly lowerBasisPoints: number | null;
+  readonly upperBasisPoints: number | null;
+  readonly bandStatus: "IN_RANGE" | "OUTSIDE_BAND" | "TARGET_NOT_CONFIGURED";
 }
 
 type AllocationStyle = CSSProperties & {
@@ -26,6 +26,46 @@ export function AllocationBand({
   upperBasisPoints,
   bandStatus,
 }: AllocationBandProps) {
+  if (
+    targetBasisPoints === null ||
+    lowerBasisPoints === null ||
+    upperBasisPoints === null ||
+    bandStatus === "TARGET_NOT_CONFIGURED"
+  ) {
+    const current = formatCurrentBasisPoints(currentBasisPointHundredths);
+    const style: AllocationStyle = {
+      "--current": `${currentBasisPointHundredths / 10_000}%`,
+      "--target": "0%",
+      "--range-start": "0%",
+      "--range-width": "0%",
+    };
+    return (
+      <article className="pr-allocation" data-status="attention">
+        <div className="pr-allocation-header">
+          <div className="pr-allocation-name">
+            <strong>{label}</strong>
+            <span>{description}</span>
+          </div>
+          <div className="pr-allocation-value">
+            <strong>{current}</strong>
+            <span>목표 미설정</span>
+          </div>
+        </div>
+        <div
+          className="pr-allocation-track"
+          style={style}
+          role="img"
+          aria-label={`${label} 현재 ${current}, 목표 비중 미설정`}
+        >
+          <span className="pr-allocation-current" aria-hidden="true" />
+        </div>
+        <div className="pr-allocation-meta">
+          <span>목표 설정 필요</span>
+          <span>주문 계획 차단</span>
+        </div>
+      </article>
+    );
+  }
   const status = bandStatus === "OUTSIDE_BAND" ? "attention" : "normal";
   const style: AllocationStyle = {
     "--current": `${currentBasisPointHundredths / 10_000}%`,

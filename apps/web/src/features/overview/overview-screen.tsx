@@ -28,11 +28,13 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
   const outOfBandAllocations = snapshot.allocations.filter(
     ({ bandStatus }) => bandStatus === "OUTSIDE_BAND",
   );
-  const observedAt = new Intl.DateTimeFormat("ko-KR", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZone: "Asia/Seoul",
-  }).format(new Date(snapshot.observedAt));
+  const observedAt = snapshot.observedAt
+    ? new Intl.DateTimeFormat("ko-KR", {
+        dateStyle: "long",
+        timeStyle: "short",
+        timeZone: "Asia/Seoul",
+      }).format(new Date(snapshot.observedAt))
+    : "아직 수집되지 않음";
 
   return (
     <div className={styles.shell}>
@@ -81,8 +83,10 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
             <Badge tone="info" showDot>
               {snapshot.mode}
             </Badge>
-            <Badge tone="info">데모 · 합성 데이터</Badge>
-            <span className={styles.accountMeta}>합성 계좌 {snapshot.accountLabel}</span>
+            <Badge tone="info">토스증권 실제 데이터</Badge>
+            <span className={styles.accountMeta}>
+              {snapshot.accountLabel ? `계좌 ${snapshot.accountLabel}` : "계좌 확인 필요"}
+            </span>
             <span className={styles.observedMeta}>데이터 {observedAt}</span>
           </div>
           <div>
@@ -120,13 +124,21 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
             icon={conclusion.icon}
             eyebrow={conclusion.eyebrow}
             title={conclusion.title}
-            description={conclusion.description}
+            description={
+              snapshot.blockReason
+                ? `${snapshot.blockReason.problem} ${snapshot.blockReason.protectiveAction} ${snapshot.blockReason.nextAction}`
+                : conclusion.description
+            }
           />
 
           <section className={styles.summaryGrid} aria-label="포트폴리오 요약">
             <SummaryCard
               label="총 관리 자산"
-              value={formatWon(snapshot.totalValueMinor, amountsHidden)}
+              value={
+                snapshot.totalValueMinor === null
+                  ? "확인 불가"
+                  : formatWon(snapshot.totalValueMinor, amountsHidden)
+              }
               description={`${observedAt} 기준`}
               emphasis="strong"
             />
@@ -160,9 +172,13 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
                 <Badge tone={conclusion.tone}>{conclusion.allocationLabel}</Badge>
               </div>
               <div className={styles.allocationList}>
-                {snapshot.allocations.map((allocation) => (
-                  <AllocationBand key={allocation.id} {...allocation} />
-                ))}
+                {snapshot.allocations.length > 0 ? (
+                  snapshot.allocations.map((allocation) => (
+                    <AllocationBand key={allocation.id} {...allocation} />
+                  ))
+                ) : (
+                  <p>표시할 실제 보유자산이 없습니다. 차단 원인과 다음 행동을 확인해 주세요.</p>
+                )}
               </div>
             </Surface>
 
@@ -178,7 +194,9 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
                         <dt>{allocation.label}</dt>
                         <dd>
                           {formatCurrentBasisPoints(allocation.currentBasisPointHundredths)} → 목표{" "}
-                          {formatBasisPoints(allocation.targetBasisPoints)}
+                          {allocation.targetBasisPoints === null
+                            ? "미설정"
+                            : formatBasisPoints(allocation.targetBasisPoints)}
                         </dd>
                       </div>
                     ))}
@@ -196,8 +214,8 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
                 <h2 id="activity-title">최근 활동</h2>
                 <ol>
                   <li>
-                    <strong>자산 비중 계산 완료</strong>
-                    <span>{observedAt} · 데모 합성 스냅샷</span>
+                    <strong>토스증권 계좌 스냅샷</strong>
+                    <span>{observedAt} · PostgreSQL 저장 데이터</span>
                   </li>
                   <li>
                     <strong>실주문 연결 차단 유지</strong>
@@ -249,14 +267,13 @@ function getConclusionCopy(conclusion: DashboardSnapshotContract["conclusion"]):
         allocationLabel: "범위 이탈",
       };
     case "BLOCKED":
-    case "UNKNOWN":
       return {
         tone: "blocked",
         icon: "!",
         eyebrow: "안전을 위해 거래를 멈췄어요",
         title: "상태를 확인하기 전에는 실행할 수 없어요",
         description: "새 주문을 차단했습니다. 원인을 해결한 뒤 상태를 다시 확인해 주세요.",
-        systemLabel: conclusion === "UNKNOWN" ? "상태 확인 필요" : "거래 차단",
+        systemLabel: "거래 차단",
         allocationLabel: "거래 차단",
       };
   }
@@ -290,13 +307,6 @@ function getActionCopy(conclusion: DashboardSnapshotContract["conclusion"]): {
         description: "차단 원인을 해결하고 새 스냅샷을 확인해야 합니다.",
         buttonLabel: "문제 해결 기능 준비 중",
         safeNote: "차단 상태에서는 새 주문과 수동 재제출을 허용하지 않습니다.",
-      };
-    case "UNKNOWN":
-      return {
-        title: "상태를 확정할 수 없어요",
-        description: "상태 대사가 끝날 때까지 새로운 행동을 시작할 수 없습니다.",
-        buttonLabel: "복구 기능 준비 중",
-        safeNote: "알 수 없음 상태에서는 새 주문과 수동 재제출을 허용하지 않습니다.",
       };
   }
 }

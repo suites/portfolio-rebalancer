@@ -8,6 +8,7 @@
 coverage/
 dist/
 node_modules/
+packages/database/generated/
 *.tsbuildinfo
 *.db
 *.db-shm

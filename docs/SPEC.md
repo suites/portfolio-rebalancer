@@ -6,7 +6,7 @@
 
 현재 명세의 최종 구현 목표는 **조회, 계산, 위험 검증, paper 검증, 안전한 실거래 및 감사 가능한 기록**입니다. 기능은 단계적으로 검증하지만 최종 완료 기준은 실제 계좌에서 지속적으로 사용할 수 있는 운영 품질입니다.
 
-현재 구현은 첫 번째 읽기 전용 수직 슬라이스입니다. 합성 스냅샷, `bigint` 교차곱 기반의 정밀 비중 판정, 검증된 대시보드 계약, 생산 Web GUI, 증권사 중립 포트와 토스증권 타입 전송 계층까지 구현되었습니다. 실제 계좌 조회, 상태 저장소, 주문 계획, paper 체결과 live 실행은 아직 구현 범위에 포함되지 않습니다.
+현재 구현은 실제 조회 기반 shadow 수직 슬라이스입니다. 토스 계좌·보유자산과 필요한 USD/KRW 환율을 런타임 검증하고, Prisma/PostgreSQL 불변 스냅샷으로 저장한 뒤 별도 engine 계약을 통해 Web GUI에 표시합니다. 목표 설정, 검증된 관리 현금, 주문 계획, paper 체결과 live 실행은 아직 구현 범위에 포함되지 않습니다.
 
 ## 2. 목표
 
@@ -46,15 +46,15 @@
 
 2026-07-16에 저장소에 고정한 공식 OpenAPI는 `3.1.0`, API 버전은 `1.2.4`입니다. operation은 OAuth 토큰 발급 1개를 포함해 30개이며, business API는 조회용 GET 23개와 계좌 상태를 변경하는 6개 operation으로 구성됩니다. `packages/broker-toss/openapi/openapi.json`을 기준 스냅샷으로 사용하고 생성 타입과 operation manifest가 이 스냅샷과 일치하는지 테스트합니다.
 
-현재 공식 API는 REST 기반입니다. 별도의 paper 또는 sandbox 주문 API가 확인되지 않았으므로 paper 체결은 애플리케이션 내부에서 구현합니다. 공식 명세의 모든 operation에는 타입 안전한 호출 표면이 있지만, 이것은 제품 유스케이스가 모두 완성되었다는 뜻이 아닙니다. 조회 결과의 증권사 중립 모델 변환, 스냅샷 저장, 런타임 응답 스키마 검증과 대사는 후속 구현입니다.
+현재 공식 API는 REST 기반입니다. 별도의 paper 또는 sandbox 주문 API가 확인되지 않았으므로 paper 체결은 애플리케이션 내부에서 구현합니다. 계좌·보유·USD/KRW 환율 응답은 Zod 런타임 스키마로 검증하고 redaction 후 저장합니다. 나머지 조회 operation의 중립 모델 변환과 대사는 후속 구현입니다.
 
 클라이언트 origin은 코드 상수 `https://openapi.tossinvest.com`으로 고정하며 호출자가 임의 `baseUrl`을 주입할 수 없습니다. 토큰과 업무 요청에는 공통 10초 timeout을 적용하고, timeout·네트워크 실패와 비정상 HTTP 상태를 원문 응답 본문을 노출하지 않는 한국어 오류로 정규화합니다. `401`은 캐시 토큰을 폐기하며, `429` 오류에는 정수형 `Retry-After`, rate-limit group과 request ID 메타데이터를 가능한 범위에서 보존합니다.
 
-계좌를 변경하는 6개 호출은 현재 `TOSS_LIVE_TRADING_DISABLED` 오류로 전송 전에 무조건 차단되며 활성화 경로를 공개하지 않습니다. 주문 원장, 멱등성, 한도, 위험 차단과 복구가 완성되고 별도 실거래 설계 검토를 통과하기 전에는 실제 주문 엔드포인트를 호출할 수 없습니다. 기본 제품 모드는 `paper`이고 현재 Web GUI는 합성 데이터만 표시합니다.
+계좌를 변경하는 6개 호출은 현재 `TOSS_LIVE_TRADING_DISABLED` 오류로 전송 전에 무조건 차단되며 활성화 경로를 공개하지 않습니다. 주문 원장, 멱등성, 한도, 위험 차단과 복구가 완성되고 별도 실거래 설계 검토를 통과하기 전에는 실제 주문 엔드포인트를 호출할 수 없습니다. 현재 제품 모드는 실제 데이터를 읽되 주문하지 않는 `shadow`입니다.
 
 공식 명세 parity를 위해 전송 패키지는 이 6개 쓰기 operation의 타입과 명시적 메서드를 보유하지만, `TOSS_TRANSPORT_DESCRIPTOR`는 transport가 제공하는 18개 read-only capability만 설명합니다. `orders.write`와 `orders.conditional.write`는 포함하지 않습니다. 중립 어댑터와 실제 계좌 연결이 없으므로 애플리케이션은 이 목록을 활성 제품 기능으로 광고하지 않습니다.
 
-운영 환경은 허용 IP 등록과 고정된 출구 IP를 고려해야 합니다. 현재 전송 계층은 `retry-after`, `x-ratelimit-group`, `x-request-id` 또는 `x-toss-request-id`를 읽어 안전 오류의 메타데이터로 제공합니다. 실제 응답에서 각 헤더가 항상 제공되는지는 실계좌 read-only 표본으로 검증하기 전까지 `[확인 필요]`입니다. 자동 재시도, jitter와 그룹별 client-side limiter는 아직 구현하지 않았으며, 쓰기 요청은 일반 재시도 대상이 아닙니다.
+운영 환경은 허용 IP 등록과 고정된 출구 IP가 필수입니다. Vercel engine 프로젝트는 Pro Static IPs 또는 Enterprise Secure Compute를 사용하고 해당 주소를 토스증권에 등록해야 합니다. `TOSS_EGRESS_ALLOWLIST_CONFIRMED=true`가 없으면 Vercel 런타임의 실제 수집을 코드에서 차단합니다. 현재 전송 계층은 `retry-after`, `x-ratelimit-group`, `x-request-id` 또는 `x-toss-request-id`를 읽어 안전 오류의 메타데이터로 제공합니다. 실제 응답에서 각 헤더가 항상 제공되는지는 실계좌 read-only 표본으로 검증하기 전까지 `[확인 필요]`입니다. 자동 재시도, jitter와 그룹별 client-side limiter는 아직 구현하지 않았으며, 쓰기 요청은 일반 재시도 대상이 아닙니다.
 
 이 절은 2026-07-16에 다음 공식 자료와 저장소 고정 명세를 확인한 결과입니다. 동기화 시점에는 반드시 버전과 operation 변경을 검토합니다.
 
@@ -69,7 +69,8 @@
 애플리케이션은 토스의 path, 요청 DTO와 원본 상태에 직접 의존하지 않습니다.
 
 ```text
-apps/web server -> application -> broker ports -> domain
+apps/web -> apps/engine -> application -> broker ports -> domain
+                        -> database (Prisma/PostgreSQL)
                                       ^
                                       |
                      future Toss neutral adapter
@@ -82,11 +83,12 @@ apps/web server -> application -> broker ports -> domain
 - `packages/broker`: 계좌, 보유, 시세, 호가, 종목, 캘린더, 일반·조건주문 조회와 pretrade 기능을 드러내는 capability와 좁은 포트
 - `packages/broker-toss`: 공식 OpenAPI 생성 타입, 인증과 토스 전송 계층. 중립 어댑터는 후속 범위
 - `packages/application`: 필요한 capability를 조합하는 유스케이스
-- `apps/web`: 서버 전용 조합 결과를 계약으로 검증한 뒤 브라우저에 전달
+- `apps/engine`: Toss 자격증명, 수집, Prisma와 PostgreSQL을 소유하는 Fastify/Vercel Function
+- `apps/web`: engine 결과를 공유 Zod 계약으로 재검증한 뒤 브라우저에 전달
 
 새 증권사는 별도 어댑터 패키지에서 중립 포트를 구현하고, 지원하지 않는 기능은 capability에 선언하지 않습니다. 최소 공통분모를 넓혀 증권사 차이를 숨기지 않으며, 필수 capability가 없으면 주문 계획을 만들지 않고 한국어 오류로 차단합니다. 브로커 원본 응답과 상태는 대사·감사를 위해 보존하되 도메인 모델과 분리합니다.
 
-`GET /api/v1/brokers`는 `connectionStatus: not_connected`, `adapterStatus: transport_only`와 transport capability를 반환합니다. 공식 OpenAPI와 transport가 제공하는 기능 목록은 실제 계좌에 연결된 제품 capability와 다른 계약입니다. UI와 애플리케이션은 연결·어댑터 상태를 함께 확인하고, transport 목록만으로 기능을 활성화하지 않습니다.
+`GET /api/v1/brokers`는 engine이 저장한 최신 스냅샷의 실제 연결 상태와 `read_only_adapter` 상태를 반환합니다. 공식 OpenAPI와 transport가 제공하는 기능 목록은 실제 계좌에 연결된 제품 capability와 다른 계약입니다. UI와 애플리케이션은 연결·어댑터 상태를 함께 확인하고, transport 목록만으로 기능을 활성화하지 않습니다.
 
 ## 5. 시스템 구성요소
 
@@ -277,7 +279,7 @@ clientOrderId = short_hash(canonical_order_intent) + version
 
 ### 5.10 State and Audit Store
 
-단일 사용자·단일 호스트 운영에는 SQLite를 사용합니다. 최소 저장 대상은 다음과 같습니다.
+운영 저장소는 Prisma가 migration을 소유하는 PostgreSQL을 사용합니다. Vercel 운영 기본 경로는 Marketplace Neon이며 runtime pooled URL과 migration direct URL을 분리합니다. 최소 저장 대상은 다음과 같습니다.
 
 - 실행 ID, 계좌 식별자의 마스킹 값, 시작·종료 시각
 - 설정 버전 및 파일 해시
@@ -291,7 +293,7 @@ clientOrderId = short_hash(canonical_order_intent) + version
 - 외부 API의 추적용 request ID
 - 알림 전송 결과
 
-첫 운영 범위는 단일 호스트로 제한합니다. 계좌 잠금은 `owner`, `acquired_at`, `expires_at`, `heartbeat`를 가진 lease로 구현하고, 계획 저장·논리 주문 고유성·일일 한도 예약을 트랜잭션으로 묶습니다. 프로세스 종료 시 `finally`에서 해제를 시도하되, 비정상 종료는 lease 만료와 복구 절차로 처리합니다.
+수평 확장되는 Vercel Function을 고려합니다. 현재 Toss 수집은 PostgreSQL의 만료 lease와 fencing token으로 직렬화하며, 계획 저장·논리 주문 고유성·일일 한도 예약도 향후 PostgreSQL 트랜잭션으로 묶습니다. 정상 종료에서는 lease를 해제하고 비정상 종료는 만료와 복구 절차로 처리합니다.
 
 비밀키, 액세스 토큰 및 전체 계좌번호는 로그에 저장하지 않습니다.
 
@@ -428,7 +430,7 @@ sequenceDiagram
 - paper 체결과 수수료가 감사 로그에 남는다.
 - 비밀정보가 로그와 Discord 메시지에 포함되지 않는다.
 - 외부 API 없이 핵심 계산과 위험 규칙을 테스트할 수 있다.
-- 신규 사용자가 문서만 보고 demo와 read-only 계좌 점검을 수행할 수 있다.
+- 신규 사용자가 문서만 보고 로컬 PostgreSQL과 read-only 계좌 점검을 수행할 수 있다.
 - 종목이나 목표 비중 변경 후 실제 주문 전에 영향을 미리 볼 수 있다.
 - 차단 또는 상태 불명 상황에서 DB를 직접 수정하지 않고 원인 확인과 안전한 복구를 수행할 수 있다.
 - 평상시 사용에는 `check`, `plan`, `run`, `status` 이외의 내부 명령이 필요하지 않다.

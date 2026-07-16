@@ -1,0 +1,35 @@
+import { z } from "zod";
+
+const EnvironmentSchema = z.object({
+  DATABASE_URL: z
+    .string()
+    .min(1)
+    .default("postgresql://portfolio:portfolio_local@127.0.0.1:15432/portfolio_rebalancer"),
+  TOSSINVEST_CLIENT_ID: z.string().min(1).optional(),
+  TOSSINVEST_CLIENT_SECRET: z.string().min(1).optional(),
+  TOSSINVEST_ACCOUNT_SEQ: z.coerce.number().int().safe().positive().optional(),
+  ACCOUNT_REFERENCE_KEY: z.string().min(32).optional(),
+  ENGINE_SERVICE_TOKEN: z.string().min(32).optional(),
+  CRON_SECRET: z.string().min(16).optional(),
+  TOSS_EGRESS_ALLOWLIST_CONFIRMED: z.enum(["true", "false"]).default("false"),
+  VERCEL: z.string().optional(),
+  ENGINE_HOST: z.string().min(1).default("127.0.0.1"),
+  ENGINE_PORT: z.coerce.number().int().min(1).max(65_535).default(4100),
+});
+
+export type EngineConfig = z.infer<typeof EnvironmentSchema>;
+
+export function loadEngineConfig(environment: NodeJS.ProcessEnv): EngineConfig {
+  const result = EnvironmentSchema.safeParse(environment);
+  if (!result.success) {
+    const missing = result.error.issues.map(({ path }) => path.join(".")).join(", ");
+    throw new Error(`엔진 환경설정을 확인할 수 없습니다: ${missing}`);
+  }
+  return result.data;
+}
+
+export function assertVercelEgressConfigured(config: EngineConfig): void {
+  if (config.VERCEL === "1" && config.TOSS_EGRESS_ALLOWLIST_CONFIRMED !== "true") {
+    throw new Error("VERCEL_TOSS_EGRESS_NOT_CONFIRMED");
+  }
+}
