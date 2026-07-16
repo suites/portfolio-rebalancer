@@ -10,6 +10,7 @@ import type {
 
 import {
   activateEngineTargetDraft,
+  createEngineShadowPlan,
   createEngineTargetDraft,
   EngineConsoleRequestError,
   searchEngineInstrumentCatalog,
@@ -22,6 +23,20 @@ export async function refreshPortfolioAction() {
   await refreshEngineDashboard();
   revalidatePath("/", "layout");
   redirect("/troubleshooting");
+}
+
+export async function createShadowPlanAction() {
+  let status: string | null = null;
+  try {
+    await createEngineShadowPlan();
+  } catch (error) {
+    status =
+      error instanceof EngineConsoleRequestError
+        ? shadowPlanErrorStatus(error.code)
+        : "plan-unavailable";
+  }
+  revalidatePath("/rebalancing");
+  redirect(status === null ? "/rebalancing" : `/rebalancing?status=${status}`);
 }
 
 export type SaveTargetDraftActionState = {
@@ -207,4 +222,20 @@ function instrumentSearchErrorMessage(error: unknown): string {
     return "토스증권에서 해당 종목을 검증하지 못했습니다.";
   }
   return "종목 검색 서버에 연결할 수 없습니다. 잠시 후 다시 시도하세요.";
+}
+
+function shadowPlanErrorStatus(code: string | null): string {
+  switch (code) {
+    case "NO_SNAPSHOT":
+      return "plan-no-snapshot";
+    case "TARGET_CONFIG_MISSING":
+    case "TARGET_CONFIG_STALE":
+      return "plan-target-required";
+    case "MANAGED_CASH_MISSING":
+      return "plan-cash-required";
+    case "PLAN_IN_PROGRESS":
+      return "plan-in-progress";
+    default:
+      return "plan-unavailable";
+  }
 }

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const engineMocks = vi.hoisted(() => ({
+  createEngineShadowPlan: vi.fn(),
   createEngineTargetDraft: vi.fn(),
   searchEngineInstrumentCatalog: vi.fn(),
   validateEngineInstrument: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/server/engine-dashboard", () => ({ refreshEngineDashboard: vi.fn() }));
 vi.mock("@/server/engine-console", () => ({
   activateEngineTargetDraft: vi.fn(),
+  createEngineShadowPlan: engineMocks.createEngineShadowPlan,
   createEngineTargetDraft: engineMocks.createEngineTargetDraft,
   searchEngineInstrumentCatalog: engineMocks.searchEngineInstrumentCatalog,
   validateEngineInstrument: engineMocks.validateEngineInstrument,
@@ -29,6 +31,7 @@ vi.mock("@/server/engine-console", () => ({
 }));
 
 import {
+  createShadowPlanAction,
   saveTargetDraftAction,
   searchTargetInstrumentAction,
   type SaveTargetDraftActionState,
@@ -128,6 +131,18 @@ describe("settings server actions", () => {
     expect(result.status).toBe("error");
     expect(result.message).toContain("입력값은 유지");
     expect(engineMocks.createEngineTargetDraft).toHaveBeenCalledOnce();
+  });
+
+  it("Shadow 계획 생성 성공은 리밸런싱 화면으로 돌아간다", async () => {
+    engineMocks.createEngineShadowPlan.mockResolvedValue({
+      state: "NO_PLAN",
+      latest: null,
+      liveOrdersEnabled: false,
+    });
+
+    await expect(createShadowPlanAction()).rejects.toThrow("REDIRECT");
+
+    expect(engineMocks.createEngineShadowPlan).toHaveBeenCalledOnce();
   });
 });
 

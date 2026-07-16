@@ -6,10 +6,12 @@ import {
   ConsoleRecordsSnapshotSchema,
   InstrumentCatalogSearchResultSchema,
   InstrumentValidationResultSchema,
+  RebalancePlanSnapshotSchema,
   TargetSettingsSnapshotSchema,
   type ConsoleRecordsSnapshotContract,
   type InstrumentCatalogSearchResultContract,
   type InstrumentValidationResultContract,
+  type RebalancePlanSnapshotContract,
   type TargetSettingsDraftInputContract,
   type TargetSettingsSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
@@ -48,6 +50,22 @@ export const getEngineTargetSettings = cache(async (): Promise<TargetSettingsSna
     return unavailableTargetSettings();
   }
 });
+
+export const getEngineRebalancePlan = cache(async (): Promise<RebalancePlanSnapshotContract> => {
+  try {
+    return RebalancePlanSnapshotSchema.parse(
+      await requestEngine("/internal/v1/rebalance-plans/latest", "GET"),
+    );
+  } catch {
+    return unavailableRebalancePlan();
+  }
+});
+
+export async function createEngineShadowPlan(): Promise<RebalancePlanSnapshotContract> {
+  return RebalancePlanSnapshotSchema.parse(
+    await requestEngine("/internal/v1/rebalance-plans", "POST", { mode: "SHADOW" }),
+  );
+}
 
 export async function createEngineTargetDraft(
   input: TargetSettingsDraftInputContract,
@@ -118,6 +136,14 @@ function unavailableTargetSettings(): TargetSettingsSnapshotContract {
     requiresCollection: false,
     assets: [],
     holdings: [],
+    liveOrdersEnabled: false,
+  });
+}
+
+function unavailableRebalancePlan(): RebalancePlanSnapshotContract {
+  return RebalancePlanSnapshotSchema.parse({
+    state: "UNAVAILABLE",
+    latest: null,
     liveOrdersEnabled: false,
   });
 }
