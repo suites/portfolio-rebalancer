@@ -10,6 +10,7 @@ import type {
 
 import {
   activateEngineTargetDraft,
+  createEngineRebalancePlan,
   createEngineShadowPlan,
   createEngineTargetDraft,
   EngineConsoleRequestError,
@@ -26,9 +27,25 @@ export async function refreshPortfolioAction() {
 }
 
 export async function createShadowPlanAction() {
+  return createRebalancePlan("SHADOW");
+}
+
+export async function createRebalancePlanAction(formData: FormData) {
+  const mode = formData.get("mode");
+  if (mode !== "SHADOW" && mode !== "PAPER" && mode !== "LIVE") {
+    redirect("/rebalancing?status=plan-mode-invalid");
+  }
+  return createRebalancePlan(mode);
+}
+
+async function createRebalancePlan(mode: "SHADOW" | "PAPER" | "LIVE") {
   let status: string | null = null;
   try {
-    await createEngineShadowPlan();
+    if (mode === "SHADOW") {
+      await createEngineShadowPlan();
+    } else {
+      await createEngineRebalancePlan(mode);
+    }
   } catch (error) {
     status =
       error instanceof EngineConsoleRequestError

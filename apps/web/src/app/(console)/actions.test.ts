@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const engineMocks = vi.hoisted(() => ({
+  createEngineRebalancePlan: vi.fn(),
   createEngineShadowPlan: vi.fn(),
   createEngineTargetDraft: vi.fn(),
   searchEngineInstrumentCatalog: vi.fn(),
@@ -16,6 +17,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/server/engine-dashboard", () => ({ refreshEngineDashboard: vi.fn() }));
 vi.mock("@/server/engine-console", () => ({
   activateEngineTargetDraft: vi.fn(),
+  createEngineRebalancePlan: engineMocks.createEngineRebalancePlan,
   createEngineShadowPlan: engineMocks.createEngineShadowPlan,
   createEngineTargetDraft: engineMocks.createEngineTargetDraft,
   searchEngineInstrumentCatalog: engineMocks.searchEngineInstrumentCatalog,
@@ -31,6 +33,7 @@ vi.mock("@/server/engine-console", () => ({
 }));
 
 import {
+  createRebalancePlanAction,
   createShadowPlanAction,
   saveTargetDraftAction,
   searchTargetInstrumentAction,
@@ -143,6 +146,21 @@ describe("settings server actions", () => {
     await expect(createShadowPlanAction()).rejects.toThrow("REDIRECT");
 
     expect(engineMocks.createEngineShadowPlan).toHaveBeenCalledOnce();
+  });
+
+  it("Paper와 Live 계획은 선택한 모드를 엔진에 그대로 전달한다", async () => {
+    engineMocks.createEngineRebalancePlan.mockResolvedValue({
+      state: "NO_PLAN",
+      latest: null,
+      liveOrdersEnabled: false,
+    });
+
+    for (const mode of ["PAPER", "LIVE"] as const) {
+      const formData = new FormData();
+      formData.set("mode", mode);
+      await expect(createRebalancePlanAction(formData)).rejects.toThrow("REDIRECT");
+      expect(engineMocks.createEngineRebalancePlan).toHaveBeenCalledWith(mode);
+    }
   });
 });
 

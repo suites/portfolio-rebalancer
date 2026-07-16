@@ -7,7 +7,7 @@ import type {
 } from "@portfolio-rebalancer/contracts";
 import { Badge, Button, StatusBanner, Surface } from "@portfolio-rebalancer/ui";
 
-import { createShadowPlanAction } from "@/app/(console)/actions";
+import { createRebalancePlanAction } from "@/app/(console)/actions";
 import {
   formatBasisPoints,
   formatCurrentWeight,
@@ -54,7 +54,7 @@ export function RebalancingScreen({
       <div className={styles.pageStack}>
         {actionStatus ? (
           <div className={styles.callout} data-tone="blocked" role="status">
-            <strong>Shadow 계획을 만들지 못했습니다.</strong>
+            <strong>리밸런싱 계획을 만들지 못했습니다.</strong>
             <p>{actionStatusMessage(actionStatus)}</p>
           </div>
         ) : null}
@@ -160,13 +160,13 @@ function PlanSurface({
     <Surface className={styles.surface} aria-labelledby="plan-title">
       <div className={styles.sectionHeader}>
         <div>
-          <h2 id="plan-title">Shadow 주문 제안</h2>
+          <h2 id="plan-title">저장된 주문 제안</h2>
           <p>
             {latest
               ? `저장된 계획 · ${formatObservedAt(latest.completedAt)}`
               : plan.state === "UNAVAILABLE"
                 ? "계획 저장소에 연결할 수 없습니다."
-                : "아직 저장된 Shadow 계획이 없습니다."}
+                : "아직 저장된 리밸런싱 계획이 없습니다."}
           </p>
         </div>
         <Badge tone={planTone(latest)}>
@@ -181,9 +181,22 @@ function PlanSurface({
       {latest ? <StoredPlanDetails plan={latest} /> : null}
 
       <div className={styles.buttonRow}>
-        <form action={createShadowPlanAction}>
+        <form action={createRebalancePlanAction}>
+          <input type="hidden" name="mode" value="SHADOW" />
           <Button type="submit" disabled={!canCreate}>
             Shadow 계획 만들기
+          </Button>
+        </form>
+        <form action={createRebalancePlanAction}>
+          <input type="hidden" name="mode" value="PAPER" />
+          <Button type="submit" disabled={!canCreate}>
+            Paper 계획 만들기
+          </Button>
+        </form>
+        <form action={createRebalancePlanAction}>
+          <input type="hidden" name="mode" value="LIVE" />
+          <Button type="submit" disabled={!canCreate}>
+            Live 계획만 만들기
           </Button>
         </form>
         <Link
@@ -199,8 +212,9 @@ function PlanSurface({
         </Link>
       </div>
       <p className={styles.fieldDescription}>
-        Shadow 계획은 실제 주문을 제출하지 않습니다. 같은 snapshot과 설정의 중복 클릭은 기존 계획을
-        반환하며, 새 데이터나 목표 설정이 생기면 이전 계획을 실행 입력으로 사용할 수 없습니다.
+        이 단계는 어떤 모드에서도 실제 주문을 제출하지 않습니다. Paper와 Live도 먼저 저장된 계획만
+        만들며, 실행은 별도의 위험 점검·주문 원장·최종 확인을 통과해야 합니다. 같은 snapshot·설정·모드의
+        중복 클릭은 기존 계획을 반환합니다.
       </p>
     </Surface>
   );
@@ -226,7 +240,7 @@ function StoredPlanDetails({ plan }: { readonly plan: StoredRebalancePlanContrac
       {plan.executableOrders.length > 0 ? (
         <div className={styles.tableScroll}>
           <table className={styles.table}>
-            <caption>저장된 Shadow 주문 후보</caption>
+            <caption>저장된 {modeLabel(plan.mode)} 주문 후보</caption>
             <thead>
               <tr>
                 <th scope="col">단계</th>
@@ -350,6 +364,12 @@ function planReasonTitle(plan: StoredRebalancePlanContract): string {
   return "안전 조건을 확인하지 못해 주문 후보를 만들지 않았습니다.";
 }
 
+function modeLabel(mode: StoredRebalancePlanContract["mode"]): string {
+  if (mode === "SHADOW") return "Shadow";
+  if (mode === "PAPER") return "Paper";
+  return "Live";
+}
+
 function reasonLabel(code: string): string {
   const labels: Record<string, string> = {
     NO_REBALANCE_NEEDED: "모든 자산이 목표 범위 안",
@@ -385,6 +405,8 @@ function assetLabel(id: string): string {
 
 function actionStatusMessage(status: string): string {
   switch (status) {
+    case "plan-mode-invalid":
+      return "계획 모드를 확인하지 못했습니다. Shadow, Paper 또는 Live 중 하나를 선택하세요.";
     case "plan-no-snapshot":
       return "먼저 토스 계좌 snapshot을 수집하세요.";
     case "plan-target-required":

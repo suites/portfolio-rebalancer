@@ -62,8 +62,14 @@ export const getEngineRebalancePlan = cache(async (): Promise<RebalancePlanSnaps
 });
 
 export async function createEngineShadowPlan(): Promise<RebalancePlanSnapshotContract> {
+  return createEngineRebalancePlan("SHADOW");
+}
+
+export async function createEngineRebalancePlan(
+  mode: "SHADOW" | "PAPER" | "LIVE",
+): Promise<RebalancePlanSnapshotContract> {
   return RebalancePlanSnapshotSchema.parse(
-    await requestEngine("/internal/v1/rebalance-plans", "POST", { mode: "SHADOW" }),
+    await requestEngine("/internal/v1/rebalance-plans", "POST", { mode }),
   );
 }
 
