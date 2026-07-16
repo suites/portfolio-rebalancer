@@ -11,6 +11,25 @@ describe("engine configuration", () => {
     expect(() => loadEngineConfig({ VERCEL: "1" })).toThrow("DATABASE_URL");
   });
 
+  it("Vercel Supabase의 pooled URL을 런타임 데이터베이스 URL로 사용한다", () => {
+    const config = loadEngineConfig({
+      VERCEL: "1",
+      POSTGRES_PRISMA_URL: "postgres://supabase.invalid/portfolio",
+    });
+
+    expect(config.DATABASE_URL).toBe("postgres://supabase.invalid/portfolio");
+  });
+
+  it("Supabase pooled URL을 기존 DATABASE_URL보다 우선한다", () => {
+    const config = loadEngineConfig({
+      VERCEL: "1",
+      POSTGRES_PRISMA_URL: "postgres://supabase.invalid/portfolio",
+      DATABASE_URL: "postgresql://legacy.invalid/portfolio",
+    });
+
+    expect(config.DATABASE_URL).toBe("postgres://supabase.invalid/portfolio");
+  });
+
   it("platform PORT를 engine 포트보다 우선한다", () => {
     const config = loadEngineConfig({
       VERCEL: "1",

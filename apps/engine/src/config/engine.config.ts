@@ -25,6 +25,7 @@ export function loadEngineConfig(environment: NodeJS.ProcessEnv): EngineConfig {
     ENGINE_HOST: environment.ENGINE_HOST ?? (environment.VERCEL === "1" ? "0.0.0.0" : undefined),
     ENGINE_PORT: environment.PORT ?? environment.ENGINE_PORT,
     DATABASE_URL:
+      environment.POSTGRES_PRISMA_URL ??
       environment.DATABASE_URL ??
       (environment.VERCEL === "1"
         ? undefined

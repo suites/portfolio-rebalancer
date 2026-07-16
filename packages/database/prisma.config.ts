@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { config as loadDotenv } from "dotenv";
 import { defineConfig } from "prisma/config";
 
+import { resolveMigrationDatabaseUrl } from "./src/database-url";
+
 loadDotenv({ path: fileURLToPath(new URL(".env.local", import.meta.url)) });
 
 export default defineConfig({
@@ -11,9 +13,6 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url:
-      process.env.DATABASE_DIRECT_URL ??
-      process.env.DATABASE_URL ??
-      "postgresql://portfolio:portfolio_local@127.0.0.1:15432/portfolio_rebalancer",
+    url: resolveMigrationDatabaseUrl(process.env),
   },
 });

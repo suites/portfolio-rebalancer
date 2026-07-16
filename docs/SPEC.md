@@ -281,7 +281,7 @@ clientOrderId = short_hash(canonical_order_intent) + version
 
 ### 5.10 State and Audit Store
 
-운영 저장소는 Prisma가 migration을 소유하는 PostgreSQL을 사용합니다. Vercel 운영 기본 경로는 Marketplace Neon이며 runtime pooled URL과 migration direct URL을 분리합니다. 최소 저장 대상은 다음과 같습니다.
+운영 저장소는 Prisma가 migration을 소유하는 PostgreSQL을 사용합니다. Vercel 운영 기본 경로는 engine 프로젝트에 연결한 Marketplace Supabase이며, Integration이 자동 주입하는 `POSTGRES_PRISMA_URL`을 runtime pooled 연결에, `POSTGRES_URL_NON_POOLING`을 migration direct 연결에 사용합니다. 기존 `DATABASE_URL`과 `DATABASE_DIRECT_URL`은 로컬·호환 fallback으로만 유지합니다. 최소 저장 대상은 다음과 같습니다.
 
 - 실행 ID, 계좌 식별자의 마스킹 값, 시작·종료 시각
 - 설정 버전 및 파일 해시

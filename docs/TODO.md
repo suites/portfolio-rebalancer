@@ -9,6 +9,7 @@
 - [ ] 설정 스키마와 예제 설정 작성
 - [ ] 첫 운영 시장을 한국으로 고정하는 ADR 작성
 - [x] Web, engine, Prisma migration별 `.env.local` 로딩 규칙과 `.gitignore` 구성
+- [x] Vercel Supabase Integration의 pooled runtime URL과 direct migration URL 자동 인식
 - [ ] 오류 코드와 구조화 로그 형식 정의
 - [x] 실제 read-only 자격증명과 PostgreSQL을 사용하는 Quick Start 작성
 - [ ] `setup`, `doctor`, `check`, `plan`, `run`, `status` CLI 골격 구현
