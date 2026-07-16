@@ -48,7 +48,6 @@ export async function getDashboard(
       allocations: [],
       unmanagedHoldings: [],
       blockReason: reasonFor(emptyBlockCode),
-      liveOrdersEnabled: false,
     });
   }
 
@@ -181,7 +180,6 @@ export async function getDashboard(
     allocations,
     unmanagedHoldings,
     blockReason: blockCode ? reasonFor(blockCode) : null,
-    liveOrdersEnabled: false,
   });
 }
 
@@ -204,7 +202,6 @@ export function blockedDashboard(
     allocations: [],
     unmanagedHoldings: [],
     blockReason: reasonFor(code),
-    liveOrdersEnabled: false,
   });
 }
 

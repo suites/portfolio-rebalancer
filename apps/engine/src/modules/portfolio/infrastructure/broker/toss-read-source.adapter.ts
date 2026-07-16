@@ -117,6 +117,7 @@ export interface TossReadSource {
 }
 
 export interface TossPretradeReadSource extends TossReadSource {
+  listAccountsEvidence(): Promise<TossNeutralReadResult<readonly TossAccount[]>>;
   getBuyingPowerEvidence(
     account: TossAccountReadReference,
     currency: "KRW" | "USD",
@@ -138,6 +139,7 @@ export function createTossReadSource(
   credentials: {
     readonly clientId: string;
     readonly clientSecret: string;
+    readonly accountReferenceKey?: string;
     readonly onResponseMetadata?: (
       metadata: TossResponseMetadata,
     ) => string | null | void | Promise<string | null | void>;
@@ -151,6 +153,7 @@ export function createTossReadSource(
     response: TossBusinessResponse,
     operationId: TossOperationId,
     schema: ZodType<Value>,
+    redactedBodyFactory?: (value: Value) => unknown,
   ) =>
     validateTossResponse(
       response,
@@ -158,6 +161,7 @@ export function createTossReadSource(
       schema,
       onResponseValidation,
       responseSensitiveValues,
+      redactedBodyFactory,
     );
   const client =
     dependencies.client ??
@@ -180,8 +184,47 @@ export function createTossReadSource(
           response,
           "getAccounts",
           TossAccountsResponseSchema,
+          (value) => ({
+            result: value.result.map((account) => ({
+              accountReferenceHmac: createTossAccountReference(
+                account.accountNo,
+                credentials.accountReferenceKey ?? credentials.clientSecret,
+              ),
+              accountNo: maskTossAccountNumber(account.accountNo),
+              accountType: account.accountType,
+            })),
+          }),
         );
         return validated.value.result;
+      } catch (error) {
+        throw normalizeTossError(error, "계좌 목록");
+      }
+    },
+    async listAccountsEvidence() {
+      try {
+        const response = await client.read.getAccounts();
+        const validated = await validateResponse(
+          response,
+          "getAccounts",
+          TossAccountsResponseSchema,
+          (value) => ({
+            result: value.result.map((account) => ({
+              accountReferenceHmac: createTossAccountReference(
+                account.accountNo,
+                credentials.accountReferenceKey ?? credentials.clientSecret,
+              ),
+              accountNo: maskTossAccountNumber(account.accountNo),
+              accountType: account.accountType,
+            })),
+          }),
+        );
+        return withBrokerMetadata(
+          response.response,
+          "getAccounts",
+          validated.value.result,
+          validated.redactedBody,
+          validated.responseValidationId,
+        );
       } catch (error) {
         throw normalizeTossError(error, "계좌 목록");
       }
@@ -538,8 +581,9 @@ async function validateTossResponse<Value>(
   schema: ZodType<Value>,
   onResponseValidation: TossResponseValidationCallback | undefined,
   sensitiveValues: readonly string[],
+  redactedBodyFactory?: (value: Value) => unknown,
 ): Promise<ValidatedTossResponse<Value>> {
-  const redactedBody = redactTossResponseBody(response.data, sensitiveValues);
+  const fallbackRedactedBody = redactTossResponseBody(response.data, sensitiveValues);
   const requestAttemptId = onResponseValidation
     ? requireResponseAuditReference(response.response, operationId)
     : null;
@@ -552,7 +596,7 @@ async function validateTossResponse<Value>(
         requestAttemptId,
         operationId,
         outcome: "SCHEMA_ERROR",
-        redactedBody,
+        redactedBody: fallbackRedactedBody,
         safeErrorCode: "TOSS_RESPONSE_SCHEMA_ERROR",
         validatedAt,
       });
@@ -560,6 +604,9 @@ async function validateTossResponse<Value>(
     throw parsed.error;
   }
 
+  const redactedBody = redactedBodyFactory
+    ? redactedBodyFactory(parsed.data)
+    : fallbackRedactedBody;
   let responseValidationId: string | null = null;
   if (onResponseValidation && requestAttemptId) {
     responseValidationId = await emitResponseValidation(onResponseValidation, {
@@ -573,6 +620,14 @@ async function validateTossResponse<Value>(
   }
 
   return { value: parsed.data, redactedBody, responseValidationId };
+}
+
+function createTossAccountReference(accountNo: string, key: string): string {
+  return createHmac("sha256", key).update(`toss-account-v1:${accountNo}`).digest("hex");
+}
+
+function maskTossAccountNumber(accountNo: string): string {
+  return `**** ${accountNo.slice(-4)}`;
 }
 
 function requireResponseAuditReference(response: Response, operationId: TossOperationId): string {
@@ -607,7 +662,10 @@ async function emitResponseValidation(
   }
 }
 
-function redactTossResponseBody(value: unknown, sensitiveValues: readonly string[]): unknown {
+export function redactTossResponseBody(
+  value: unknown,
+  sensitiveValues: readonly string[],
+): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => redactTossResponseBody(item, sensitiveValues));
   }
@@ -652,6 +710,18 @@ function isDescriptorKey(key: string): boolean {
 }
 
 function redactSensitiveString(value: string, sensitiveValues: readonly string[]): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (parsed !== null && typeof parsed === "object") {
+        return JSON.stringify(redactTossResponseBody(parsed, sensitiveValues));
+      }
+    } catch {
+      // Continue with best-effort free-form redaction below.
+    }
+  }
+
   let redacted = value;
   for (const sensitiveValue of sensitiveValues) {
     if (sensitiveValue.length >= 4) {
@@ -663,11 +733,11 @@ function redactSensitiveString(value: string, sensitiveValues: readonly string[]
     .replace(/\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, REDACTED_VALUE)
     .replace(/((?:authorization)\s*[:=]\s*)([^,;]+)/gi, `$1${REDACTED_VALUE}`)
     .replace(
-      /((?:access[_\s-]?token|client[_\s-]?secret|api[_\s-]?key|credential|password|token|secret)\s*[:=]\s*)([^\s,;]+)/gi,
+      /((?:\\?["'])?(?:access[_\s-]?token|refresh[_\s-]?token|client[_\s-]?secret|api[_\s-]?key|credential|password|token|secret)(?:\\?["'])?\s*[:=]\s*(?:\\?["'])?)([^\\"',;\s}]+)/gi,
       `$1${REDACTED_VALUE}`,
     )
     .replace(
-      /((?:account(?:id|identifier|number|no|seq|key|ref|hash)?|계좌(?:\s*번호)?)(?:\s*[:=#-]\s*|\s+))([A-Za-z0-9*][A-Za-z0-9*._-]{5,})/gi,
+      /((?:\\?["'])?(?:account(?:id|identifier|number|no|seq|key|ref|hash)?|계좌(?:\s*번호)?)(?:\\?["'])?(?:\s*[:=#-]\s*(?:\\?["'])?|\s+))([^\\"',;\s}]{6,})/gi,
       `$1${REDACTED_VALUE}`,
     );
   return redacted;
@@ -815,3 +885,4 @@ function normalizeTossError(error: unknown, subject: string): CollectionError {
     { cause: error },
   );
 }
+import { createHmac } from "node:crypto";

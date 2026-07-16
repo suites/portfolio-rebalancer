@@ -5,7 +5,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const integrationDatabaseUrl = process.env.PORTFOLIO_REBALANCER_DATABASE_INTEGRATION_URL;
 const integrationDescribe = integrationDatabaseUrl ? describe : describe.skip;
-const migrationName = "20260716167000_order_ledger_risk_reservations";
+const migrationNames = [
+  "20260716167000_order_ledger_risk_reservations",
+  "20260716170000_order_non_dispatch_recovery",
+  "20260716171000_live_dispatch_db_safety",
+] as const;
 
 let pool: Pool | undefined;
 
@@ -14,14 +18,14 @@ integrationDescribe("order ledger and risk reservation PostgreSQL integration", 
     if (!integrationDatabaseUrl) return;
     assertIsolatedTestDatabase(integrationDatabaseUrl);
     pool = new Pool({ connectionString: integrationDatabaseUrl, max: 6 });
-    const migration = await pool.query<{ finished_at: Date | null }>(
+    const migrations = await pool.query<{ finished_at: Date | null }>(
       `SELECT "finished_at"
        FROM public."_prisma_migrations"
-       WHERE "migration_name" = $1`,
-      [migrationName],
+       WHERE "migration_name" = ANY($1::TEXT[])`,
+      [migrationNames],
     );
-    expect(migration.rows).toHaveLength(1);
-    expect(migration.rows[0]?.finished_at).not.toBeNull();
+    expect(migrations.rows).toHaveLength(migrationNames.length);
+    expect(migrations.rows.every((migration) => migration.finished_at !== null)).toBe(true);
   });
 
   afterAll(async () => {
@@ -243,6 +247,31 @@ integrationDescribe("order ledger and risk reservation PostgreSQL integration", 
     }
   });
 
+  it("pre-submit은 fresh getAccounts PASSED 결과로 현재 계좌를 정확히 재결합한다", async () => {
+    const client = await integrationClient();
+    await client.query("BEGIN");
+    try {
+      const fixture = await insertSealedPlan(client, "LIVE", [
+        planOrderInput("005930", 1n, 10_000n),
+      ]);
+      await expectRejectedSql(client, () =>
+        insertLivePreSubmitEvidence(client, fixture, fixture.orders[0]!, {
+          accountReferenceHmac: "f".repeat(64),
+        }),
+      );
+      await expectRejectedSql(client, () =>
+        insertLivePreSubmitEvidence(client, fixture, fixture.orders[0]!, {
+          includeAccountValidation: false,
+        }),
+      );
+      const valid = await insertLivePreSubmitEvidence(client, fixture, fixture.orders[0]!);
+      expect(valid.preSubmitEvidenceId).toMatch(/^[0-9a-f-]{36}$/);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+
   it("LIVE 제출은 기본 차단되고 승인 1회 소비와 DISENGAGED 킬스위치를 동시에 요구한다", async () => {
     const client = await integrationClient();
     await client.query("BEGIN");
@@ -319,6 +348,12 @@ integrationDescribe("order ledger and risk reservation PostgreSQL integration", 
         firstOrder,
         evidence,
         firstApprovalId,
+      );
+      await expectRejectedSql(client, () =>
+        insertPreAuthorizationNonDispatchEvidence(client, {
+          orderId: firstOrder.id,
+          reservationId: submissionAuthorization.reservationId,
+        }),
       );
       expect(
         await client.query(
@@ -480,6 +515,641 @@ integrationDescribe("order ledger and risk reservation PostgreSQL integration", 
           canceledEvidenceId,
         ]),
       );
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+
+  it("B는 A 이후 바뀐 ACTIVE config, promotion, kill switch를 계좌 잠금 아래 fail closed한다", async () => {
+    const client = await integrationClient();
+    await client.query("BEGIN");
+    try {
+      const prepareAuthorization = async (symbol: string) => {
+        const fixture = await insertSealedPlan(client, "LIVE", [
+          planOrderInput(symbol, 1n, 10_000n),
+        ]);
+        const limitId = await insertDailyLimit(client, fixture, 50_000n);
+        const evidence = await insertLivePreSubmitEvidence(client, fixture, fixture.orders[0]!);
+        const order = await insertLedgerOrder(client, fixture, fixture.orders[0]!, limitId, {
+          reservedGrossMinor: evidence.reservedGrossMinor,
+          reservationEvidenceId: evidence.preSubmitEvidenceId,
+        });
+        await insertKillSwitchEvent(client, fixture.accountId, 1, "ENGAGED");
+        await insertKillSwitchEvent(client, fixture.accountId, 2, "DISENGAGED");
+        const approvalId = await insertApproval(client, fixture, fixture.orders[0]!);
+        const authorization = await insertSubmissionAuthorization(
+          client,
+          fixture,
+          fixture.orders[0]!,
+          order,
+          evidence,
+          approvalId,
+        );
+        return { fixture, evidence, order, approvalId, authorization };
+      };
+
+      const configChanged = await prepareAuthorization("005930");
+      const nextConfig = JSON.parse(configChanged.evidence.operationalConfigCanonical) as Record<
+        string,
+        unknown
+      >;
+      const live = nextConfig.live as Record<string, unknown>;
+      live.approvalTtlSeconds = 299;
+      const nextCanonical = JSON.stringify(nextConfig);
+      const nextConfigVersionId = randomUUID();
+      await client.query(
+        `INSERT INTO public."operational_config_version" (
+           "id", "config_id", "version", "schema_version", "canonical_content",
+           "content_hash", "payload"
+         ) VALUES ($1, $2, 2, 'OPERATIONAL_CONFIG_V1', $3::TEXT, $4,
+           $3::TEXT::JSONB)`,
+        [
+          nextConfigVersionId,
+          configChanged.evidence.operationalConfigId,
+          nextCanonical,
+          sha256Hex(nextCanonical),
+        ],
+      );
+      await client.query(
+        `INSERT INTO public."operational_config_activation" (
+           "config_id", "version", "operational_config_version_id", "actor",
+           "confirmation_version"
+         ) VALUES ($1, 2, $2, 'integration-operator',
+           'OPERATIONAL_CONFIG_ACTIVATION_V1')`,
+        [configChanged.evidence.operationalConfigId, nextConfigVersionId],
+      );
+      await expectRejectedSql(client, () =>
+        insertDispatchClaim(
+          client,
+          configChanged.fixture,
+          configChanged.fixture.orders[0]!,
+          configChanged.order,
+          configChanged.evidence,
+          configChanged.approvalId,
+          configChanged.authorization,
+        ),
+      );
+
+      const promotionRevoked = await prepareAuthorization("000660");
+      await client.query(
+        `INSERT INTO public."live_promotion_event" (
+           "account_id", "version", "state", "operational_config_sha256",
+           "operational_config_version_id", "account_allowlist_hmac",
+           "max_single_order_gross_minor", "max_daily_gross_minor",
+           "tiny_live_max_gross_minor", "actor", "reason"
+         ) VALUES ($1, 3, 'REVOKED', $2, $3, $4, 100000, 300000, 50000,
+           'integration-operator', 'integration-revocation')`,
+        [
+          promotionRevoked.fixture.accountId,
+          promotionRevoked.evidence.operationalConfigSha256,
+          promotionRevoked.evidence.operationalConfigVersionId,
+          promotionRevoked.fixture.accountExternalRefHmac,
+        ],
+      );
+      await expectRejectedSql(client, () =>
+        insertDispatchClaim(
+          client,
+          promotionRevoked.fixture,
+          promotionRevoked.fixture.orders[0]!,
+          promotionRevoked.order,
+          promotionRevoked.evidence,
+          promotionRevoked.approvalId,
+          promotionRevoked.authorization,
+        ),
+      );
+
+      const killEngaged = await prepareAuthorization("035420");
+      await insertKillSwitchEvent(client, killEngaged.fixture.accountId, 3, "ENGAGED");
+      await expectRejectedSql(client, () =>
+        insertDispatchClaim(
+          client,
+          killEngaged.fixture,
+          killEngaged.fixture.orders[0]!,
+          killEngaged.order,
+          killEngaged.evidence,
+          killEngaged.approvalId,
+          killEngaged.authorization,
+        ),
+      );
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+
+  it("B와 config activation은 같은 broker account 행 잠금으로 직렬화된다", async () => {
+    const setupClient = await integrationClient();
+    const lockClient = await integrationClient();
+    const dispatchClient = await integrationClient();
+    let lockOpen = false;
+    try {
+      const fixture = await insertSealedPlan(setupClient, "LIVE", [
+        planOrderInput("068270", 1n, 10_000n),
+      ]);
+      const limitId = await insertDailyLimit(setupClient, fixture, 50_000n);
+      const evidence = await insertLivePreSubmitEvidence(setupClient, fixture, fixture.orders[0]!);
+      const order = await insertLedgerOrder(setupClient, fixture, fixture.orders[0]!, limitId, {
+        reservedGrossMinor: evidence.reservedGrossMinor,
+        reservationEvidenceId: evidence.preSubmitEvidenceId,
+      });
+      await insertKillSwitchEvent(setupClient, fixture.accountId, 1, "ENGAGED");
+      await insertKillSwitchEvent(setupClient, fixture.accountId, 2, "DISENGAGED");
+      const approvalId = await insertApproval(setupClient, fixture, fixture.orders[0]!);
+      const authorization = await insertSubmissionAuthorization(
+        setupClient,
+        fixture,
+        fixture.orders[0]!,
+        order,
+        evidence,
+        approvalId,
+      );
+
+      await lockClient.query("BEGIN");
+      lockOpen = true;
+      await lockClient.query(`SELECT 1 FROM public."broker_account" WHERE "id" = $1 FOR UPDATE`, [
+        fixture.accountId,
+      ]);
+      await dispatchClient.query("SET statement_timeout = '200ms'");
+      let timedOut: unknown;
+      try {
+        await insertDispatchClaim(
+          dispatchClient,
+          fixture,
+          fixture.orders[0]!,
+          order,
+          evidence,
+          approvalId,
+          authorization,
+        );
+      } catch (error) {
+        timedOut = error;
+      }
+      expect(sqlState(timedOut)).toBe("57014");
+
+      await lockClient.query("COMMIT");
+      lockOpen = false;
+      await dispatchClient.query("SET statement_timeout = 0");
+      await insertDispatchClaim(
+        dispatchClient,
+        fixture,
+        fixture.orders[0]!,
+        order,
+        evidence,
+        approvalId,
+        authorization,
+      );
+    } finally {
+      if (lockOpen) await lockClient.query("ROLLBACK");
+      await dispatchClient.query("SET statement_timeout = 0").catch(() => undefined);
+      setupClient.release();
+      lockClient.release();
+      dispatchClient.release();
+    }
+  });
+
+  it("config activation은 account-first lock을 기다린 뒤에만 최신 ACTIVE를 바꾼다", async () => {
+    const setupClient = await integrationClient();
+    const lockClient = await integrationClient();
+    const activationClient = await integrationClient();
+    let lockOpen = false;
+    try {
+      const fixture = await insertSealedPlan(setupClient, "LIVE", [
+        planOrderInput("051910", 1n, 10_000n),
+      ]);
+      const evidence = await insertLivePreSubmitEvidence(setupClient, fixture, fixture.orders[0]!);
+      const nextConfig = JSON.parse(evidence.operationalConfigCanonical) as Record<string, unknown>;
+      (nextConfig.live as Record<string, unknown>).approvalTtlSeconds = 298;
+      const nextCanonical = JSON.stringify(nextConfig);
+      const nextConfigVersionId = randomUUID();
+      await setupClient.query(
+        `INSERT INTO public."operational_config_version" (
+           "id", "config_id", "version", "schema_version", "canonical_content",
+           "content_hash", "payload"
+         ) VALUES ($1, $2, 2, 'OPERATIONAL_CONFIG_V1', $3::TEXT, $4,
+           $3::TEXT::JSONB)`,
+        [
+          nextConfigVersionId,
+          evidence.operationalConfigId,
+          nextCanonical,
+          sha256Hex(nextCanonical),
+        ],
+      );
+
+      await lockClient.query("BEGIN");
+      lockOpen = true;
+      await lockClient.query(`SELECT 1 FROM public."broker_account" WHERE "id" = $1 FOR UPDATE`, [
+        fixture.accountId,
+      ]);
+      await activationClient.query("SET statement_timeout = '200ms'");
+      let timedOut: unknown;
+      try {
+        await activationClient.query(
+          `INSERT INTO public."operational_config_activation" (
+             "config_id", "version", "operational_config_version_id", "actor",
+             "confirmation_version"
+           ) VALUES ($1, 2, $2, 'integration-operator',
+             'OPERATIONAL_CONFIG_ACTIVATION_V1')`,
+          [evidence.operationalConfigId, nextConfigVersionId],
+        );
+      } catch (error) {
+        timedOut = error;
+      }
+      expect(sqlState(timedOut)).toBe("57014");
+
+      await lockClient.query("COMMIT");
+      lockOpen = false;
+      await activationClient.query("SET statement_timeout = 0");
+      await activationClient.query(
+        `INSERT INTO public."operational_config_activation" (
+           "config_id", "version", "operational_config_version_id", "actor",
+           "confirmation_version"
+         ) VALUES ($1, 2, $2, 'integration-operator',
+           'OPERATIONAL_CONFIG_ACTIVATION_V1')`,
+        [evidence.operationalConfigId, nextConfigVersionId],
+      );
+      expect(
+        await activationClient.query(
+          `SELECT "operational_config_version_id"
+           FROM public."operational_config_current"
+           WHERE "account_id" = $1`,
+          [fixture.accountId],
+        ),
+      ).toMatchObject({ rows: [{ operational_config_version_id: nextConfigVersionId }] });
+    } finally {
+      if (lockOpen) await lockClient.query("ROLLBACK");
+      await activationClient.query("SET statement_timeout = 0").catch(() => undefined);
+      setupClient.release();
+      lockClient.release();
+      activationClient.release();
+    }
+  });
+
+  it("A 이전 PLANNED 고착은 불변 증거로 REJECTED와 예약 해제를 원자 기록한다", async () => {
+    const client = await integrationClient();
+    await client.query("BEGIN");
+    try {
+      const fixture = await insertSealedPlan(client, "LIVE", [
+        planOrderInput("005930", 1n, 10_000n),
+      ]);
+      const limitId = await insertDailyLimit(client, fixture, 50_000n);
+      const liveEvidence = await insertLivePreSubmitEvidence(client, fixture, fixture.orders[0]!);
+      const order = await insertLedgerOrder(client, fixture, fixture.orders[0]!, limitId, {
+        reservedGrossMinor: liveEvidence.reservedGrossMinor,
+        reservationEvidenceId: liveEvidence.preSubmitEvidenceId,
+      });
+      const reservation = await client.query<{ id: string }>(
+        `SELECT "id" FROM public."daily_trade_reservation" WHERE "order_id" = $1`,
+        [order.id],
+      );
+      const evidenceId = await insertPreAuthorizationNonDispatchEvidence(client, {
+        orderId: order.id,
+        reservationId: reservation.rows[0]!.id,
+      });
+      const recovered = await client.query<{
+        normalized_state: string;
+        pre_authorization_non_dispatch_evidence_id: string;
+        pre_authorization_non_dispatch_safe_reason_code: string;
+        pre_authorization_non_dispatch_proof_sha256: string;
+        released_gross_minor: string;
+      }>(
+        `SELECT state."normalized_state"::TEXT,
+           state."pre_authorization_non_dispatch_evidence_id",
+           state."pre_authorization_non_dispatch_safe_reason_code",
+           state."pre_authorization_non_dispatch_proof_sha256",
+           reservation."released_gross_minor"
+         FROM public."order_ledger_current_state" AS state
+         JOIN public."daily_trade_reservation" AS reservation
+           ON reservation."order_id" = state."order_id"
+         WHERE state."order_id" = $1`,
+        [order.id],
+      );
+      expect(recovered.rows).toMatchObject([
+        {
+          normalized_state: "REJECTED",
+          pre_authorization_non_dispatch_evidence_id: evidenceId,
+          pre_authorization_non_dispatch_safe_reason_code: "PRE_AUTHORIZATION_NOT_COMPLETED",
+          released_gross_minor: liveEvidence.reservedGrossMinor.toString(),
+        },
+      ]);
+      expect(recovered.rows[0]?.pre_authorization_non_dispatch_proof_sha256).toMatch(
+        /^[0-9a-f]{64}$/,
+      );
+
+      await insertKillSwitchEvent(client, fixture.accountId, 1, "ENGAGED");
+      await insertKillSwitchEvent(client, fixture.accountId, 2, "DISENGAGED");
+      const approvalId = await insertApproval(client, fixture, fixture.orders[0]!);
+      await expectRejectedSql(client, () =>
+        insertSubmissionAuthorization(
+          client,
+          fixture,
+          fixture.orders[0]!,
+          order,
+          liveEvidence,
+          approvalId,
+        ),
+      );
+      await expectRejectedSql(client, () =>
+        insertBrokerResponseEvidence(client, {
+          orderId: order.id,
+          evidenceKind: "SUBMIT",
+          brokerOrderId: "must-never-exist",
+          brokerStatusRaw: "ACKNOWLEDGED",
+          httpStatus: 200,
+          writeOutcome: "ACKNOWLEDGED",
+        }),
+      );
+      await expectRejectedSql(client, () =>
+        client.query(
+          `UPDATE public."order_pre_auth_non_dispatch_evidence"
+           SET "actor" = 'tampered' WHERE "id" = $1`,
+          [evidenceId],
+        ),
+      );
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+
+  it("A 이후 B가 없으면 불변 증명으로 REJECTED를 닫고 이후 제출을 영구 차단한다", async () => {
+    const client = await integrationClient();
+    await client.query("BEGIN");
+    try {
+      const fixture = await insertSealedPlan(client, "LIVE", [
+        planOrderInput("005930", 1n, 10_000n),
+      ]);
+      const limitId = await insertDailyLimit(client, fixture, 50_000n);
+      const liveEvidence = await insertLivePreSubmitEvidence(client, fixture, fixture.orders[0]!);
+      const order = await insertLedgerOrder(client, fixture, fixture.orders[0]!, limitId, {
+        reservedGrossMinor: liveEvidence.reservedGrossMinor,
+        reservationEvidenceId: liveEvidence.preSubmitEvidenceId,
+      });
+      await insertKillSwitchEvent(client, fixture.accountId, 1, "ENGAGED");
+      await insertKillSwitchEvent(client, fixture.accountId, 2, "DISENGAGED");
+      const approvalId = await insertApproval(client, fixture, fixture.orders[0]!);
+      const authorization = await insertSubmissionAuthorization(
+        client,
+        fixture,
+        fixture.orders[0]!,
+        order,
+        liveEvidence,
+        approvalId,
+      );
+
+      await expectRejectedSql(client, () =>
+        insertNonDispatchEvidence(client, {
+          submissionAuthorizationId: authorization.id,
+          orderId: randomUUID(),
+        }),
+      );
+      await expectRejectedSql(
+        client,
+        () =>
+          insertNonDispatchEvidence(client, {
+            submissionAuthorizationId: randomUUID(),
+            orderId: order.id,
+          }),
+        ["23503"],
+      );
+      const evidenceId = await insertNonDispatchEvidence(client, {
+        submissionAuthorizationId: authorization.id,
+        orderId: order.id,
+      });
+      await expectRejectedSql(client, () =>
+        insertDispatchClaim(
+          client,
+          fixture,
+          fixture.orders[0]!,
+          order,
+          liveEvidence,
+          approvalId,
+          authorization,
+        ),
+      );
+      const recovered = await client.query<{
+        normalized_state: string;
+        actor: string;
+        non_dispatch_evidence_id: string;
+        broker_order_id: string | null;
+        broker_response_evidence_id: string | null;
+        non_dispatch_safe_reason_code: string;
+        non_dispatch_proof_sha256: string;
+        canonical_proof: string;
+        released_gross_minor: string;
+      }>(
+        `SELECT current_state."normalized_state"::TEXT, current_state."actor",
+           current_state."non_dispatch_evidence_id", current_state."broker_order_id",
+           current_state."broker_response_evidence_id",
+           current_state."non_dispatch_safe_reason_code",
+           current_state."non_dispatch_proof_sha256",
+           non_dispatch."canonical_proof", reservation."released_gross_minor"
+         FROM public."order_ledger_current_state" AS current_state
+         JOIN public."order_non_dispatch_evidence" AS non_dispatch
+           ON non_dispatch."id" = current_state."non_dispatch_evidence_id"
+         JOIN public."daily_trade_reservation" AS reservation
+           ON reservation."order_id" = current_state."order_id"
+         WHERE current_state."order_id" = $1`,
+        [order.id],
+      );
+      expect(recovered.rows).toMatchObject([
+        {
+          normalized_state: "REJECTED",
+          actor: "RECOVERY",
+          non_dispatch_evidence_id: evidenceId,
+          broker_order_id: null,
+          broker_response_evidence_id: null,
+          non_dispatch_safe_reason_code: "AUTHORIZATION_NOT_DISPATCHED",
+          released_gross_minor: liveEvidence.reservedGrossMinor.toString(),
+        },
+      ]);
+      expect(recovered.rows[0]?.non_dispatch_proof_sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(recovered.rows[0]?.canonical_proof).not.toContain(fixture.accountExternalRefHmac);
+      expect(recovered.rows[0]?.canonical_proof).not.toContain("synthetic-live-account-reference");
+
+      await expectRejectedSql(client, () =>
+        insertNonDispatchEvidence(client, {
+          submissionAuthorizationId: authorization.id,
+          orderId: order.id,
+        }),
+      );
+      await expectRejectedSql(client, () =>
+        insertBrokerResponseEvidence(client, {
+          orderId: order.id,
+          evidenceKind: "SUBMIT",
+          brokerOrderId: "must-never-exist",
+          brokerStatusRaw: "ACKNOWLEDGED",
+          httpStatus: 200,
+          writeOutcome: "ACKNOWLEDGED",
+        }),
+      );
+      expect(
+        await client.query(
+          `SELECT
+             (SELECT COUNT(*)::INTEGER FROM public."order_dispatch_claim"
+              WHERE "order_id" = $1) AS dispatch_count,
+             (SELECT COUNT(*)::INTEGER FROM public."broker_order_response_evidence"
+              WHERE "order_id" = $1 AND "evidence_kind" = 'SUBMIT') AS submit_count`,
+          [order.id],
+        ),
+      ).toMatchObject({ rows: [{ dispatch_count: 0, submit_count: 0 }] });
+
+      await expectRejectedSql(client, () =>
+        client.query(
+          `UPDATE public."order_non_dispatch_evidence"
+           SET "actor" = 'tampered'
+           WHERE "id" = $1`,
+          [evidenceId],
+        ),
+      );
+      await expectRejectedSql(client, () =>
+        client.query(`DELETE FROM public."order_non_dispatch_evidence" WHERE "id" = $1`, [
+          evidenceId,
+        ]),
+      );
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+
+  it("B가 먼저 존재하면 비전송 증명을 만들 수 없다", async () => {
+    const client = await integrationClient();
+    await client.query("BEGIN");
+    try {
+      const fixture = await insertSealedPlan(client, "LIVE", [
+        planOrderInput("000660", 1n, 20_000n),
+      ]);
+      const limitId = await insertDailyLimit(client, fixture, 50_000n);
+      const liveEvidence = await insertLivePreSubmitEvidence(client, fixture, fixture.orders[0]!);
+      const order = await insertLedgerOrder(client, fixture, fixture.orders[0]!, limitId, {
+        reservedGrossMinor: liveEvidence.reservedGrossMinor,
+        reservationEvidenceId: liveEvidence.preSubmitEvidenceId,
+      });
+      await insertKillSwitchEvent(client, fixture.accountId, 1, "ENGAGED");
+      await insertKillSwitchEvent(client, fixture.accountId, 2, "DISENGAGED");
+      const approvalId = await insertApproval(client, fixture, fixture.orders[0]!);
+      const authorization = await insertSubmissionAuthorization(
+        client,
+        fixture,
+        fixture.orders[0]!,
+        order,
+        liveEvidence,
+        approvalId,
+      );
+      await insertDispatchClaim(
+        client,
+        fixture,
+        fixture.orders[0]!,
+        order,
+        liveEvidence,
+        approvalId,
+        authorization,
+      );
+
+      await expectRejectedSql(client, () =>
+        insertNonDispatchEvidence(client, {
+          submissionAuthorizationId: authorization.id,
+          orderId: order.id,
+        }),
+      );
+      expect(
+        await client.query(
+          `SELECT COUNT(*)::INTEGER AS proof_count
+           FROM public."order_non_dispatch_evidence"
+           WHERE "order_id" = $1`,
+          [order.id],
+        ),
+      ).toMatchObject({ rows: [{ proof_count: 0 }] });
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+    }
+  });
+
+  it("B 뒤 SUBMIT 증거가 없으면 exact claim의 no-ID UNKNOWN_BLOCKED만 첫 결과로 허용한다", async () => {
+    const client = await integrationClient();
+    await client.query("BEGIN");
+    try {
+      const fixture = await insertSealedPlan(client, "LIVE", [
+        planOrderInput("005930", 1n, 10_000n),
+      ]);
+      const limitId = await insertDailyLimit(client, fixture, 50_000n);
+      const preSubmit = await insertLivePreSubmitEvidence(client, fixture, fixture.orders[0]!);
+      const order = await insertLedgerOrder(client, fixture, fixture.orders[0]!, limitId, {
+        reservedGrossMinor: preSubmit.reservedGrossMinor,
+        reservationEvidenceId: preSubmit.preSubmitEvidenceId,
+      });
+      const approvalId = await insertApproval(client, fixture, fixture.orders[0]!);
+      await insertKillSwitchEvent(client, fixture.accountId, 1, "ENGAGED");
+      await insertKillSwitchEvent(client, fixture.accountId, 2, "DISENGAGED");
+      const submissionAuthorization = await insertSubmissionAuthorization(
+        client,
+        fixture,
+        fixture.orders[0]!,
+        order,
+        preSubmit,
+        approvalId,
+      );
+      const dispatchClaimId = await insertDispatchClaim(
+        client,
+        fixture,
+        fixture.orders[0]!,
+        order,
+        preSubmit,
+        approvalId,
+        submissionAuthorization,
+      );
+
+      await expectRejectedSql(client, () =>
+        insertBrokerResponseEvidence(client, {
+          orderId: order.id,
+          evidenceKind: "RECONCILE",
+          dispatchClaimId,
+          brokerOrderId: "unsafe-economic-match",
+          brokerStatusRaw: "PENDING",
+          httpStatus: 200,
+          writeOutcome: "OBSERVED",
+        }),
+      );
+      const blockedEvidenceId = await insertBrokerResponseEvidence(client, {
+        orderId: order.id,
+        evidenceKind: "RECONCILE",
+        dispatchClaimId,
+        brokerStatusRaw: "INTEGRITY_BLOCKED",
+        safeErrorCode: "IDEMPOTENCY_WINDOW_EXPIRED",
+        httpStatus: null,
+        writeOutcome: "INTEGRITY_BLOCKED",
+      });
+      await insertState(client, order.id, 2, "UNKNOWN_BLOCKED", {
+        brokerStatusRaw: "INTEGRITY_BLOCKED",
+        brokerResponseEvidenceId: blockedEvidenceId,
+      });
+
+      expect(
+        await client.query(
+          `SELECT current_state."normalized_state"::TEXT,
+                  current_state."broker_order_id",
+                  evidence."dispatch_claim_id",
+                  reservation."released_gross_minor"
+           FROM public."order_ledger_current_state" AS current_state
+           JOIN public."broker_order_response_evidence" AS evidence
+             ON evidence."id" = current_state."broker_response_evidence_id"
+           JOIN public."daily_trade_reservation" AS reservation
+             ON reservation."order_id" = current_state."order_id"
+           WHERE current_state."order_id" = $1`,
+          [order.id],
+        ),
+      ).toMatchObject({
+        rows: [
+          {
+            normalized_state: "UNKNOWN_BLOCKED",
+            broker_order_id: null,
+            dispatch_claim_id: dispatchClaimId,
+            released_gross_minor: "0",
+          },
+        ],
+      });
     } finally {
       await client.query("ROLLBACK");
       client.release();
@@ -1561,12 +2231,21 @@ interface LiveEvidenceFixture {
   readonly preSubmitEvidenceId: string;
   readonly reservationBasisPriceMinor: bigint;
   readonly reservedGrossMinor: bigint;
+  readonly operationalConfigId: string;
+  readonly operationalConfigVersionId: string;
+  readonly operationalConfigCanonical: string;
+  readonly operationalConfigSha256: string;
+  readonly grantedPromotionId: string;
 }
 
 async function insertLivePreSubmitEvidence(
   client: PoolClient,
   fixture: SealedPlanFixture,
   planOrder: PlanOrderFixture,
+  options: {
+    readonly accountReferenceHmac?: string;
+    readonly includeAccountValidation?: boolean;
+  } = {},
 ): Promise<LiveEvidenceFixture> {
   const evaluatedAt = new Date(Date.now() - 100);
   const expiresAt = new Date(evaluatedAt.getTime() + 20_000);
@@ -1729,6 +2408,27 @@ async function insertLivePreSubmitEvidence(
   const reservationBasisPriceMinor =
     planOrder.side === "BUY" ? planOrder.limitPriceMinor : upperLimit;
   const reservedGrossMinor = planOrder.quantity * reservationBasisPriceMinor;
+  const accountValidation =
+    options.includeAccountValidation === false
+      ? null
+      : await insertPassedBrokerValidation(client, {
+          correlationId: preSubmitEvidenceId,
+          workflowType: "PRE_SUBMIT",
+          operationId: "getAccounts",
+          ordinal: 0,
+          completedAt: evaluatedAt,
+          requestSummary: {},
+          redactedBody: {
+            result: [
+              {
+                accountReferenceHmac:
+                  options.accountReferenceHmac ?? fixture.accountExternalRefHmac,
+                accountNo: "***-ledger",
+                accountType: "SYNTHETIC",
+              },
+            ],
+          },
+        });
   const validationInputs = [
     {
       operationId: "getPrices",
@@ -1844,20 +2544,22 @@ async function insertLivePreSubmitEvidence(
   await client.query(
     `INSERT INTO public."pre_submit_evidence" (
        "id", "execution_risk_evidence_id", "plan_order_id", "account_id",
-       "planned_price_snapshot_id", "quote_response_validation_id",
+       "account_response_validation_id", "planned_price_snapshot_id",
+       "quote_response_validation_id",
        "price_limit_response_validation_id", "calendar_response_validation_id",
        "capacity_response_validation_id", "instrument_response_validation_id",
        "warnings_response_validation_id", "open_orders_response_validation_id",
        "planned_quote_price_minor", "current_quote_price_minor", "lower_price_limit_minor",
        "upper_price_limit_minor", "reservation_basis_price_minor", "reserved_gross_minor",
        "checks", "evaluated_at", "expires_at"
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-       $13, $13, $14, $15, $16, $17, $18::JSONB, $19, $20)`,
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+       $14, $14, $15, $16, $17, $18, $19::JSONB, $20, $21)`,
     [
       preSubmitEvidenceId,
       executionRiskEvidenceId,
       planOrder.id,
       fixture.accountId,
+      accountValidation?.validationId ?? null,
       plannedPriceSnapshotId,
       ...validationIds,
       planOrder.limitPriceMinor.toString(),
@@ -1876,6 +2578,11 @@ async function insertLivePreSubmitEvidence(
     preSubmitEvidenceId,
     reservationBasisPriceMinor,
     reservedGrossMinor,
+    operationalConfigId,
+    operationalConfigVersionId,
+    operationalConfigCanonical: operationalConfig,
+    operationalConfigSha256,
+    grantedPromotionId,
   };
 }
 
@@ -2035,6 +2742,42 @@ async function insertSubmissionAuthorization(
     ],
   );
   return { id, reservationId, expiresAt };
+}
+
+async function insertNonDispatchEvidence(
+  client: PoolClient,
+  input: {
+    readonly submissionAuthorizationId: string;
+    readonly orderId: string;
+    readonly actor?: string;
+  },
+): Promise<string> {
+  const id = randomUUID();
+  await client.query(
+    `INSERT INTO public."order_non_dispatch_evidence" (
+       "id", "submission_authorization_id", "order_id", "actor"
+     ) VALUES ($1, $2, $3, $4)`,
+    [id, input.submissionAuthorizationId, input.orderId, input.actor ?? "integration-recovery"],
+  );
+  return id;
+}
+
+async function insertPreAuthorizationNonDispatchEvidence(
+  client: PoolClient,
+  input: {
+    readonly orderId: string;
+    readonly reservationId: string;
+    readonly actor?: string;
+  },
+): Promise<string> {
+  const id = randomUUID();
+  await client.query(
+    `INSERT INTO public."order_pre_auth_non_dispatch_evidence" (
+       "id", "order_id", "reservation_id", "actor"
+     ) VALUES ($1, $2, $3, $4)`,
+    [id, input.orderId, input.reservationId, input.actor ?? "integration-recovery"],
+  );
+  return id;
 }
 
 async function insertDispatchClaim(

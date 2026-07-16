@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   DashboardSnapshotSchema,
+  OperationalConfigSnapshotSchema,
   RebalancePlanSnapshotSchema,
 } from "@portfolio-rebalancer/contracts";
 
@@ -10,6 +11,8 @@ import { RebalancingScreen } from "./rebalancing-screen";
 
 vi.mock("@/app/(console)/actions", () => ({
   createRebalancePlanAction: vi.fn(),
+  executeLivePlanAction: vi.fn(),
+  executePaperPlanAction: vi.fn(),
 }));
 
 describe("RebalancingScreen", () => {
@@ -20,9 +23,10 @@ describe("RebalancingScreen", () => {
         plan={RebalancePlanSnapshotSchema.parse({
           state: "NO_PLAN",
           latest: null,
-          liveOrdersEnabled: false,
         })}
+        operational={operational()}
         actionStatus={undefined}
+        csrfToken={"c".repeat(64)}
       />,
     );
 
@@ -101,20 +105,31 @@ describe("RebalancingScreen", () => {
           },
         ],
       },
-      liveOrdersEnabled: false,
     });
 
     const html = renderToStaticMarkup(
-      <RebalancingScreen snapshot={dashboard("READY")} plan={plan} actionStatus={undefined} />,
+      <RebalancingScreen
+        snapshot={dashboard("READY")}
+        plan={plan}
+        operational={operational()}
+        actionStatus={undefined}
+        csrfToken={"c".repeat(64)}
+      />,
     );
 
     expect(html).toContain("1개 주문 후보");
     expect(html).toContain("KR:114800");
     expect(html).toContain("2주");
     expect(html).toContain("₩20,000");
+    expect(html).toContain("대상 계좌");
+    expect(html).toContain("**** 0007");
+    expect(html).toContain("총 예상 거래금액");
+    expect(html).toContain("주문 직전 수수료 일정으로 재검증");
+    expect(html).toContain("데이터 기준 시각");
     expect(html).toContain("다음 snapshot에서 다시 계산");
     expect(html).toContain("70%");
     expect(html).not.toContain("실거래 실행");
+    expect(html).toContain('name="_csrf"');
   });
 });
 
@@ -168,6 +183,16 @@ function dashboard(state: "READY" | "BLOCKED") {
             nextAction: "설정에서 관리 현금을 선택하세요.",
           }
         : null,
+  });
+}
+
+function operational() {
+  return OperationalConfigSnapshotSchema.parse({
+    state: "EMPTY",
+    activeVersion: null,
+    draftVersion: null,
+    killSwitch: "UNKNOWN",
+    livePromotion: "UNKNOWN",
     liveOrdersEnabled: false,
   });
 }

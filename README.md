@@ -2,7 +2,7 @@
 
 `portfolio-rebalancer`는 사람이 승인한 장기 목표 비중을 결정론적으로 점검하고, 불확실한 상황에서는 거래하지 않는 개인용 자산배분 시스템입니다. 시장 예측이나 종목 추천보다 계산 재현성, 장애 안전성, 주문 멱등성과 감사 가능성을 우선합니다.
 
-> 현재 상태: 토스증권 실제 계좌·보유자산과 통화별 매수 가능 금액을 Prisma/PostgreSQL 불변 스냅샷으로 저장하고, 6개 운영 화면에서 조회하는 shadow 수직 슬라이스가 구현되었습니다. 현재 보유종목을 `안전자산 / 핵심 공격자산 / 위성 공격자산`으로 분류하고 `관리 현금`을 더한 네 자산군 목표를 버전형 초안으로 저장·적용할 수 있습니다. 미보유 종목은 서버의 과거 Toss 검증 결과로 만든 로컬 카탈로그에서 이름을 검색하거나 국내 6자리 코드·미국 티커를 Toss `getStocks`와 `getStockWarnings`로 정확히 재검증한 뒤 추가할 수 있습니다. 자산군 내부 종목 비중은 현재 평가액 보존 또는 명시적 균등 배분으로 정확히 10000점에 고정하며, 새 read-only 수집에서 같은 활성 버전의 정책·주식 평가액·관리 현금·총액을 함께 저장합니다. 매수 가능 금액은 관리 현금과 분리된 주문 가능성 참고 증거로만 유지합니다. 주문 계획, 주문 원장과 paper/live 실행은 아직 구현되지 않아 계속 차단되며 실거래 쓰기 전송도 코드에서 하드 차단됩니다.
+> 현재 상태: 실제 토스 계좌 스냅샷, 버전형 목표 설정, Shadow/Paper/Live 계획, append-only 주문 원장, 위험 게이트와 운영 Web UI가 연결되어 있습니다. Paper는 실제 호가·호가잔량·수수료 증거로 내부 모의 체결만 수행합니다. Live 생성·조회·취소 코드는 구현되어 있지만 기본값은 PAPER이며, ACTIVE LIVE 설정, 현재 계좌 HMAC allowlist, 해제된 킬 스위치, 동일 설정의 별도 Live 승격, 주문별 만료 승인, 최신 pretrade 증거와 DB 일회성 dispatch claim을 모두 통과한 첫 주문 한 건만 전송할 수 있습니다. 실제 계좌의 극소액 주문 검증과 장기 운영 승격은 아직 수행하지 않았으며 별도 사용자 승인 없이는 실행하지 않습니다.
 
 ## 지금 확인할 수 있는 것
 
@@ -23,6 +23,16 @@
 - 총 관리 자산을 `보유주식 평가액 + 관리 현금`으로 저장하고 DB 제약으로 검증
 - 현재·목표·허용 범위와 서버 판정 상태를 함께 쓰는 비중 밴드
 - 목표 비중만 입력하면 서버가 `MIXED_V1` 혼합 정책으로 하한·상한 자동 계산
+- 같은 불변 snapshot에서 `SHADOW`, `PAPER`, `LIVE` 계획을 별도로 생성하고 plan hash 저장
+- `logical_order_id` UNIQUE, 결정적 36자 `clientOrderId`, 일일 예약과 append-only 상태 이력을 사용하는 주문 원장
+- 실제 호가·호가잔량·수수료를 사용하는 한국 지정가 `DAY` Paper 모의 체결과 보수적 부분체결
+- 킬 스위치, 일일·단일·회전율·종목·자산군·위험자산 비중, stale quote, 장 상태, 거래 제한과 기존 미체결 주문을 차단하는 Risk Gate
+- 운영 설정 DRAFT 저장과 별도 적용, 현재 계좌 서버 봉인, 별도 Live 승격과 주문별 최종 확인
+- 서명된 단일 운영자 세션, 동일 출처 CSRF와 Live·취소·복구 전 최근 5분 재인증
+- Live 주문 전 A 승인과 B dispatch claim의 일회성 봉인, 브로커 결과 대사, 안전한 취소와 `UNKNOWN_BLOCKED` exact 복구
+- A 뒤 B가 전혀 없음을 DB가 증명한 경우에만 `REJECTED`로 종료하고 예약을 해제하는 비전송 복구
+- B 뒤 응답 저장 중단은 외부 주문을 자동 귀속하지 않고 no-ID `UNKNOWN_BLOCKED`와 운영자 exact 복구로 처리
+- `/orders`의 실제 주문 타임라인, 상태 재확인, 명시적 취소와 운영자 복구 UI
 - `bigint` 교차곱으로 1bp 미만 이탈까지 감지하는 부동소수점 없는 포트폴리오 비중 계산
 - `BAND_EDGE`·`TARGET` 복귀, 신규 현금 우선 배분, 한국 정수 수량 내림과 반올림 후 비중 재검증 순수 계산
 - 통화별 금액, 소수 수량과 basis point 비중을 부동소수점 없이 보존하는 값 객체와 전수·불변식 테스트
@@ -34,7 +44,7 @@
 - OAuth 토큰 메모리 캐시와 동시 발급 single-flight
 - 고정된 공식 origin, 공통 10초 timeout과 안전한 네트워크·HTTP 오류
 - 401 토큰 무효화와 429 `Retry-After`·rate-limit group·request ID 메타데이터 추출
-- 계좌 변경 메서드의 네트워크 전송 하드 차단(`TOSS_LIVE_TRADING_DISABLED`)
+- 일반 `TossTradingApi` 쓰기 표면은 계속 하드 차단하고, 별도 `TossLiveOrderAdapter`만 만료되는 authorization과 감사 callback을 요구
 - 계좌·보유·시세·호가·종목·주문 조회를 분리한 capability 기반 중립 포트
 - 종목 정규 키는 `marketCountry(KR/US) + symbol`, 상장 시장은 별도 metadata로 분리
 - Toss transport가 제공하는 read-only capability 18개와 write capability 미제공
@@ -45,7 +55,7 @@
 - `OPERATIONAL_CONFIG_V1` strict 계약과 직접 파싱되는 완전한 `config.example.yaml`
 - PAPER 기본값, 데이터 신선도·거래 한도·비중 상한·킬 스위치와 제한적 KR live 승격 조건의 교차 검증
 
-이 범위는 실제 주문 기능이 아닙니다. 토스증권에는 확인된 별도 sandbox/paper 서버가 없으므로 향후 paper 체결은 애플리케이션 내부에서 구현합니다.
+토스증권에는 확인된 별도 sandbox/paper 주문 서버가 없어 Paper는 애플리케이션 내부 모의 체결입니다. Live 코드는 존재하지만 실계좌 승격 검증 완료를 뜻하지 않습니다.
 
 ## 빠른 시작
 
@@ -61,9 +71,13 @@ pnpm db:migrate:deploy
 pnpm dev
 ```
 
-`apps/engine/.env.example`, `apps/web/.env.example`, `packages/database/.env.example`을 각각 같은 위치의 `.env.local`로 복사하고 로컬 값을 설정합니다. 토스 read-only 자격증명은 engine에만 두고 브라우저에서 `http://127.0.0.1:13000`을 엽니다. 호스트 운영에서는 launchd가 같은 포트의 production Web과 4100 포트의 engine을 유지하고, `home-server` Caddy가 `https://stock.fredly.dev`를 Web으로 전달합니다. 첫 화면은 저장된 스냅샷이 없을 때 한 번 실제 계좌 수집을 시도합니다. 설정 화면에서 관리 현금을 포트폴리오 평가에서 제외하거나 관리할 원화 금액을 직접 입력하고, 각 현재 보유종목을 안전자산·핵심 공격자산·위성 공격자산 중 한 곳에 배치한 뒤 네 자산군 목표 합계를 100%로 맞춥니다. 미보유 종목은 종목명으로 로컬 검증 카탈로그를 검색하거나 국내 6자리 코드·미국 티커로 Toss에 정확 검증을 요청합니다. 검색·검증은 설정을 저장하지 않으며, 사용자가 추가한 미보유 종목은 제거할 수 있지만 현재 보유종목은 목표에서 뺄 수 없습니다. 미보유 종목이 들어간 자산군은 `균등 배분`을 명시적으로 선택해야 합니다. 목표 저장과 적용은 분리되며 초안은 저장 당시 스냅샷 ID와 digest 및 미보유 종목의 검증 ID에 묶입니다. 그 사이 계좌 데이터가 바뀌면 적용하지 않고 새 초안을 요구합니다. 적용 후 문제 해결 화면에서 새 데이터를 재점검해야 최신 스냅샷에 활성 버전과 관리 현금 정책이 함께 고정됩니다. 전체 계좌번호와 토큰은 저장하거나 브라우저로 전달하지 않으며 주문을 제출하지 않습니다.
+`apps/engine/.env.example`, `apps/web/.env.example`, `packages/database/.env.example`을 각각 같은 위치의 `.env.local`로 복사하고 로컬 값을 설정합니다. `DATABASE_URL`은 migration owner 전용이고 engine은 `DATABASE_RUNTIME_URL` 제한 역할로만 연결합니다. `db:migrate:deploy`는 migration 뒤 runtime role bootstrap을 실행하며, engine은 시작 시 owner·superuser·DDL·TRUNCATE·migration ledger 접근이 없는지 다시 검사합니다. engine과 Web에는 같은 32자 이상 무작위 `ENGINE_SERVICE_TOKEN`을 넣고, Web에는 12자 이상 `WEB_OPERATOR_PASSWORD`와 32바이트 이상 `WEB_OPERATOR_SESSION_SECRET`을 설정합니다. localhost 평문 HTTP에서는 `WEB_OPERATOR_SECURE_COOKIE=false`를 사용합니다. 토스 자격증명은 engine에만 두고 브라우저에서 `http://127.0.0.1:13000`을 엽니다.
 
-루트의 `config.example.yaml`은 향후 `setup` UI/CLI가 생성할 운영 정책의 계약 예제입니다. 사용자가 YAML을 일상적으로 손편집하는 흐름은 목표가 아니며, 현재는 계약과 예제 검증만 구현되어 런타임 설정 로더나 주문 실행을 활성화하지 않습니다. PAPER 기본값, quote·캘린더 신선도, 주문별·일별 한도, 회전율·비중 상한, 킬 스위치와 제한적 한국 live 승격 조건은 [운영 설정 레퍼런스](docs/CONFIG.md)를 참고하세요.
+첫 화면은 저장된 스냅샷이 없을 때 한 번 실제 계좌 수집을 시도합니다. 설정에서 관리 현금을 고정 원화 금액으로 포함하거나 평가에서 제외하고, 모든 보유종목을 안전자산·핵심 공격자산·위성 공격자산 중 한 곳에 배치한 뒤 네 자산군 목표 합계를 100%로 맞춥니다. 미보유 종목은 로컬 검증 카탈로그 이름 검색 또는 국내 코드·미국 티커의 Toss 정확 검증으로 추가합니다. 목표와 운영 설정은 모두 초안 저장과 적용을 분리합니다.
+
+정상 검증 순서는 `Shadow 계획 → Paper 계획 및 실행 → 주문 원장 확인`입니다. Live를 사용하려면 설정에서 LIVE 초안을 저장·적용하고, 킬 스위치를 명시적으로 해제한 뒤 같은 설정을 극소액 Live로 별도 승격해야 합니다. 이후에도 Live 계획의 정확한 확인 문구와 주문별 승인, 주문 직전 조회를 다시 통과해야 하며 한 번에 첫 주문 한 건만 제출합니다. 개발·테스트 과정에서는 실제 계좌 주문을 호출하지 않습니다.
+
+루트의 `config.example.yaml`은 운영 정책 계약 예제입니다. 정상 경로는 설정 화면에서 현재 계좌를 서버가 HMAC으로 봉인한 DRAFT를 만들고 해시·버전을 검토한 뒤 적용하는 흐름입니다. PAPER 기본값, quote·캘린더 신선도, 주문별·일별 한도, 회전율·비중 상한, 킬 스위치와 제한적 한국 Live 승격 조건은 [운영 설정 레퍼런스](docs/CONFIG.md)를 참고하세요.
 
 전체 검증은 다음 명령으로 실행합니다.
 
@@ -114,7 +128,9 @@ apps/engine/src/
 ├── config/                          Zod 환경설정과 Config Module
 ├── infrastructure/prisma/           Prisma Module과 singleton PrismaService
 └── modules/
-    ├── system/                      health endpoint
+    ├── system/                      운영 설정 기반 health endpoint
+    ├── operational-config/          설정 버전·활성화·킬 스위치·Live 승격
+    ├── orders/                      Paper/Live 실행·원장·취소·대사·복구
     └── portfolio/
         ├── presentation/            Controller
         ├── application/             Service, 수집 use case, presenter
@@ -124,7 +140,7 @@ apps/engine/src/
 
 ## Vercel 운영
 
-같은 Git 저장소에서 `apps/web`과 `apps/engine`을 각각 Vercel Project로 가져옵니다. PostgreSQL은 `portfolio-rebalancer-engine`에 연결한 Vercel Marketplace Supabase를 기본 운영 경로로 사용합니다. Integration이 자동 주입하는 pooled `POSTGRES_PRISMA_URL`은 runtime, direct `POSTGRES_URL_NON_POOLING`은 Prisma migration에 사용하며 기존 `DATABASE_URL`과 `DATABASE_DIRECT_URL`은 로컬·호환 fallback으로 유지합니다.
+같은 Git 저장소에서 `apps/web`과 `apps/engine`을 각각 Vercel Project로 가져옵니다. PostgreSQL migration은 object owner/direct `DATABASE_URL`로만 수행하고, engine에는 별도로 만든 제한 역할의 pooled `DATABASE_RUNTIME_URL`만 주입합니다. Marketplace가 제공하는 owner 성격의 URL을 그대로 runtime에 사용하지 않습니다. migration 뒤 `pnpm db:bootstrap:runtime`을 실행해 현재 객체에 최소 권한을 다시 부여해야 하며 새 migration 객체는 bootstrap 전 자동 노출되지 않습니다.
 
 engine 프로젝트의 Root Directory는 `apps/engine`으로 지정하고 외부 workspace source 포함을 활성화합니다. Framework, Build Command와 Output Directory는 override하지 않습니다. `src/main.ts`는 일반 Nest 애플리케이션과 동일하게 `NestFactory.create()`와 하나의 `app.listen()` 경로만 사용합니다. Vercel zero-config가 NestJS와 이 진입점을 자동 감지하므로 `vercel.json`에는 서울 리전과 Cron만 선언합니다. Vercel이 제공하는 `PORT`를 `ENGINE_PORT`보다 우선하고, 실행 시간과 메모리는 Fluid Compute와 충돌하지 않도록 Dashboard의 Functions 설정에서 관리합니다.
 
@@ -132,7 +148,7 @@ engine은 별도 webpack 번들을 만들지 않습니다. 로컬에서는 `tsx`
 
 토스증권은 허용 IP를 요구하므로 engine 프로젝트에서 Vercel Pro Static IPs 또는 Enterprise Secure Compute를 활성화해야 합니다. 해당 IP를 토스증권에 등록한 뒤에만 `TOSS_EGRESS_ALLOWLIST_CONFIRMED=true`를 설정하세요. 일반 Vercel 동적 출구 IP에서는 실제 수집이 코드에서 차단됩니다.
 
-Production engine에는 Supabase Integration의 `POSTGRES_PRISMA_URL`, `POSTGRES_URL_NON_POOLING`과 직접 관리하는 `TOSSINVEST_CLIENT_ID`, `TOSSINVEST_CLIENT_SECRET`, `ENGINE_SERVICE_TOKEN`, `CRON_SECRET`을 민감 환경변수로 설정합니다. Supabase Integration은 engine 프로젝트에만 연결하고 web에는 `ENGINE_INTERNAL_URL`과 같은 `ENGINE_SERVICE_TOKEN`만 설정합니다. Preview에는 운영 토스 키를 주입하지 않는 것을 기본으로 합니다.
+Production migration 환경에는 owner `DATABASE_URL`을, engine에는 제한 `DATABASE_RUNTIME_URL`, `TOSSINVEST_CLIENT_ID`, `TOSSINVEST_CLIENT_SECRET`, `ACCOUNT_REFERENCE_KEY`, `ENGINE_SERVICE_TOKEN`, `CRON_SECRET`을 민감 환경변수로 설정합니다. Web에는 `ENGINE_INTERNAL_URL`, 같은 `ENGINE_SERVICE_TOKEN`, `WEB_OPERATOR_ID`, `WEB_OPERATOR_PASSWORD`, `WEB_OPERATOR_SESSION_SECRET`, `WEB_OPERATOR_ALLOWED_ORIGINS`를 설정합니다. Production은 Secure `__Host-` 세션 쿠키를 강제합니다. Preview에는 운영 토스 키를 주입하지 않는 것을 기본으로 합니다.
 
 로컬 환경변수도 같은 권한 경계를 사용합니다. Web은 `apps/web/.env.local`, engine은 `apps/engine/.env.local`, Prisma migration은 `packages/database/.env.local`을 읽습니다. `.env.local`은 Git에 포함하지 않으며, `vercel env pull`은 파일을 덮어쓰므로 앱별 파일에 수동 override와 Vercel pull 결과를 섞지 않습니다.
 
@@ -145,9 +161,10 @@ Production engine에는 Supabase Integration의 `POSTGRES_PRISMA_URL`, `POSTGRES
 - `buying power`를 검증된 평가용 현금으로 간주하지 않습니다.
 - 설정 저장, 계획 생성과 주문 제출을 서로 다른 동작으로 유지합니다.
 - 브라우저에서 증권사 API를 직접 호출하거나 비밀정보를 전달하지 않습니다.
-- 실제 주문은 별도 설계 검토, 원장·멱등성·한도·복구와 명시적 승인 조건이 모두 구현되기 전까지 활성화하지 않습니다.
+- Live 코드가 존재해도 기본 PAPER, 별도 설정 적용, 킬 스위치 해제, 계좌 allowlist, 승격, 주문별 승인과 pretrade 검증 없이는 실제 주문을 전송하지 않습니다.
+- 실제 계좌 극소액 검증과 장기 운영 승격은 코드 구현과 별도이며 명시적인 사용자 승인 없이 수행하지 않습니다.
 
-향후 운영 인터페이스는 `setup`, `doctor`, `check`, `plan`, `run`, `status`, `explain`, `recover`로 내부 복잡성을 숨깁니다. 운영 설정의 strict 계약과 예제는 구현되었지만 이를 질문형으로 생성·저장하는 setup UI/CLI와 실제 주문 흐름은 아직 구현되지 않았으며 [구현 계획](docs/TODO.md)에서 추적합니다.
+Web GUI는 목표·운영 설정, 계획, Paper/Live 실행, 상태 확인, 취소와 UNKNOWN 복구를 공통 엔진 서비스로 제공합니다. 동일 기능의 CLI `setup`, `doctor`, `check`, `plan`, `run`, `status`, `explain`, `recover`와 전용 doctor/explain 화면은 [구현 계획](docs/TODO.md)에서 계속 추적합니다.
 
 ## 디자인 기준
 
@@ -167,9 +184,11 @@ Production engine에는 Supabase Integration의 `POSTGRES_PRISMA_URL`, `POSTGRES
 - [Web GUI 설계](docs/WEB_UI.md)
 - [운영 설정 레퍼런스](docs/CONFIG.md)
 - [토스증권 API 연동](docs/API_TOSS.md)
+- [제한형 Live 코드 안전 리뷰](docs/LIVE_SAFETY_REVIEW.md)
 - [아키텍처 결정 기록](docs/adr/0001-typescript-hexagonal-monorepo.md)
 - [NestJS engine 결정 기록](docs/adr/0002-nestjs-engine-on-vercel.md)
 - [한국 시장 첫 live 범위 결정 기록](docs/adr/0003-korean-market-first-live-scope.md)
+- [승인 전용 일회성 Live dispatch 결정 기록](docs/adr/0004-authorized-one-shot-live-dispatch.md)
 - [에이전트 작업 지침](AGENTS.md)
 
 ## 개발 단계
@@ -177,9 +196,9 @@ Production engine에는 Supabase Integration의 `POSTGRES_PRISMA_URL`, `POSTGRES
 1. 순수 계산과 읽기 전용 합성 데이터 수직 슬라이스 (완료)
 2. Prisma/PostgreSQL 저장소와 감사 가능한 실계좌 스냅샷 (완료)
 3. 토스증권 조회 API를 연결한 shadow 모드 (완료)
-4. 자체 모의 체결기를 사용하는 paper 모드
-5. 위험 차단, 주문 원장, 멱등성과 장애 복구
-6. 모든 승격 조건과 별도 검토를 통과한 뒤 제한적 실거래 검토
+4. 자체 모의 체결기를 사용하는 Paper 모드 (완료)
+5. 위험 차단, 주문 원장, 멱등성과 안전한 Live 코드 경로 (완료)
+6. 장기 Shadow/Paper 관찰, 명시적 극소액 실계좌 검증과 운영 런북 검증 (미완료)
 
 ## 주의
 

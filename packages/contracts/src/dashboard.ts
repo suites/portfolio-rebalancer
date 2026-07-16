@@ -112,7 +112,6 @@ export const DashboardSnapshotSchema = z
     allocations: z.array(DashboardAllocationSchema),
     unmanagedHoldings: z.array(DashboardUnmanagedHoldingSchema).default([]),
     blockReason: DashboardBlockReasonSchema.nullable(),
-    liveOrdersEnabled: z.literal(false),
   })
   .superRefine((snapshot, context) => {
     if (snapshot.managedCashSource === "UNSET" && snapshot.managedCashMinor !== null) {

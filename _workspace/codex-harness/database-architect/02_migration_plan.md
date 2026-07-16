@@ -18,3 +18,13 @@
 3. append-only row guard가 있는 모든 테이블에 재실행 가능한 `BEFORE TRUNCATE` guard를 설치한다.
 4. immutable, running-state, provenance trigger를 `ENABLE ALWAYS`로 고정한다.
 5. static contract와 disposable PostgreSQL rejection path를 검증한다.
+
+## Restricted runtime role bootstrap
+
+1. compose init hook가 비밀정보를 파일에 저장하지 않고 환경변수에서 제한 LOGIN role을 만든다.
+2. Prisma migration은 `DATABASE_URL` owner 연결로만 실행한다.
+3. migration 성공 뒤 `bootstrap-runtime-role.cjs`가 current schema를 열거해 권한을 재적용한다.
+4. PUBLIC의 public-schema CREATE, database TEMP, table privileges와 function EXECUTE 기본권한을 제거한다.
+5. runtime group에는 현재 application table SELECT/INSERT와 명시적 UPDATE/DELETE allowlist만 부여한다.
+6. `_prisma_migrations`, TRUNCATE, DDL ownership과 future-object 자동 grant는 허용하지 않는다.
+7. engine 시작 시 현재/session role, role flags, ownership, schema/TEMP/TRUNCATE/migration-ledger 권한을 다시 검사한다.

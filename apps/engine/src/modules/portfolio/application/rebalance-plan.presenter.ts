@@ -59,7 +59,6 @@ export function presentRebalancePlan(run: StoredRun): RebalancePlanSnapshotContr
   return RebalancePlanSnapshotSchema.parse({
     state: "READY",
     latest,
-    liveOrdersEnabled: false,
   });
 }
 
@@ -67,7 +66,6 @@ export function unavailableRebalancePlanSnapshot(): RebalancePlanSnapshotContrac
   return RebalancePlanSnapshotSchema.parse({
     state: "UNAVAILABLE",
     latest: null,
-    liveOrdersEnabled: false,
   });
 }
 
@@ -75,7 +73,6 @@ function emptyRebalancePlanSnapshot(): RebalancePlanSnapshotContract {
   return RebalancePlanSnapshotSchema.parse({
     state: "NO_PLAN",
     latest: null,
-    liveOrdersEnabled: false,
   });
 }
 

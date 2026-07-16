@@ -365,6 +365,12 @@ describe("TossReadSource validation and compatibility", () => {
             },
             freeForm:
               "client_secret=synthetic-secret; token=abc.defghijkl.mnopqrstuv; 계좌 번호 123-456-7890",
+            stringifiedJson: JSON.stringify({
+              accountNo: "12345678901",
+              refresh_token: "opaque-refresh-token",
+            }),
+            escapedJson:
+              'upstream={\\"accountNo\\":\\"998877665544\\",\\"refresh_token\\":\\"escaped-refresh-token\\"}',
           },
         },
       ],
@@ -402,6 +408,9 @@ describe("TossReadSource validation and compatibility", () => {
               extra: "[REDACTED]",
             },
             freeForm: "client_secret=[REDACTED]; token=[REDACTED]; 계좌 번호 [REDACTED]",
+            stringifiedJson: '{"accountNo":"[REDACTED]","refresh_token":"[REDACTED]"}',
+            escapedJson:
+              'upstream={\\"accountNo\\":\\"[REDACTED]\\",\\"refresh_token\\":\\"[REDACTED]\\"}',
           },
         },
       ],
@@ -673,6 +682,44 @@ describe("TossReadSource validation and compatibility", () => {
       },
     });
   });
+
+  it("주문 직전 계좌 증거는 원 계좌번호 대신 HMAC과 마스킹 값만 저장한다", async () => {
+    const response = await reply(
+      "getAccounts",
+      {
+        result: [{ accountNo: "12345678901", accountSeq: 17, accountType: "BROKERAGE" }],
+      },
+      { auditReference: "11111111-1111-4111-8111-111111111111" },
+    );
+    mocks.read.getAccounts.mockResolvedValue(response);
+    const onResponseValidation = vi
+      .fn<TossResponseValidationCallback>()
+      .mockResolvedValue(responseValidationId);
+    const source = createSource(onResponseValidation);
+
+    const result = await source.listAccountsEvidence();
+
+    expect(result.responseValidationId).toBe(responseValidationId);
+    const event = onResponseValidation.mock.calls[0]?.[0];
+    expect(event?.operationId).toBe("getAccounts");
+    expect(event?.outcome).toBe("PASSED");
+    const redactedResult = (
+      event?.redactedBody as
+        | {
+            result?: Array<{
+              accountReferenceHmac?: unknown;
+              accountNo?: unknown;
+              accountType?: unknown;
+            }>;
+          }
+        | undefined
+    )?.result;
+    expect(redactedResult).toHaveLength(1);
+    expect(redactedResult?.[0]?.accountReferenceHmac).toMatch(/^[a-f0-9]{64}$/);
+    expect(redactedResult?.[0]?.accountNo).toBe("**** 8901");
+    expect(redactedResult?.[0]?.accountType).toBe("BROKERAGE");
+    expect(JSON.stringify(event)).not.toContain("12345678901");
+  });
 });
 
 const samsung = instrument("KR", "005930");
@@ -758,6 +805,8 @@ function operationUrl(operationId: TossOperationId): string {
       return `${origin}/api/v1/stocks/005930/warnings`;
     case "getOrders":
       return `${origin}/api/v1/orders?status=OPEN`;
+    case "getAccounts":
+      return `${origin}/api/v1/accounts`;
     default:
       throw new Error(`테스트 business operation URL이 없습니다: ${operationId}`);
   }

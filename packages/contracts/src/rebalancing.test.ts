@@ -56,7 +56,6 @@ describe("rebalancing contracts", () => {
     const parsed = RebalancePlanSnapshotSchema.parse({
       state: "READY",
       latest: latestPlan,
-      liveOrdersEnabled: false,
     });
 
     expect(parsed.latest?.planHash).toBe("b".repeat(64));
@@ -84,7 +83,6 @@ describe("rebalancing contracts", () => {
             },
           ],
         },
-        liveOrdersEnabled: false,
       }).success,
     ).toBe(false);
   });

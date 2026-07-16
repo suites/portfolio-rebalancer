@@ -31,18 +31,12 @@ export function calculateOrderGrossReservation(input: {
   readonly upperPriceLimitMinor: bigint | null;
 }): OrderGrossReservationDecision {
   if (input.quantity <= 0n || input.limitPriceMinor <= 0n) {
-    return blocked(
-      "ORDER_RESERVATION_INPUT_INVALID",
-      "주문 수량과 지정가는 0보다 커야 합니다.",
-    );
+    return blocked("ORDER_RESERVATION_INPUT_INVALID", "주문 수량과 지정가는 0보다 커야 합니다.");
   }
 
   const plannedGrossMinor = multiplyWithinSigned64(input.quantity, input.limitPriceMinor);
   if (plannedGrossMinor === null) {
-    return blocked(
-      "ORDER_RESERVATION_OVERFLOW",
-      "계획 주문금액이 저장 가능한 범위를 넘었습니다.",
-    );
+    return blocked("ORDER_RESERVATION_OVERFLOW", "계획 주문금액이 저장 가능한 범위를 넘었습니다.");
   }
 
   if (input.side === "BUY") {
@@ -67,10 +61,7 @@ export function calculateOrderGrossReservation(input: {
       plannedGrossMinor,
     );
   }
-  const reservedGrossMinor = multiplyWithinSigned64(
-    input.quantity,
-    input.upperPriceLimitMinor,
-  );
+  const reservedGrossMinor = multiplyWithinSigned64(input.quantity, input.upperPriceLimitMinor);
   if (reservedGrossMinor === null) {
     return blocked(
       "ORDER_RESERVATION_OVERFLOW",

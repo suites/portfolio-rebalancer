@@ -51,13 +51,19 @@ pnpm toss:sync
 
 고정 명세에는 총 30개 operation이 있습니다.
 
-| 구분                    | 개수 | 현재 구현                                       |
-| ----------------------- | ---: | ----------------------------------------------- |
-| OAuth 토큰 발급         |    1 | `TossTokenProvider` 내부 호출                   |
-| 조회용 GET business API |   23 | `TossReadApi`의 명시적 메서드                   |
-| 계좌 변경 API           |    6 | 타입·명시적 메서드는 있으나 전송 전에 하드 차단 |
+| 구분                    | 개수 | 현재 구현                                               |
+| ----------------------- | ---: | ------------------------------------------------------- |
+| OAuth 토큰 발급         |    1 | `TossTokenProvider` 내부 호출                           |
+| 조회용 GET business API |   23 | `TossReadApi`의 명시적 메서드                           |
+| 계좌 변경 API           |    6 | raw 표면 하드 차단, 별도 승인 어댑터는 생성·취소만 연결 |
 
-operation 표면과 제품에 연결된 기능은 구분합니다. 공식 명세 parity를 위해 `TossTradingApi`에 쓰기 메서드 6개가 존재하지만, `TOSS_TRANSPORT_DESCRIPTOR`는 transport가 제공하는 다음 18개 read-only capability만 설명하며 `orders.write`와 `orders.conditional.write`를 포함하지 않습니다. 중립 어댑터와 실제 계좌 연결은 아직 없으므로 이 목록을 활성 제품 기능으로 해석하지 않습니다.
+operation 표면과 제품에 연결된 기능은 구분합니다. 공식 명세 parity를 위해
+`TossTradingApi`에 쓰기 메서드 6개가 존재하지만 이 일반 표면은 항상
+`TOSS_LIVE_TRADING_DISABLED`로 차단됩니다. `TOSS_TRANSPORT_DESCRIPTOR`도 transport가
+제공하는 다음 18개 read-only capability만 설명하며 `orders.write`와
+`orders.conditional.write`를 포함하지 않습니다. 제한형 Live는 이 descriptor를
+넓히지 않고, 봉인된 authorization이 필요한 별도 `TossLiveOrderAdapter`와
+`BrokerLiveOrderPort`로만 연결합니다.
 
 ```text
 accounts.read                 holdings.read
@@ -87,18 +93,20 @@ rankings.read                 indicators.read
 | Order                     |    3 | 일반 주문 생성·정정·취소               |
 | Conditional Order         |    3 | 조건주문 생성·수정·취소                |
 
-전체 타입 전송 계층이 있다는 것은 모든 제품 유스케이스가 완성되었다는 뜻이 아닙니다. 현재 계좌·보유자산·KRW·USD 매수 가능 금액과 필요 시 USD/KRW 환율의 실제 read-only 수집, 런타임 검증과 PostgreSQL 저장까지 연결했습니다. 매수 가능 금액은 관리 현금과 분리된 `valuationEligible=false` 증거로만 사용합니다. 다음은 아직 미구현입니다.
+전체 타입 전송 계층이 있다는 것은 모든 제품 유스케이스가 완성되었다는 뜻이 아닙니다.
+현재 계좌·보유자산·가격·호가·가격 제한·시장 캘린더·KRW/USD 매수 가능 금액·매도
+가능 수량·수수료와 필요 시 USD/KRW 환율을 중립 모델로 변환하고, 런타임 검증 후
+PostgreSQL 불변 증거로 저장합니다. 매수 가능 금액은 관리 현금과 분리된
+`valuationEligible=false` 증거로만 사용합니다.
 
 보유 응답의 `marketCountry(KR/US)`와 종목 기본 정보의 `market(KOSPI/NASDAQ 등)`은
 의미가 다릅니다. 애플리케이션 정규 키는 `marketCountry + symbol`을 사용하고 종목
 정보의 `market`은 `listingMarket`으로 별도 저장합니다.
 
-- 나머지 조회 API를 `packages/broker`의 중립 모델로 변환하는 어댑터
-- 가격 API의 관측 시각을 이용한 주문용 freshness 검증
-- 자동 재시도·jitter, 그룹별 client-side limiter와 request ID 감사 저장
-- 계획·주문 원장과 PostgreSQL migration 확장
-- paper 체결기, 주문 대사와 복구
-- live 주문 승인 구성
+- 포트폴리오 유스케이스에 필요하지 않은 랭킹·지표·캔들 등 나머지 조회 API의 중립 어댑터
+- 평가용 현금 source of truth의 실계좌 표본 검증
+- 주문 정정과 조건주문의 안전한 제품 경로
+- 미국·소수 수량·시장가·정규장 밖 주문의 별도 승격
 
 ## 4. 인증
 
@@ -113,7 +121,10 @@ rankings.read                 indicators.read
 
 현재 `TossTokenProvider`는 실행 중인 Nest 애플리케이션 프로세스 메모리에만 토큰을 저장하고 만료 30초 전부터 새 토큰을 요구합니다. 동시에 여러 요청이 갱신을 요구해도 single-flight로 발급을 한 번만 수행하며, PostgreSQL collection lease가 여러 Vercel runtime 인스턴스의 동시 수집도 차단합니다. 토큰 요청은 10초 후 중단하고 업무 API에서 `401`을 받으면 캐시 토큰을 즉시 무효화합니다. 영구 캐시나 refresh token은 사용하지 않습니다.
 
-`clientId`, `clientSecret`과 access token은 서버에만 둡니다. HTML, 브라우저 계약, 로그와 fixture에 포함하지 않습니다. 인증 오류 메시지에 자격증명이 포함돼도 알려진 자격증명 값을 `[REDACTED]`로 바꾸는 회귀 테스트가 있습니다. 전체 로그·응답 마스킹은 향후 공통 오류 계층에서 추가 검증해야 합니다.
+`clientId`, `clientSecret`과 access token은 서버에만 둡니다. HTML, 브라우저 계약,
+로그와 fixture에 포함하지 않습니다. 인증 오류와 저장 전 원본 응답은 알려진
+자격증명·계좌 식별자를 redaction하고 회귀 테스트로 고정합니다. 새 외부 오류 필드나
+fixture를 추가할 때도 합성 식별자와 마스킹 테스트가 필수입니다.
 
 ## 5. 데이터와 오류 규칙
 
@@ -132,26 +143,53 @@ rankings.read                 indicators.read
 - `x-ratelimit-group`: `rateLimitGroup`
 - `x-request-id` 또는 `x-toss-request-id`: `requestId`
 
-실제 응답에서 이 헤더가 항상 제공되는지는 read-only 표본으로 확인하기 전까지 `[확인 필요]`입니다. 현재 값은 관측과 다음 행동 안내를 위한 메타데이터일 뿐 자동 대기나 재요청을 수행하지 않습니다. 자동 retry·jitter와 그룹별 limiter는 미구현이며 쓰기 요청은 일반 재시도 대상이 아닙니다.
+실제 응답에서 이 헤더가 항상 제공되는지는 read-only 표본으로 확인하기 전까지
+`[확인 필요]`입니다. transport는 rate-limit group별 요청을 직렬화하고, GET 요청의
+`429`만 정수형 `Retry-After`와 제한된 jitter 정책 안에서 재시도합니다. 요청 ID와
+rate-limit metadata는 감사 증거에 저장합니다. 쓰기 요청, timeout, 네트워크 오류와
+모호한 응답은 일반 재시도 대상이 아닙니다.
 
 ## 6. 주문 안전 경계
 
-토스증권에는 확인된 별도 sandbox/paper 주문 서버가 없습니다. 현재 기본 모드와 Web GUI는 실제 조회 데이터를 사용하는 읽기 전용 `shadow`이며, `TossTradingApi`는 다음 6개 operation의 타입과 명시적 메서드를 노출하되 `TOSS_LIVE_TRADING_DISABLED` 오류로 네트워크 요청 전에 무조건 차단합니다. 안전한 executor와 ledger가 설계되기 전에는 이 차단을 해제하는 경로가 전혀 없습니다.
+토스증권에는 확인된 별도 sandbox/paper 주문 서버가 없습니다. Paper는 실제
+호가·호가잔량·수수료 증거를 내부 `PaperOrderExecutor`가 재생하며 브로커 쓰기 요청을
+보내지 않습니다.
+
+`TossTradingApi`는 공식 parity를 위해 다음 6개 operation의 타입과 명시적 메서드를
+노출하지만 모두 `TOSS_LIVE_TRADING_DISABLED` 오류로 네트워크 요청 전에
+차단합니다. 이 차단을 설정 플래그로 해제하는 경로는 없습니다.
 
 - 일반 주문 생성, 정정, 취소
 - 조건주문 생성, 수정, 취소
 
-현재는 live authorization 입력이나 활성화 구성이 존재하지 않습니다. 활성화 경로를 설계하기 전 최소한 다음 조건이 필요합니다.
+제한형 Live는 별도 `TossLiveOrderAdapter`만 사용합니다. 일반 지정가 주문 생성과
+취소만 지원하며, engine이 다음 증거를 먼저 DB에 봉인해야 호출할 수 있습니다.
 
-- 저장된 계획과 `logical_order_id` UNIQUE 원장
-- 결정적인 `clientOrderId`와 재시작 대사
-- 계좌 허용 목록, 주문별·일별 한도와 킬 스위치
-- 최신 시세·잔고·미체결 주문·매수/매도 가능성 재검사
-- 만료되는 수동 승인과 명시적인 live 모드 다중 조건
-- 부분체결, 정정, 취소, timeout과 `UNKNOWN_BLOCKED` 복구
-- 독립 코드 리뷰, 소액 검증과 운영 런북
+- ACTIVE `LIVE` 설정과 현재 계좌 allowlist HMAC
+- 실제 킬 스위치 `DISENGAGED`와 동일 설정 버전의 별도 승격 `GRANTED`
+- 저장된 계획 hash와 만료되지 않은 주문별 수동 승인
+- 최신 시세·호가·캘린더·가격 제한·종목 경고·미체결 주문·매수/매도 가능성
+- `logical_order_id` UNIQUE, 결정적인 36자 `clientOrderId`와 일일 한도 예약
+- 네트워크 호출 직전의 A submission authorization과 B 일회성 dispatch claim
+
+한 Live 실행은 매도 우선 첫 주문 한 건만 보내고 즉시 원 주문을 조회해 대사합니다.
+다음 주문은 새 스냅샷과 새 계획 없이는 제출하지 않습니다. 취소도 별도 운영자 확인과
+cancel dispatch claim 뒤 한 번만 전송하며, 최종 `CANCELED`는 원 주문 조회로만
+확정합니다. 주문 정정과 조건주문은 제품 경로에 연결하지 않습니다.
 
 공식 명세상 일반 주문의 `clientOrderId`는 최대 36자이며 서버 멱등성 유효 시간은 10분입니다. 이 값은 보조 방어선일 뿐입니다. 10분 뒤에도 결과가 불명확하면 자동 재제출하지 않습니다. 정정·취소와 조건주문의 실계좌 멱등성 동작은 fixture와 read-only 대사만으로 확정할 수 없으므로 `[확인 필요]`이며, 확인 전 자동 재시도하지 않습니다.
+
+A 이후 B가 없고 `SUBMIT` 증거도 없음을 DB가 증명한 경우에만 비전송 증거를 남기고
+주문을 `REJECTED`로 복구합니다. B가 존재하거나 존재 가능성을 배제할 수 없으면 자동
+재제출하지 않습니다. B 이후 저장 중단에서는 미체결 목록의 종목·방향·수량·지정가가
+같다는 이유만으로 외부 주문을 자동 귀속하지 않습니다. 조회 증거에 봉인한
+`clientOrderId`가 없으므로 10분 뒤 broker ID 없는 `UNKNOWN_BLOCKED`로 잠그고 운영자
+exact 복구만 허용합니다. 모호한 주문은 원 주문의
+종목·방향·수량·지정가가 방금 조회한 브로커 증거와 일치하고 운영자가 broker ID·상태·
+지정가·누적 체결수량·체결총액·수수료를 exact 입력한 경우에만 복구합니다.
+
+이 코드는 실계좌 운영 승격 완료를 의미하지 않습니다. 장기 Shadow/Paper 비교, 독립
+실거래 리뷰, 극소액 실제 주문과 원장 대사, 장애 런북은 별도 미완료 검증입니다.
 
 ## 7. 다른 증권사 추가
 
@@ -169,19 +207,44 @@ rankings.read                 indicators.read
 
 ## 8. 현재 engine 및 Web API
 
-NestJS 11 engine은 Fastify adapter로 다음 내부 route를 제공합니다. dashboard와 refresh는 `ENGINE_SERVICE_TOKEN` Guard, Cron은 별도 `CRON_SECRET` Guard로 보호합니다.
+NestJS 11 engine은 Fastify adapter로 다음 내부 route를 제공합니다. 상태 확인용
+`GET /internal/v1/health`만 무인증이며 설정·계획·주문·수집 route는
+`ENGINE_SERVICE_TOKEN` Guard, Cron은 별도 `CRON_SECRET` Guard로 보호합니다.
 
 - `GET /internal/v1/health`
 - `GET /internal/v1/dashboard`
 - `POST /internal/v1/portfolio/refresh`
+- `GET /internal/v1/records`
+- `GET /internal/v1/target-settings`
+- `POST /internal/v1/target-settings/drafts`
+- `POST /internal/v1/target-settings/drafts/:version/activate`
+- `GET /internal/v1/instruments/search`
+- `POST /internal/v1/instrument-validations`
+- `GET /internal/v1/rebalance-plans/latest`
+- `POST /internal/v1/rebalance-plans`
+- `GET /internal/v1/orders`
+- `POST /internal/v1/rebalance-plans/:planId/live-approvals`
+- `POST /internal/v1/rebalance-plans/:planId/execute`
+- `POST /internal/v1/orders/:orderId/cancel`
+- `POST /internal/v1/orders/:orderId/reconcile`
+- `POST /internal/v1/orders/:orderId/recover`
+- `GET /internal/v1/operational-config`
+- `POST /internal/v1/operational-config/drafts/current-account`
+- `POST /internal/v1/operational-config/drafts/activate`
+- `POST /internal/v1/live-promotion`
+- `POST /internal/v1/kill-switch`
 - `GET /internal/v1/cron/portfolio`: Vercel Cron, 평일 00:00 UTC/09:00 KST
 
 Web BFF는 다음 route를 제공합니다.
 
-- `GET /api/v1/system/health`: 서버 상태, 기본 paper 모드, live 비활성 여부
-- `GET /api/v1/brokers`: 실제 engine 연결, 마지막 관측 시각과 read-only adapter 상태
+- `GET /api/v1/system/health`: 실제 운영 모드, 킬 스위치, 승격과 Live 허용 상태
+- `GET /api/v1/brokers`: engine 연결, 마지막 관측 시각과 `live_gated_ready/blocked`
 
-Web route는 주문을 생성하거나 브라우저에 engine 비밀정보를 전달하지 않습니다. 첫 화면은 저장된 스냅샷이 없을 때만 engine refresh를 호출하며 결과를 `DashboardSnapshotSchema`로 검증합니다.
+Web의 Server Action/BFF는 위 내부 API를 호출할 수 있지만 브라우저에 service token,
+계좌 HMAC, 승인 ID나 Toss 비밀정보를 전달하지 않습니다. 모든 응답은 공유 Zod 계약으로
+재검증합니다. 콘솔은 서명된 단일 운영자 세션과 동일 출처 CSRF를 요구합니다. Live
+승인·실행, Live 승격, 킬 스위치 해제, 취소와 exact 복구는 최근 5분 이내 재인증
+증거를 engine 감사 헤더에 함께 전달하며, engine도 이 시간 경계를 다시 확인합니다.
 
 Vercel의 기본 출구 IP는 동적입니다. Production engine은 Pro Static IPs 또는 Enterprise Secure Compute를 활성화하고 해당 IP를 토스증권에 allowlist한 뒤 `TOSS_EGRESS_ALLOWLIST_CONFIRMED=true`를 설정해야 합니다. Preview에는 운영 토스 자격증명을 주입하지 않습니다.
 
@@ -192,11 +255,15 @@ Vercel의 기본 출구 IP는 동적입니다. Production engine은 Pro Static I
 - 고정 버전 `1.2.4`, operation 30개, GET 23개, 계좌 변경 6개
 - manifest의 모든 business operation과 명시적 클라이언트 메서드의 parity
 - transport descriptor가 read-only capability만 설명하고 write capability를 제외하는지
-- 쓰기 호출이 `TOSS_LIVE_TRADING_DISABLED`로 fetch 전에 하드 차단되는지
+- raw 쓰기 호출이 `TOSS_LIVE_TRADING_DISABLED`로 fetch 전에 하드 차단되는지
+- Live adapter가 정확하고 만료되지 않은 authorization 없이는 fetch를 호출하지 않는지
+- Live 생성·취소가 한 번만 전송되고 모호한 응답을 자동 재시도하지 않는지
+- A/B dispatch claim, 비전송 복구와 `UNKNOWN_BLOCKED` 10분 경계
 - 동시 토큰 요청이 한 번만 발급되는지
 - 공식 origin만 사용하고 비어 있거나 비정상인 토큰 응답을 거부하는지
 - 공통 request timeout이 안전 오류로 변환되는지
 - `429`의 retry, rate-limit group과 request ID 메타데이터를 추출하는지
+- GET bounded retry와 rate-limit group 직렬화가 쓰기 재시도로 확장되지 않는지
 - `401` 이후 캐시 토큰을 무효화하고 다음 호출에서 다시 발급하는지
 - 인증 오류가 자격증명을 노출하지 않는지
 - JSON이 아닌 인증 오류도 안전한 도메인 오류로 변환되는지

@@ -57,7 +57,6 @@ function engineUnavailableDashboard(): DashboardSnapshotContract {
       protectiveAction: "실제 주문과 리밸런싱 계획 생성을 차단했습니다.",
       nextAction: "PostgreSQL과 engine 프로세스 상태를 확인하세요.",
     },
-    liveOrdersEnabled: false,
   });
 }
 

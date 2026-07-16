@@ -4,17 +4,36 @@ import { cache } from "react";
 
 import {
   ConsoleRecordsSnapshotSchema,
+  CancelOrderReceiptSchema,
+  ExecuteRebalancePlanReceiptSchema,
   InstrumentCatalogSearchResultSchema,
   InstrumentValidationResultSchema,
+  LivePlanApprovalReceiptSchema,
+  OperationalConfigSnapshotSchema,
+  OrdersSnapshotSchema,
   RebalancePlanSnapshotSchema,
+  StoredOrderReceiptSchema,
   TargetSettingsSnapshotSchema,
+  type ActivateOperationalConfigDraftInputContract,
+  type CancelOrderInputContract,
+  type CancelOrderReceiptContract,
   type ConsoleRecordsSnapshotContract,
+  type ExecuteRebalancePlanReceiptContract,
   type InstrumentCatalogSearchResultContract,
   type InstrumentValidationResultContract,
+  type KillSwitchCommandContract,
+  type LivePlanApprovalReceiptContract,
+  type LivePromotionCommandContract,
+  type OperationalConfigSnapshotContract,
+  type OrdersSnapshotContract,
   type RebalancePlanSnapshotContract,
+  type RecoverUnknownOrderInputContract,
+  type StoredOrderReceiptContract,
   type TargetSettingsDraftInputContract,
   type TargetSettingsSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
+
+import type { OperatorAuditContext } from "./operator-auth-core";
 
 const ENGINE_INTERNAL_URL = process.env.ENGINE_INTERNAL_URL ?? "http://127.0.0.1:4100";
 
@@ -35,8 +54,6 @@ export const getEngineRecords = cache(async (): Promise<ConsoleRecordsSnapshotCo
     return ConsoleRecordsSnapshotSchema.parse({
       state: "UNAVAILABLE",
       records: [],
-      orderLedgerState: "NOT_IMPLEMENTED",
-      liveOrdersEnabled: false,
     });
   }
 });
@@ -60,6 +77,26 @@ export const getEngineRebalancePlan = cache(async (): Promise<RebalancePlanSnaps
     return unavailableRebalancePlan();
   }
 });
+
+export const getEngineOrders = cache(async (): Promise<OrdersSnapshotContract> => {
+  try {
+    return OrdersSnapshotSchema.parse(await requestEngine("/internal/v1/orders", "GET"));
+  } catch {
+    return unavailableOrders();
+  }
+});
+
+export const getEngineOperationalConfig = cache(
+  async (): Promise<OperationalConfigSnapshotContract> => {
+    try {
+      return OperationalConfigSnapshotSchema.parse(
+        await requestEngine("/internal/v1/operational-config", "GET"),
+      );
+    } catch {
+      return unavailableOperationalConfig();
+    }
+  },
+);
 
 export async function createEngineShadowPlan(): Promise<RebalancePlanSnapshotContract> {
   return createEngineRebalancePlan("SHADOW");
@@ -106,13 +143,146 @@ export async function validateEngineInstrument(
   );
 }
 
-async function requestEngine(path: string, method: "GET" | "POST", body?: unknown) {
+export async function saveEngineCurrentAccountOperationalDraft(
+  config: unknown,
+): Promise<OperationalConfigSnapshotContract> {
+  return OperationalConfigSnapshotSchema.parse(
+    await requestEngine("/internal/v1/operational-config/drafts/current-account", "POST", {
+      accountScope: "CURRENT_ACCOUNT",
+      config,
+    }),
+  );
+}
+
+export async function activateEngineOperationalDraft(
+  input: ActivateOperationalConfigDraftInputContract,
+): Promise<OperationalConfigSnapshotContract> {
+  return OperationalConfigSnapshotSchema.parse(
+    await requestEngine("/internal/v1/operational-config/drafts/activate", "POST", input),
+  );
+}
+
+export async function saveEngineLivePromotion(
+  input: LivePromotionCommandContract,
+  operator: OperatorAuditContext,
+): Promise<OperationalConfigSnapshotContract> {
+  return OperationalConfigSnapshotSchema.parse(
+    await requestEngine("/internal/v1/live-promotion", "POST", input, operator),
+  );
+}
+
+export async function createEngineLivePlanApproval(
+  input: {
+    readonly planId: string;
+    readonly planHash: string;
+    readonly confirmation: "LIVE 주문 계획과 금액을 확인했습니다";
+  },
+  operator: OperatorAuditContext,
+): Promise<LivePlanApprovalReceiptContract> {
+  const receipt = LivePlanApprovalReceiptSchema.parse(
+    await requestEngine(
+      `/internal/v1/rebalance-plans/${input.planId}/live-approvals`,
+      "POST",
+      input,
+      operator,
+    ),
+  );
+  if (receipt.planId !== input.planId || receipt.planHash !== input.planHash) {
+    throw new EngineConsoleRequestError(502, "ENGINE_RECEIPT_MISMATCH");
+  }
+  return receipt;
+}
+
+export async function executeEngineRebalancePlan(
+  input: {
+    readonly planId: string;
+    readonly mode: "PAPER" | "LIVE";
+    readonly approvalIds: readonly string[];
+  },
+  operator: OperatorAuditContext,
+): Promise<ExecuteRebalancePlanReceiptContract> {
+  const receipt = ExecuteRebalancePlanReceiptSchema.parse(
+    await requestEngine(
+      `/internal/v1/rebalance-plans/${input.planId}/execute`,
+      "POST",
+      input,
+      operator,
+    ),
+  );
+  if (receipt.planId !== input.planId || receipt.mode !== input.mode) {
+    throw new EngineConsoleRequestError(502, "ENGINE_RECEIPT_MISMATCH");
+  }
+  return receipt;
+}
+
+export async function setEngineKillSwitch(
+  input: KillSwitchCommandContract,
+  operator: OperatorAuditContext,
+): Promise<OrdersSnapshotContract> {
+  return OrdersSnapshotSchema.parse(
+    await requestEngine("/internal/v1/kill-switch", "POST", input, operator),
+  );
+}
+
+export async function cancelEngineOrder(
+  input: CancelOrderInputContract,
+  operator: OperatorAuditContext,
+): Promise<CancelOrderReceiptContract> {
+  const receipt = CancelOrderReceiptSchema.parse(
+    await requestEngine(`/internal/v1/orders/${input.orderId}/cancel`, "POST", input, operator),
+  );
+  if (receipt.orderId !== input.orderId) {
+    throw new EngineConsoleRequestError(502, "ENGINE_RECEIPT_MISMATCH");
+  }
+  return receipt;
+}
+
+export async function reconcileEngineOrder(
+  orderId: string,
+  operator: OperatorAuditContext,
+): Promise<StoredOrderReceiptContract> {
+  const receipt = StoredOrderReceiptSchema.parse(
+    await requestEngine(`/internal/v1/orders/${orderId}/reconcile`, "POST", undefined, operator),
+  );
+  if (receipt.orderId !== orderId) {
+    throw new EngineConsoleRequestError(502, "ENGINE_RECEIPT_MISMATCH");
+  }
+  return receipt;
+}
+
+export async function recoverEngineUnknownOrder(
+  input: RecoverUnknownOrderInputContract,
+  operator: OperatorAuditContext,
+): Promise<StoredOrderReceiptContract> {
+  const receipt = StoredOrderReceiptSchema.parse(
+    await requestEngine(`/internal/v1/orders/${input.orderId}/recover`, "POST", input, operator),
+  );
+  if (receipt.orderId !== input.orderId) {
+    throw new EngineConsoleRequestError(502, "ENGINE_RECEIPT_MISMATCH");
+  }
+  return receipt;
+}
+
+async function requestEngine(
+  path: string,
+  method: "GET" | "POST",
+  body?: unknown,
+  operator?: OperatorAuditContext,
+) {
   const serviceToken = process.env.ENGINE_SERVICE_TOKEN;
   const response = await fetch(new URL(path, ENGINE_INTERNAL_URL), {
     method,
     headers: {
       ...(serviceToken ? { authorization: `Bearer ${serviceToken}` } : {}),
       ...(body === undefined ? {} : { "content-type": "application/json" }),
+      ...(operator
+        ? {
+            "x-portfolio-operator-id": operator.operatorId,
+            "x-portfolio-operator-session-id": operator.sessionId,
+            "x-portfolio-operator-authenticated-at": operator.authenticatedAt,
+            "x-portfolio-operator-reauthenticated-at": operator.reauthenticatedAt,
+          }
+        : {}),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     cache: "no-store",
@@ -142,7 +312,6 @@ function unavailableTargetSettings(): TargetSettingsSnapshotContract {
     requiresCollection: false,
     assets: [],
     holdings: [],
-    liveOrdersEnabled: false,
   });
 }
 
@@ -150,6 +319,25 @@ function unavailableRebalancePlan(): RebalancePlanSnapshotContract {
   return RebalancePlanSnapshotSchema.parse({
     state: "UNAVAILABLE",
     latest: null,
+  });
+}
+
+function unavailableOrders(): OrdersSnapshotContract {
+  return OrdersSnapshotSchema.parse({
+    state: "UNAVAILABLE",
+    killSwitch: "UNKNOWN",
+    orders: [],
+    liveOrdersEnabled: false,
+  });
+}
+
+function unavailableOperationalConfig(): OperationalConfigSnapshotContract {
+  return OperationalConfigSnapshotSchema.parse({
+    state: "UNAVAILABLE",
+    activeVersion: null,
+    draftVersion: null,
+    killSwitch: "UNKNOWN",
+    livePromotion: "UNKNOWN",
     liveOrdersEnabled: false,
   });
 }

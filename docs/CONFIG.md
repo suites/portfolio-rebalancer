@@ -1,14 +1,34 @@
 # 운영 설정 레퍼런스
 
 `config.example.yaml`은 주문 실행 정책의 버전형 입력 계약을 보여 주는 예제입니다.
-실제 제품에서는 `setup` UI/CLI가 질문형 흐름으로 값을 받고 같은 Zod 계약으로 검증한
-뒤 설정을 생성합니다. 사용자가 YAML 키, basis point 또는 minor unit 구조를 외워
-손으로 편집하는 흐름은 정상 운영 경로가 아닙니다.
+현재 정상 운영 경로는 Web 설정 화면이 질문형 필드로 값을 받고 같은 Zod 계약으로
+검증한 뒤 DRAFT를 생성하는 흐름입니다. 별도 `setup` CLI는 아직 구현되지 않았습니다.
+사용자가 YAML 키, basis point 또는 minor unit 구조를 외워 손으로 편집하는 흐름은
+정상 운영 경로가 아닙니다.
 
-현재 저장소에는 설정 계약과 예제 검증까지 구현되어 있습니다. 설정 파일을 런타임에
-적용하는 `setup`, `check`, `plan`, `run` 서비스와 live executor는 아직 연결되지
-않았습니다. 따라서 예제의 `mode`나 `live.enabled`를 바꾸는 것만으로 실거래가
-활성화되지 않으며, 현재 Toss 쓰기 전송 하드 차단도 해제되지 않습니다.
+현재 저장소는 이 계약을 PostgreSQL의 append-only 운영 설정 버전으로 저장하고,
+DRAFT와 ACTIVE 전환을 분리합니다. Web 설정 화면은 사용자가 계좌번호나 HMAC을
+입력하지 않도록 현재 수집 계좌를 engine 내부에서 allowlist HMAC으로 봉인합니다.
+계획·Paper 실행·제한형 Live executor도 같은 ACTIVE 설정을 사용합니다.
+
+`mode`나 `live.enabled` 하나만 바꿔서는 실거래가 활성화되지 않습니다. ACTIVE LIVE
+설정, 현재 계좌 allowlist, 실제 킬 스위치 `DISENGAGED`, 동일 설정 버전에 묶인 별도
+Live 승격 `GRANTED`, 주문별 만료 승인, 최신 pretrade 증거와 일회성 dispatch claim이
+모두 필요합니다. 기본 모드는 항상 PAPER이며 실제 계좌 극소액 검증은 별도 승인
+항목입니다.
+
+## 저장과 적용
+
+운영 설정은 다음 순서로 변경합니다.
+
+1. `POST /internal/v1/operational-config/drafts/current-account`로 현재 계좌에 묶인 초안을 저장합니다.
+2. 화면에 표시된 version과 SHA-256을 검토합니다.
+3. 별도 확인 문구와 함께 DRAFT를 ACTIVE로 전환합니다.
+4. 필요하면 킬 스위치를 명시적으로 해제합니다.
+5. LIVE 설정은 같은 ACTIVE 버전을 다시 확인해 별도 승격합니다.
+
+동일 내용은 덮어쓰지 않으며, 과거 version·activation·kill switch·promotion event는
+수정하거나 삭제하지 않습니다. 설정 저장과 적용은 계획이나 주문을 만들지 않습니다.
 
 ## 계약 버전과 형식
 
@@ -29,8 +49,10 @@
 | `mode`          | `PAPER` 또는 `LIVE`. 생략 시 `PAPER`                   |
 | `killSwitch`    | `true`이면 신규 주문 실행을 차단하는 운영 킬 스위치    |
 
-`killSwitch`에는 기본값을 숨겨 두지 않습니다. 설정 생성 화면에서 현재 상태와 보호
-효과를 보여 준 뒤 명시적으로 저장해야 합니다.
+설정의 `killSwitch`는 해당 버전이 실행을 허용할 수 있는지 나타내는 봉인 값입니다.
+실제 운영 킬 스위치는 별도 append-only event 원장으로 관리합니다. 둘 중 하나라도
+차단 상태이거나 확인 불가이면 실행하지 않습니다. 킬 스위치 작동은 즉시 가능하고,
+해제는 사유 입력과 별도 동작을 요구합니다.
 
 ## 데이터 신선도
 
@@ -101,6 +123,21 @@ V1의 첫 live 안전 상한은 단일 주문 100,000원, 일일 총거래 300,0
 유효하더라도 주문 원장, 멱등성, 현재 장 상태, 최신 quote, 일일 예약, 수동 승인과
 별도 live 승격 상태 중 하나라도 확인되지 않으면 실행은 차단되어야 합니다.
 
+최종 `liveOrdersEnabled`는 다음 조건의 논리곱입니다.
+
+```text
+ACTIVE config mode = LIVE
+AND live.enabled = true
+AND current account HMAC in ACTIVE allowlist
+AND latest kill switch = DISENGAGED
+AND latest promotion = GRANTED
+AND promotion.operational_config_version_id = ACTIVE version id
+```
+
+이 값이 `true`여도 개별 주문의 계획 hash, 승인 TTL, 최신 quote·캘린더·상하한가,
+종목 경고, 미체결 주문, 매수 가능 금액 또는 매도 가능 수량 검증을 다시 통과해야
+합니다. 한 번의 Live 실행은 매도 우선 첫 주문 한 건만 dispatch합니다.
+
 `approvalTtlSeconds`는 사람이 검토한 계획 승인이 유효한 최대 시간입니다. 설정 자체에
 승인 토큰이나 서명을 저장하지 않습니다. `tinyLiveMaxGrossMinor`는 별도 설계 검토 뒤
 한 종목 극소액 검증에만 사용할 추가 상한이며 일반 live 한도를 넓힐 수 없습니다.
@@ -108,9 +145,25 @@ V1의 첫 live 안전 상한은 단일 주문 100,000원, 일일 총거래 300,0
 ## 계좌와 비밀정보
 
 설정에는 전체 계좌 식별자, API client secret, access token 또는 승인 서명을 넣지
-않습니다. `setup`은 engine 내부의 승인된 계좌 참조와 별도 비밀 키를 사용해 HMAC을
-만들고 `accountAllowlistHmacs`만 기록해야 합니다. 사용자가 HMAC을 직접 계산하거나
-계좌 식별자를 YAML에 복사하도록 요구하면 안 됩니다.
+않습니다. Web의 현재 계좌 저장 endpoint는 engine 내부의 승인된 계좌 참조와 별도
+비밀 키로 이미 생성된 HMAC만 canonical 설정에 넣습니다. 클라이언트가 보낸 allowlist
+값은 신뢰하지 않고 현재 수집 계좌 값으로 교체합니다. 사용자가 HMAC을 직접 계산하거나
+계좌 식별자를 YAML에 복사하도록 요구하지 않습니다.
+
+## 데이터베이스 역할
+
+Prisma migration owner와 engine runtime은 서로 다른 PostgreSQL 역할이어야 합니다.
+
+- `DATABASE_URL`: migration·runtime role bootstrap 전용 object owner
+- `DATABASE_RUNTIME_URL`: engine 전용 제한 LOGIN 역할
+
+runtime 역할은 public schema CREATE, TEMP, TRUNCATE, trigger DDL,
+`session_replication_role`, `_prisma_migrations` 접근과 application object 소유권을
+가질 수 없습니다. 필요한 SELECT·INSERT와 명시적 행 잠금/단조 UPDATE만 부여합니다.
+engine은 시작할 때 `SESSION_USER = CURRENT_USER`, 비-superuser, runtime group membership,
+비-owner와 위 금지 권한을 catalog에서 다시 검사하며 하나라도 어기면 시작을 차단합니다.
+각 migration 뒤 `pnpm db:bootstrap:runtime`을 다시 실행해야 새 객체가 runtime에
+노출됩니다.
 
 ## 개발 중 검증
 
@@ -129,4 +182,6 @@ import { OperationalConfigSchema } from "@portfolio-rebalancer/contracts";
 const config = OperationalConfigSchema.parse(untrustedYamlValue);
 ```
 
-운영 로더는 검증 전 값을 사용하거나 실패한 설정의 일부만 적용해서는 안 됩니다.
+운영 로더와 Web action은 검증 전 값을 사용하거나 실패한 설정의 일부만 적용해서는
+안 됩니다. Web은 YAML 구조를 요구하지 않지만 저장되는 canonical payload는 같은
+`OperationalConfigSchema`를 통과합니다.

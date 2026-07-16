@@ -24,5 +24,6 @@ import { PortfolioController } from "./presentation/portfolio.controller";
     ServiceTokenGuard,
     CronTokenGuard,
   ],
+  exports: [PrismaPortfolioRepository, TossRuntimeService],
 })
 export class PortfolioModule {}

@@ -152,6 +152,7 @@ export const RecoverUnknownOrderInputSchema = z.strictObject({
   resolvedState: z.enum(["PENDING", "PARTIAL_FILLED", "FILLED", "CANCELED", "REJECTED"]),
   brokerEvidenceReference: z.string().trim().min(1).max(500),
   brokerOrderId: z.string().trim().min(1).max(500),
+  limitPriceMinor: positiveIntegerString,
   filledQuantity: nonNegativeIntegerString,
   filledGrossMinor: nonNegativeIntegerString,
   feeMinor: nonNegativeIntegerString,
@@ -160,6 +161,7 @@ export const RecoverUnknownOrderInputSchema = z.strictObject({
 export type ExecuteRebalancePlanInputContract = z.infer<typeof ExecuteRebalancePlanInputSchema>;
 export type CreateLivePlanApprovalInputContract = z.infer<typeof CreateLivePlanApprovalInputSchema>;
 export type LivePlanApprovalReceiptContract = z.infer<typeof LivePlanApprovalReceiptSchema>;
+export type StoredOrderReceiptContract = z.infer<typeof StoredOrderReceiptSchema>;
 export type OrdersSnapshotContract = z.infer<typeof OrdersSnapshotSchema>;
 export type ExecuteRebalancePlanReceiptContract = z.infer<typeof ExecuteRebalancePlanReceiptSchema>;
 export type KillSwitchCommandContract = z.infer<typeof KillSwitchCommandSchema>;

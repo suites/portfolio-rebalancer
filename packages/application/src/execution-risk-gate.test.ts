@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  evaluateExecutionRiskGate,
-  type ExecutionRiskGateInput,
-} from "./execution-risk-gate";
+import { evaluateExecutionRiskGate, type ExecutionRiskGateInput } from "./execution-risk-gate";
 
 const accountHmac = "a".repeat(64);
 const approvalDigest = "b".repeat(64);

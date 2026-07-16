@@ -136,7 +136,6 @@ describe("target settings editor state", () => {
           currentBasisPointHundredths: 500_000,
         },
       ],
-      liveOrdersEnabled: false,
     });
 
     const instruments = buildEditableInstruments(settings);

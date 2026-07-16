@@ -236,6 +236,14 @@
   font-weight: 700;
   text-align: right;
 }
+.hashValue {
+  display: inline-block;
+  max-width: 34ch;
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: left;
+}
 
 .callout {
   padding: 1rem 1.25rem;
@@ -457,6 +465,143 @@
   flex-wrap: wrap;
   gap: 0.75rem;
 }
+.executionPanel,
+.liveExecutionPanel {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding: 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+}
+.liveExecutionPanel {
+  display: grid;
+  align-items: stretch;
+  border-color: #e6c77a;
+  background: var(--color-attention-soft);
+}
+.executionPanel h3,
+.liveExecutionPanel h3 {
+  margin: 0;
+}
+.executionPanel p,
+.liveExecutionPanel p {
+  margin: 0.35rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+.settingsForm > label,
+.inlineSafetyForm label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+.settingsForm > label > input,
+.inlineSafetyForm input,
+.inlineSafetyForm select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--color-text);
+  font: inherit;
+}
+.checkboxField {
+  display: flex !important;
+  align-items: center;
+  align-self: end;
+  min-height: 44px;
+  grid-template-columns: auto 1fr;
+  gap: 0.6rem !important;
+}
+.checkboxField input {
+  width: 1.1rem !important;
+  min-height: 1.1rem !important;
+  margin: 0;
+  padding: 0;
+}
+.safetyActionGroup {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
+.inlineSafetyForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+.inlineSafetyForm .checkboxField {
+  grid-column: 1 / -1;
+}
+.orderList {
+  display: grid;
+  gap: 1rem;
+}
+.orderCard {
+  padding: 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.orderCard .sectionHeader {
+  margin-bottom: 1rem;
+}
+.orderSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+.orderSummary div {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+}
+.orderSummary dt {
+  color: var(--color-text-tertiary);
+  font-size: 0.75rem;
+}
+.orderSummary dd {
+  margin: 0;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.orderDetails,
+.recoveryPanel {
+  margin-top: 1rem;
+  padding: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+.orderDetails summary,
+.recoveryPanel summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.orderDetails .timeline {
+  margin-bottom: 0;
+}
+.orderActions {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+.recoveryPanel {
+  border-color: #efb2b4;
+  background: var(--color-blocked-soft);
+}
 .safeLink {
   color: var(--color-primary);
   font-weight: 700;
@@ -498,8 +643,26 @@
   .formFooter button {
     width: 100%;
   }
+  .executionPanel,
+  .inlineSafetyForm {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+  .executionPanel {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .orderSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .timeline li {
     grid-template-columns: 1fr;
     gap: 0.25rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .orderSummary {
+    grid-template-columns: 1fr;
   }
 }

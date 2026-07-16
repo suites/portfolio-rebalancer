@@ -11,3 +11,11 @@
 - `apps/web`: 안전 기본 상태 route
 
 실제 계좌, DB, paper executor, live 주문과 E2E는 구현되지 않아 현재 테스트 범위가 아닙니다.
+
+## 2026-07-17 Runtime DB role slice
+
+- URL resolver와 engine config의 migration/runtime secret 경계
+- bootstrap SQL의 role flags, ownership, PUBLIC/default privilege, DML allowlist
+- engine startup의 runtime identity fail-closed 검사
+- 격리 PostgreSQL에서 정상 append-only/lease/terminal update
+- runtime의 UPDATE/DELETE/TRUNCATE/trigger DDL/session replication/migration ledger 거부

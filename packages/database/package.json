@@ -12,12 +12,13 @@
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.build.json",
+    "db:bootstrap:runtime": "node scripts/bootstrap-runtime-role.cjs",
     "db:generate": "prisma generate",
-    "db:migrate:dev": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev && node scripts/bootstrap-runtime-role.cjs",
+    "db:migrate:deploy": "prisma migrate deploy && node scripts/bootstrap-runtime-role.cjs",
     "postinstall": "prisma generate",
     "test": "vitest run --passWithNoTests",
-    "test:integration": "vitest run --passWithNoTests --no-file-parallelism --maxWorkers=1 src/broker-response-validation-provenance.integration.spec.ts src/legacy-market-snapshot-quarantine.integration.spec.ts src/collection-run-terminal-timeline.integration.spec.ts src/market-snapshot-payload-provenance.integration.spec.ts src/shadow-rebalance-plan-store.integration.spec.ts src/order-ledger-risk-reservations.integration.spec.ts src/operational-config-store.integration.spec.ts src/cancel-dispatch-audit.integration.spec.ts",
+    "test:integration": "vitest run --passWithNoTests --no-file-parallelism --maxWorkers=1 src/broker-response-validation-provenance.integration.spec.ts src/legacy-market-snapshot-quarantine.integration.spec.ts src/collection-run-terminal-timeline.integration.spec.ts src/market-snapshot-payload-provenance.integration.spec.ts src/shadow-rebalance-plan-store.integration.spec.ts src/order-ledger-risk-reservations.integration.spec.ts src/operational-config-store.integration.spec.ts src/cancel-dispatch-audit.integration.spec.ts src/runtime-role.integration.spec.ts",
     "test:coverage": "vitest run --coverage",
     "typecheck": "prisma generate && tsc --noEmit"
   },

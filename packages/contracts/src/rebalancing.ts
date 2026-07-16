@@ -123,7 +123,6 @@ export const StoredRebalancePlanSchema = z.strictObject({
 export const RebalancePlanSnapshotSchema = z.strictObject({
   state: z.enum(["READY", "NO_PLAN", "UNAVAILABLE"]),
   latest: StoredRebalancePlanSchema.nullable(),
-  liveOrdersEnabled: z.boolean(),
 });
 
 export type CreateRebalancePlanInputContract = z.infer<typeof CreateRebalancePlanInputSchema>;

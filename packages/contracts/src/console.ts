@@ -283,7 +283,6 @@ export const TargetSettingsSnapshotSchema = z.object({
   requiresCollection: z.boolean(),
   assets: z.array(TargetSettingsAssetSchema),
   holdings: z.array(TargetSettingsHoldingSchema),
-  liveOrdersEnabled: z.literal(false),
 });
 
 export const ConsoleCheckSchema = z.object({
@@ -306,8 +305,6 @@ export const ConsoleRecordSchema = z.object({
 export const ConsoleRecordsSnapshotSchema = z.object({
   state: z.enum(["READY", "UNAVAILABLE"]),
   records: z.array(ConsoleRecordSchema),
-  orderLedgerState: z.literal("NOT_IMPLEMENTED"),
-  liveOrdersEnabled: z.literal(false),
 });
 
 export type TargetSettingsDraftInputContract = z.infer<typeof TargetSettingsDraftInputSchema>;

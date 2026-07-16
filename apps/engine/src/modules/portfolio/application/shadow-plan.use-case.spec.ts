@@ -2,10 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { TossRequestAuditContext } from "../infrastructure/broker/toss-request-audit.context";
 import type { SealRebalancePlanInput } from "../infrastructure/persistence/prisma-portfolio.repository";
-import {
-  createAndStoreRebalancePlan,
-  createAndStoreShadowPlan,
-} from "./shadow-plan.use-case";
+import { createAndStoreRebalancePlan, createAndStoreShadowPlan } from "./shadow-plan.use-case";
 
 const accountId = "30000000-0000-4000-8000-000000000001";
 const snapshotId = "30000000-0000-4000-8000-000000000002";
@@ -168,9 +165,7 @@ describe("createAndStoreShadowPlan", () => {
     const snapshot = planningSnapshot("KR_NO_ACTION");
     const existing = storedRun("NO_ACTION");
     const repository = repositoryMock(snapshot, {
-      startRebalanceRun: vi
-        .fn()
-        .mockResolvedValue({ created: false, runId, status: "NO_ACTION" }),
+      startRebalanceRun: vi.fn().mockResolvedValue({ created: false, runId, status: "NO_ACTION" }),
       rebalanceRunById: vi.fn().mockResolvedValue(existing),
     });
     const source = sourceMock();

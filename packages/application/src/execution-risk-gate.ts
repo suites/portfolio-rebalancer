@@ -316,9 +316,7 @@ function evaluateProjectedExposure(
 function evaluateLiveOrderShape(orders: readonly PlannedExecutionOrder[]): ExecutionRiskCheck {
   const invalid = orders.find(
     (order) =>
-      order.marketCountry !== "KR" ||
-      order.orderType !== "LIMIT" ||
-      order.timeInForce !== "DAY",
+      order.marketCountry !== "KR" || order.orderType !== "LIMIT" || order.timeInForce !== "DAY",
   );
   return passOrBlock(
     invalid === undefined,

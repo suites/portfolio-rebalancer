@@ -8,8 +8,10 @@ import styles from "@/features/console/console.module.css";
 
 export function TroubleshootingScreen({
   snapshot,
+  csrfToken,
 }: {
   readonly snapshot: DashboardSnapshotContract;
+  readonly csrfToken: string;
 }) {
   return (
     <>
@@ -19,6 +21,7 @@ export function TroubleshootingScreen({
         description="연결 상태를 확인하고 필요한 경우 최신 정보로 다시 점검하세요."
       >
         <form action={refreshPortfolioAction}>
+          <input type="hidden" name="_csrf" value={csrfToken} />
           <Button type="submit" variant="secondary">
             토스 데이터 재점검
           </Button>

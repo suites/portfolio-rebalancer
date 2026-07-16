@@ -1,6 +1,9 @@
 import Link from "next/link";
 
-import type { TargetSettingsSnapshotContract } from "@portfolio-rebalancer/contracts";
+import type {
+  OperationalConfigSnapshotContract,
+  TargetSettingsSnapshotContract,
+} from "@portfolio-rebalancer/contracts";
 import { Badge, Button, Surface } from "@portfolio-rebalancer/ui";
 
 import { activateTargetDraftAction } from "@/app/(console)/actions";
@@ -9,15 +12,24 @@ import { ConsolePageHeader } from "@/features/console/page-header";
 import styles from "@/features/console/console.module.css";
 
 import { TargetSettingsEditor } from "./target-settings-editor";
+import { OperationalSettingsPanel } from "./operational-settings-panel";
 
 export function SettingsScreen({
   settings,
+  operational,
   status,
+  csrfToken,
 }: {
   readonly settings: TargetSettingsSnapshotContract;
+  readonly operational: OperationalConfigSnapshotContract;
   readonly status: string | undefined;
+  readonly csrfToken: string;
 }) {
-  const feedback = feedbackFor(settings.state === "UNAVAILABLE" ? "unavailable" : status);
+  const feedback = feedbackFor(
+    settings.state === "UNAVAILABLE" || operational.state === "UNAVAILABLE"
+      ? "unavailable"
+      : status,
+  );
   return (
     <>
       <ConsolePageHeader
@@ -75,7 +87,7 @@ export function SettingsScreen({
               ) : null}
             </div>
             {settings.assets.length > 0 ? (
-              <TargetSettingsEditor settings={settings} />
+              <TargetSettingsEditor settings={settings} csrfToken={csrfToken} />
             ) : (
               <div className={styles.emptyState}>
                 <strong>
@@ -142,6 +154,7 @@ export function SettingsScreen({
                   ))}
                 </ul>
                 <form action={activateTargetDraftAction}>
+                  <input type="hidden" name="_csrf" value={csrfToken} />
                   <input type="hidden" name="version" value={settings.draftVersion.version} />
                   <Button type="submit">검토한 초안 적용</Button>
                 </form>
@@ -154,6 +167,10 @@ export function SettingsScreen({
             )}
           </Surface>
         </div>
+
+        <Surface className={styles.surface}>
+          <OperationalSettingsPanel operational={operational} csrfToken={csrfToken} />
+        </Surface>
       </div>
     </>
   );
@@ -192,6 +209,83 @@ function feedbackFor(
     return {
       title: "설정 정보를 불러올 수 없습니다.",
       description: "잠시 후 다시 시도하거나 문제 해결에서 연결 상태를 확인하세요.",
+      tone: "blocked",
+    };
+  if (status === "operational-draft-saved")
+    return {
+      title: "운영 설정 초안을 저장했습니다.",
+      description: "해시와 버전을 검토한 뒤 별도로 적용하세요. 아직 실행 상태는 바뀌지 않았습니다.",
+    };
+  if (status === "operational-activated")
+    return {
+      title: "운영 설정을 적용했습니다.",
+      description: "Live 주문은 킬 스위치 해제와 별도 승격이 모두 끝나기 전까지 차단됩니다.",
+    };
+  if (status === "live-promotion-updated")
+    return {
+      title: "Live 승격 상태를 갱신했습니다.",
+      description: "상단 상태에서 실제 주문 허용 여부를 다시 확인하세요.",
+    };
+  if (status === "kill-switch-engaged")
+    return {
+      title: "킬 스위치를 작동했습니다.",
+      description: "새 주문 실행을 즉시 차단했습니다.",
+      tone: "attention",
+    };
+  if (status === "kill-switch-disengaged")
+    return {
+      title: "킬 스위치를 해제했습니다.",
+      description: "해제만으로 Live 주문이 켜지지는 않습니다. 활성 설정과 별도 승격도 필요합니다.",
+    };
+  if (status === "operational-input-invalid")
+    return {
+      title: "운영 설정을 저장하지 못했습니다.",
+      description: "금액 한도, Live 체크와 사유 입력을 다시 확인하세요.",
+      tone: "blocked",
+    };
+  if (status === "operational-account-missing")
+    return {
+      title: "현재 계좌를 운영 설정에 연결하지 못했습니다.",
+      description: "문제 해결에서 계좌 정보를 새로 수집한 뒤 다시 저장하세요.",
+      tone: "blocked",
+    };
+  if (status === "operational-content-reused")
+    return {
+      title: "같은 운영 설정이 이미 봉인되어 있습니다.",
+      description: "기존 활성 설정 또는 최신 초안을 확인하세요.",
+      tone: "attention",
+    };
+  if (status === "operational-draft-stale")
+    return {
+      title: "확인한 운영 설정 초안이 최신 버전이 아닙니다.",
+      description: "현재 표시된 버전과 해시를 다시 검토하세요.",
+      tone: "blocked",
+    };
+  if (status === "live-kill-switch-blocked")
+    return {
+      title: "킬 스위치 때문에 Live 승격을 차단했습니다.",
+      description: "활성 Live 설정을 확인한 뒤 킬 스위치를 명시적으로 해제하세요.",
+      tone: "blocked",
+    };
+  if (status === "live-policy-blocked" || status === "live-revoke-required")
+    return {
+      title: "현재 안전 정책으로 Live 승격할 수 없습니다.",
+      description:
+        status === "live-revoke-required"
+          ? "이전 설정의 Live 권한을 먼저 회수한 뒤 새 설정을 승격하세요."
+          : "활성 LIVE 설정, 현재 계좌 고정, 수동 승인과 극소액 한도를 확인하세요.",
+      tone: "blocked",
+    };
+  if (status === "operational-unavailable")
+    return {
+      title: "실행 안전 원장을 갱신하지 못했습니다.",
+      description: "아무 권한도 완화하지 않았습니다. 연결 상태를 확인한 뒤 다시 시도하세요.",
+      tone: "blocked",
+    };
+  if (status === "operator-security-blocked")
+    return {
+      title: "운영자 보안 검증에서 요청을 차단했습니다.",
+      description: "세션, 동일 출처와 CSRF 토큰을 확인하지 못해 설정 엔진을 호출하지 않았습니다.",
       tone: "blocked",
     };
   return null;

@@ -21,3 +21,19 @@
 ## 명령
 
 타깃 package test 후 `pnpm verify`로 전체 포맷, 린트, 타입, 테스트와 빌드를 확인합니다. `pnpm test:coverage`는 설치된 V8 provider로 workspace coverage를 생성합니다.
+
+## Runtime DB role 위험 우선순위
+
+1. engine이 owner URL로 연결해 trigger를 disable/drop하는 회귀
+2. PUBLIC 또는 direct grant로 TRUNCATE와 migration ledger 접근이 남는 회귀
+3. UPDATE를 제거하면서 정상 `FOR UPDATE`, lease와 terminal transition도 깨지는 회귀
+4. owner login 후 `SET ROLE runtime`으로 startup 검증을 통과하는 회귀
+5. 새 migration table이 자동 grant되어 검토 없이 runtime write surface가 넓어지는 회귀
+
+## Live dispatch DB safety 위험 우선순위
+
+1. A 이후 config activation/revoke/kill 변경을 놓치고 B가 seal되는 TOCTOU
+2. broker account의 stable HMAC/broker/id가 runtime UPDATE로 바뀌는 계좌 재결합 오류
+3. getAccounts validation이 없거나 다른 계좌인데 pre-submit evidence가 저장되는 오류
+4. A 생성 전 PLANNED+reservation 고착이 영구 unresolved order로 남는 오류
+5. 복구 proof 이후 A 또는 broker evidence가 뒤늦게 생성되는 오류

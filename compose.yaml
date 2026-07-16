@@ -5,10 +5,13 @@ services:
       POSTGRES_DB: portfolio_rebalancer
       POSTGRES_USER: portfolio
       POSTGRES_PASSWORD: portfolio_local
+      POSTGRES_RUNTIME_USER: ${POSTGRES_RUNTIME_USER:-portfolio_runtime}
+      POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:-portfolio_runtime_local}
     ports:
       - "127.0.0.1:15432:5432"
     volumes:
       - portfolio-postgres-data:/var/lib/postgresql/data
+      - ./packages/database/postgres/init/010-create-runtime-role.sh:/docker-entrypoint-initdb.d/010-create-runtime-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U portfolio -d portfolio_rebalancer"]
       interval: 2s

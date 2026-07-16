@@ -1,18 +1,24 @@
 import { NextResponse } from "next/server";
 
+import { getEngineOperationalConfig } from "../../../../server/engine-console";
 import { getStoredEngineDashboard } from "../../../../server/engine-dashboard";
 
 export async function GET() {
-  const dashboard = await getStoredEngineDashboard();
+  const [dashboard, operational] = await Promise.all([
+    getStoredEngineDashboard(),
+    getEngineOperationalConfig(),
+  ]);
   return NextResponse.json({
     brokers: [
       {
         id: "toss",
         displayName: "토스증권",
         connectionStatus: dashboard.brokerConnection.toLowerCase(),
-        adapterStatus: "read_only_adapter",
+        adapterStatus: operational.liveOrdersEnabled ? "live_gated_ready" : "live_gated_blocked",
         lastObservedAt: dashboard.observedAt,
-        liveOrdersEnabled: false,
+        killSwitch: operational.killSwitch.toLowerCase(),
+        livePromotion: operational.livePromotion.toLowerCase(),
+        liveOrdersEnabled: operational.liveOrdersEnabled,
       },
     ],
   });

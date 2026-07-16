@@ -62,6 +62,8 @@ export class TossRuntimeService {
         {
           clientId: this.config.TOSSINVEST_CLIENT_ID,
           clientSecret: this.config.TOSSINVEST_CLIENT_SECRET,
+          accountReferenceKey:
+            this.config.ACCOUNT_REFERENCE_KEY ?? this.config.TOSSINVEST_CLIENT_SECRET,
           onResponseMetadata: (metadata) => this.appendRequestAttempt(metadata),
           onResponseValidation: (event) => this.appendResponseValidation(event),
         },

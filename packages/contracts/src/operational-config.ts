@@ -237,6 +237,11 @@ export const OperationalConfigSnapshotSchema = z
 
 export const SaveOperationalConfigDraftInputSchema = OperationalConfigSchema;
 
+export const SaveCurrentAccountOperationalConfigDraftInputSchema = z.strictObject({
+  accountScope: z.literal("CURRENT_ACCOUNT"),
+  config: z.unknown(),
+});
+
 export const ActivateOperationalConfigDraftInputSchema = z.strictObject({
   version: z.number().int().positive(),
   contentHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -266,6 +271,9 @@ export type OperationalConfigVersionContract = z.infer<typeof OperationalConfigV
 export type OperationalConfigSnapshotContract = z.infer<typeof OperationalConfigSnapshotSchema>;
 export type SaveOperationalConfigDraftInputContract = z.infer<
   typeof SaveOperationalConfigDraftInputSchema
+>;
+export type SaveCurrentAccountOperationalConfigDraftInputContract = z.infer<
+  typeof SaveCurrentAccountOperationalConfigDraftInputSchema
 >;
 export type ActivateOperationalConfigDraftInputContract = z.infer<
   typeof ActivateOperationalConfigDraftInputSchema

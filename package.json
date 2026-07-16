@@ -14,6 +14,7 @@
     "dev": "pnpm --parallel --filter @portfolio-rebalancer/engine --filter @portfolio-rebalancer/web dev",
     "dev:web": "pnpm --filter @portfolio-rebalancer/web dev",
     "dev:engine": "pnpm --filter @portfolio-rebalancer/engine dev",
+    "db:bootstrap:runtime": "pnpm --filter @portfolio-rebalancer/database db:bootstrap:runtime",
     "db:generate": "pnpm --filter @portfolio-rebalancer/database db:generate",
     "db:migrate:dev": "pnpm --filter @portfolio-rebalancer/database db:migrate:dev",
     "db:migrate:deploy": "pnpm --filter @portfolio-rebalancer/database db:migrate:deploy",

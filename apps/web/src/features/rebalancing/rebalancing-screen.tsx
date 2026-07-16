@@ -2,12 +2,17 @@ import Link from "next/link";
 
 import type {
   DashboardSnapshotContract,
+  OperationalConfigSnapshotContract,
   RebalancePlanSnapshotContract,
   StoredRebalancePlanContract,
 } from "@portfolio-rebalancer/contracts";
 import { Badge, Button, StatusBanner, Surface } from "@portfolio-rebalancer/ui";
 
-import { createRebalancePlanAction } from "@/app/(console)/actions";
+import {
+  createRebalancePlanAction,
+  executeLivePlanAction,
+  executePaperPlanAction,
+} from "@/app/(console)/actions";
 import {
   formatBasisPoints,
   formatCurrentWeight,
@@ -20,11 +25,15 @@ import styles from "@/features/console/console.module.css";
 export function RebalancingScreen({
   snapshot,
   plan,
+  operational,
   actionStatus,
+  csrfToken,
 }: {
   readonly snapshot: DashboardSnapshotContract;
   readonly plan: RebalancePlanSnapshotContract;
+  readonly operational: OperationalConfigSnapshotContract;
   readonly actionStatus: string | undefined;
+  readonly csrfToken: string;
 }) {
   const targetFixed =
     snapshot.allocations.length > 0 &&
@@ -53,9 +62,13 @@ export function RebalancingScreen({
       />
       <div className={styles.pageStack}>
         {actionStatus ? (
-          <div className={styles.callout} data-tone="blocked" role="status">
-            <strong>리밸런싱 계획을 만들지 못했습니다.</strong>
-            <p>{actionStatusMessage(actionStatus)}</p>
+          <div
+            className={styles.callout}
+            data-tone={actionFeedback(actionStatus).tone}
+            role="status"
+          >
+            <strong>{actionFeedback(actionStatus).title}</strong>
+            <p>{actionFeedback(actionStatus).description}</p>
           </div>
         ) : null}
         <StatusBanner
@@ -140,7 +153,12 @@ export function RebalancingScreen({
           </Surface>
         </div>
 
-        <PlanSurface snapshot={snapshot} plan={plan} />
+        <PlanSurface
+          snapshot={snapshot}
+          plan={plan}
+          operational={operational}
+          csrfToken={csrfToken}
+        />
       </div>
     </>
   );
@@ -149,9 +167,13 @@ export function RebalancingScreen({
 function PlanSurface({
   snapshot,
   plan,
+  operational,
+  csrfToken,
 }: {
   readonly snapshot: DashboardSnapshotContract;
   readonly plan: RebalancePlanSnapshotContract;
+  readonly operational: OperationalConfigSnapshotContract;
+  readonly csrfToken: string;
 }) {
   const latest = plan.latest;
   const canCreate =
@@ -178,22 +200,31 @@ function PlanSurface({
         </Badge>
       </div>
 
-      {latest ? <StoredPlanDetails plan={latest} /> : null}
+      {latest ? (
+        <StoredPlanDetails
+          plan={latest}
+          accountLabel={snapshot.accountLabel}
+          observedAt={snapshot.observedAt}
+        />
+      ) : null}
 
       <div className={styles.buttonRow}>
         <form action={createRebalancePlanAction}>
+          <input type="hidden" name="_csrf" value={csrfToken} />
           <input type="hidden" name="mode" value="SHADOW" />
           <Button type="submit" disabled={!canCreate}>
             Shadow 계획 만들기
           </Button>
         </form>
         <form action={createRebalancePlanAction}>
+          <input type="hidden" name="_csrf" value={csrfToken} />
           <input type="hidden" name="mode" value="PAPER" />
           <Button type="submit" disabled={!canCreate}>
             Paper 계획 만들기
           </Button>
         </form>
         <form action={createRebalancePlanAction}>
+          <input type="hidden" name="_csrf" value={csrfToken} />
           <input type="hidden" name="mode" value="LIVE" />
           <Button type="submit" disabled={!canCreate}>
             Live 계획만 만들기
@@ -213,14 +244,94 @@ function PlanSurface({
       </div>
       <p className={styles.fieldDescription}>
         이 단계는 어떤 모드에서도 실제 주문을 제출하지 않습니다. Paper와 Live도 먼저 저장된 계획만
-        만들며, 실행은 별도의 위험 점검·주문 원장·최종 확인을 통과해야 합니다. 같은 snapshot·설정·모드의
-        중복 클릭은 기존 계획을 반환합니다.
+        만들며, 실행은 별도의 위험 점검·주문 원장·최종 확인을 통과해야 합니다. 같은
+        snapshot·설정·모드의 중복 클릭은 기존 계획을 반환합니다.
       </p>
+
+      {latest?.mode === "PAPER" &&
+      latest.status === "PLANNED" &&
+      latest.executableOrders.length > 0 ? (
+        <div className={styles.executionPanel}>
+          <div>
+            <h3>Paper 실행</h3>
+            <p>
+              현재 호가·호가잔량·수수료 증거로 주문 원장과 체결을 재생합니다. 토스 주문 API는
+              호출하지 않습니다.
+            </p>
+          </div>
+          <form action={executePaperPlanAction}>
+            <input type="hidden" name="_csrf" value={csrfToken} />
+            <input type="hidden" name="planId" value={latest.planId} />
+            <Button type="submit">Paper 주문 원장 실행</Button>
+          </form>
+        </div>
+      ) : null}
+
+      {latest?.mode === "LIVE" &&
+      latest.status === "PLANNED" &&
+      latest.executableOrders.length > 0 ? (
+        <div className={styles.liveExecutionPanel}>
+          <div>
+            <h3>Live 최종 확인</h3>
+            <p>
+              한 번의 실행에서 매도 우선 첫 주문 한 건만 전송합니다. 체결을 확인하고 새 계좌
+              snapshot과 계획을 만든 뒤 다음 주문을 검토해야 합니다.
+            </p>
+          </div>
+          <LiveFinalReview
+            plan={latest}
+            accountLabel={snapshot.accountLabel}
+            observedAt={snapshot.observedAt}
+          />
+          {operational.liveOrdersEnabled ? (
+            <form className={styles.settingsForm} action={executeLivePlanAction}>
+              <input type="hidden" name="_csrf" value={csrfToken} />
+              <input type="hidden" name="planId" value={latest.planId} />
+              <input type="hidden" name="planHash" value={latest.planHash} />
+              <label>
+                아래 문구를 정확히 입력하세요
+                <input
+                  name="confirmation"
+                  required
+                  pattern="LIVE 주문 계획과 금액을 확인했습니다"
+                  autoComplete="off"
+                  placeholder="LIVE 주문 계획과 금액을 확인했습니다"
+                />
+              </label>
+              <p className={styles.fieldDescription}>
+                이 동작은 최근 운영자 재인증이 유효할 때만 진행됩니다. 만료되었으면 재인증 화면으로
+                이동하며 승인이나 주문을 만들지 않습니다.
+              </p>
+              <Button type="submit">승인 생성 후 Live 첫 주문 1회 전송</Button>
+            </form>
+          ) : (
+            <div className={styles.blockedState}>
+              <strong>Live 주문은 현재 차단되어 있습니다.</strong>
+              <p>
+                설정에서 ACTIVE LIVE 구성, 현재 계좌 고정, 킬 스위치 해제와 별도 Live 승격을 모두
+                완료하세요.
+              </p>
+              <Link className={styles.safeLink} href="/settings">
+                실행 안전 설정 열기
+              </Link>
+            </div>
+          )}
+        </div>
+      ) : null}
     </Surface>
   );
 }
 
-function StoredPlanDetails({ plan }: { readonly plan: StoredRebalancePlanContract }) {
+function StoredPlanDetails({
+  plan,
+  accountLabel,
+  observedAt,
+}: {
+  readonly plan: StoredRebalancePlanContract;
+  readonly accountLabel: string | null;
+  readonly observedAt: string | null;
+}) {
+  const totalNotionalMinor = totalPlanNotionalMinor(plan);
   return (
     <div className={styles.pageStack}>
       <div
@@ -236,6 +347,29 @@ function StoredPlanDetails({ plan }: { readonly plan: StoredRebalancePlanContrac
         <strong>{planReasonTitle(plan)}</strong>
         <p>{plan.reasonCodes.map(reasonLabel).join(" · ")}</p>
       </div>
+
+      <dl className={styles.diagnosticList}>
+        <div>
+          <dt>대상 계좌</dt>
+          <dd>{accountLabel ?? "확인 불가"}</dd>
+        </div>
+        <div>
+          <dt>주문 후보</dt>
+          <dd>{plan.executableOrders.length.toLocaleString("ko-KR")}건</dd>
+        </div>
+        <div>
+          <dt>총 예상 거래금액</dt>
+          <dd>{formatWon(totalNotionalMinor.toString())}</dd>
+        </div>
+        <div>
+          <dt>예상 비용</dt>
+          <dd>주문 직전 수수료 일정으로 재검증</dd>
+        </div>
+        <div>
+          <dt>데이터 기준 시각</dt>
+          <dd>{formatObservedAt(observedAt)}</dd>
+        </div>
+      </dl>
 
       {plan.executableOrders.length > 0 ? (
         <div className={styles.tableScroll}>
@@ -326,6 +460,70 @@ function StoredPlanDetails({ plan }: { readonly plan: StoredRebalancePlanContrac
   );
 }
 
+function LiveFinalReview({
+  plan,
+  accountLabel,
+  observedAt,
+}: {
+  readonly plan: StoredRebalancePlanContract;
+  readonly accountLabel: string | null;
+  readonly observedAt: string | null;
+}) {
+  const orderedOrders = [...plan.executableOrders].sort(
+    (left, right) =>
+      phaseRank(left.phase) - phaseRank(right.phase) ||
+      left.candidateId.localeCompare(right.candidateId),
+  );
+  const firstOrder = orderedOrders[0]!;
+  const remainingOrderCount = Math.max(0, orderedOrders.length - 1);
+  return (
+    <div className={styles.pageStack}>
+      <dl className={styles.diagnosticList}>
+        <div>
+          <dt>실거래 대상 계좌</dt>
+          <dd>{accountLabel ?? "확인 불가"}</dd>
+        </div>
+        <div>
+          <dt>이번에 전송할 첫 주문</dt>
+          <dd>
+            {firstOrder.side === "SELL" ? "매도" : "매수"} {firstOrder.instrumentKey}{" "}
+            {BigInt(firstOrder.quantity).toLocaleString("ko-KR")}주 · 지정가{" "}
+            {formatWon(firstOrder.limitPriceMinor)}
+          </dd>
+        </div>
+        <div>
+          <dt>이번 전송 뒤 남는 계획 주문</dt>
+          <dd>{remainingOrderCount.toLocaleString("ko-KR")}건</dd>
+        </div>
+        <div>
+          <dt>전체 계획 예상 거래금액</dt>
+          <dd>{formatWon(totalPlanNotionalMinor(plan).toString())}</dd>
+        </div>
+        <div>
+          <dt>비용 확인</dt>
+          <dd>전송 직전 최신 수수료·매수 가능 금액·매도 가능 수량으로 다시 검증</dd>
+        </div>
+        <div>
+          <dt>데이터 기준 시각</dt>
+          <dd>{formatObservedAt(observedAt)}</dd>
+        </div>
+      </dl>
+      <p className={styles.fieldDescription}>
+        지정가와 수량은 봉인된 계획 값이며 실제 체결가격·수수료·체결 여부는 달라질 수 있습니다. 첫
+        주문 결과를 확인하기 전에는 남은 주문을 자동으로 전송하지 않습니다.
+      </p>
+    </div>
+  );
+}
+
+function totalPlanNotionalMinor(plan: StoredRebalancePlanContract): bigint {
+  return plan.executableOrders.reduce((total, order) => total + BigInt(order.notionalMinor), 0n);
+}
+
+function phaseRank(phase: "SELL" | "BUY"): number {
+  return phase === "SELL" ? 0 : 1;
+}
+
 function CheckRow({
   label,
   description,
@@ -403,19 +601,61 @@ function assetLabel(id: string): string {
   return id;
 }
 
-function actionStatusMessage(status: string): string {
-  switch (status) {
-    case "plan-mode-invalid":
-      return "계획 모드를 확인하지 못했습니다. Shadow, Paper 또는 Live 중 하나를 선택하세요.";
-    case "plan-no-snapshot":
-      return "먼저 토스 계좌 snapshot을 수집하세요.";
-    case "plan-target-required":
-      return "목표 비중을 적용하고 새 snapshot에 고정하세요.";
-    case "plan-cash-required":
-      return "설정에서 관리 현금을 고정 금액으로 포함하거나 평가에서 제외하세요.";
-    case "plan-in-progress":
-      return "같은 snapshot의 계획 생성이 진행 중입니다. 잠시 뒤 다시 확인하세요.";
-    default:
-      return "엔진과 토스 사전조회 상태를 확인한 뒤 다시 시도하세요.";
-  }
+function actionFeedback(status: string): {
+  readonly title: string;
+  readonly description: string;
+  readonly tone?: "attention" | "blocked";
+} {
+  if (status === "paper-executed")
+    return {
+      title: "Paper 주문 원장을 실행했습니다.",
+      description: "토스 주문 API는 호출하지 않았습니다. 주문·기록에서 재생 상태를 확인하세요.",
+    };
+  if (status === "paper-execution-pending")
+    return {
+      title: "Paper 주문 원장을 만들었고 재생 상태는 진행 중입니다.",
+      description: "토스 주문 API는 호출하지 않았습니다. 주문·기록에서 각 주문 상태를 확인하세요.",
+      tone: "attention",
+    };
+  if (status === "live-order-completed")
+    return {
+      title: "Live 첫 주문 결과를 확인했습니다.",
+      description:
+        "엔진 receipt가 완료 상태를 반환했습니다. 주문·기록에서 저장된 브로커 증거를 확인하세요.",
+    };
+  if (status === "live-order-pending")
+    return {
+      title: "Live 첫 주문은 접수·대사 진행 상태입니다.",
+      description:
+        "성공 완료로 간주하지 않습니다. 자동으로 다음 주문을 보내지 않으며 주문·기록에서 브로커 상태를 확인해야 합니다.",
+      tone: "attention",
+    };
+  const messages: Record<string, string> = {
+    "plan-mode-invalid":
+      "계획 모드를 확인하지 못했습니다. Shadow, Paper 또는 Live 중 하나를 선택하세요.",
+    "plan-no-snapshot": "먼저 토스 계좌 snapshot을 수집하세요.",
+    "plan-target-required": "목표 비중을 적용하고 새 snapshot에 고정하세요.",
+    "plan-cash-required": "설정에서 관리 현금을 고정 금액으로 포함하거나 평가에서 제외하세요.",
+    "plan-in-progress": "같은 snapshot의 계획 생성이 진행 중입니다. 잠시 뒤 다시 확인하세요.",
+    "execute-input-invalid": "실행할 계획 ID를 확인하지 못했습니다.",
+    "live-confirmation-required": "Live 주문 계획과 금액 확인 문구를 정확히 입력하세요.",
+    "live-approval-stale": "계획이 바뀌었거나 주문별 승인이 만료되어 주문을 전송하지 않았습니다.",
+    "order-execution-blocked":
+      "위험 게이트, 최신 시세, 계좌 한도 또는 실행 안전 상태를 모두 확인하지 못했습니다.",
+    "paper-execution-blocked": "Paper 주문 원장 실행이 receipt의 BLOCKED 결과로 종료됐습니다.",
+    "paper-refresh-required": "새 snapshot 또는 시세로 Paper 계획을 다시 만들어야 합니다.",
+    "live-refresh-required":
+      "Live 실행 receipt가 새 snapshot과 계획을 요구했습니다. 주문을 추가 전송하지 않았습니다.",
+    "paper-execute-unavailable": "Paper 주문 원장을 안전하게 기록하지 못했습니다.",
+    "live-execute-unavailable":
+      "Live dispatch claim 또는 브로커 결과를 안전하게 기록하지 못해 추가 전송을 차단했습니다.",
+    "order-input-invalid": "주문 실행 입력을 확인하지 못했습니다.",
+    "operator-security-blocked":
+      "운영자 세션의 요청 출처 또는 CSRF 토큰을 확인하지 못해 엔진을 호출하지 않았습니다.",
+  };
+  return {
+    title: "리밸런싱 작업을 완료하지 못했습니다.",
+    description: messages[status] ?? "엔진과 토스 사전조회 상태를 확인한 뒤 다시 시도하세요.",
+    tone: "blocked",
+  };
 }

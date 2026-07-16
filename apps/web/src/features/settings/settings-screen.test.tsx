@@ -1,14 +1,21 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { TargetSettingsSnapshotSchema } from "@portfolio-rebalancer/contracts";
+import {
+  OperationalConfigSnapshotSchema,
+  TargetSettingsSnapshotSchema,
+} from "@portfolio-rebalancer/contracts";
 
 import { SettingsScreen } from "./settings-screen";
 
 vi.mock("@/app/(console)/actions", () => ({
   activateTargetDraftAction: vi.fn(),
+  activateOperationalConfigDraftAction: vi.fn(),
   saveTargetDraftAction: vi.fn(),
+  saveOperationalConfigDraftAction: vi.fn(),
   searchTargetInstrumentAction: vi.fn(),
+  setKillSwitchAction: vi.fn(),
+  setLivePromotionAction: vi.fn(),
 }));
 
 describe("SettingsScreen", () => {
@@ -23,10 +30,16 @@ describe("SettingsScreen", () => {
       requiresCollection: false,
       assets: [],
       holdings: [],
-      liveOrdersEnabled: false,
     });
 
-    const html = renderToStaticMarkup(<SettingsScreen settings={settings} status="activated" />);
+    const html = renderToStaticMarkup(
+      <SettingsScreen
+        settings={settings}
+        operational={operational()}
+        status="activated"
+        csrfToken={"c".repeat(64)}
+      />,
+    );
 
     expect(html).not.toContain("목표 설정을 적용했습니다.");
   });
@@ -42,10 +55,16 @@ describe("SettingsScreen", () => {
       requiresCollection: false,
       assets: [],
       holdings: [],
-      liveOrdersEnabled: false,
     });
 
-    const html = renderToStaticMarkup(<SettingsScreen settings={settings} status="invalid" />);
+    const html = renderToStaticMarkup(
+      <SettingsScreen
+        settings={settings}
+        operational={operational()}
+        status="invalid"
+        csrfToken={"c".repeat(64)}
+      />,
+    );
 
     expect(html).toContain("설정 정보를 불러올 수 없습니다.");
     expect(html).not.toContain("목표 초안을 저장하지 못했습니다.");
@@ -94,10 +113,16 @@ describe("SettingsScreen", () => {
           currentBasisPointHundredths: 1_000_000,
         },
       ],
-      liveOrdersEnabled: false,
     });
 
-    const html = renderToStaticMarkup(<SettingsScreen settings={settings} status={undefined} />);
+    const html = renderToStaticMarkup(
+      <SettingsScreen
+        settings={settings}
+        operational={operational()}
+        status={undefined}
+        csrfToken={"c".repeat(64)}
+      />,
+    );
 
     expect(html).toContain('name="targetPercent"');
     expect(html).not.toContain('name="lowerPercent"');
@@ -122,10 +147,109 @@ describe("SettingsScreen", () => {
     expect(html).toContain("균형형 예시");
     expect(html).toContain("성장형 예시");
     expect(html).toContain("개인 맞춤 추천");
+    expect(html).toContain("실행 안전 설정");
+    expect(html).toContain("현재 수집된 계좌만 봉인");
+    expect(html).toContain('name="liveEnabled"');
+    expect(html).toContain("킬 스위치");
+    expect(html).toContain("Live 승격");
+    expect(html).toContain('name="_csrf"');
 
     const firstFormStart = html.indexOf("<form");
     const firstFormEnd = html.indexOf("</form>", firstFormStart);
     const secondFormStart = html.indexOf("<form", firstFormStart + 1);
     expect(firstFormEnd).toBeLessThan(secondFormStart);
   });
+
+  it("운영 설정 초안의 SHA-256과 적용 확인 문구를 화면에 표시한다", () => {
+    const settings = TargetSettingsSnapshotSchema.parse({
+      state: "NO_SNAPSHOT",
+      accountLabel: null,
+      snapshotObservedAt: null,
+      snapshotTargetVersion: null,
+      activeVersion: null,
+      draftVersion: null,
+      requiresCollection: false,
+      assets: [],
+      holdings: [],
+    });
+    const hash = "a".repeat(64);
+
+    const html = renderToStaticMarkup(
+      <SettingsScreen
+        settings={settings}
+        operational={operationalWithDraft(hash)}
+        status={undefined}
+        csrfToken={"c".repeat(64)}
+      />,
+    );
+
+    expect(html).toContain(hash);
+    expect(html).toContain('name="confirmation"');
+    expect(html).toContain('pattern="운영 설정을 적용합니다"');
+  });
 });
+
+function operational() {
+  return OperationalConfigSnapshotSchema.parse({
+    state: "EMPTY",
+    activeVersion: null,
+    draftVersion: null,
+    killSwitch: "UNKNOWN",
+    livePromotion: "UNKNOWN",
+    liveOrdersEnabled: false,
+  });
+}
+
+function operationalWithDraft(contentHash: string) {
+  return OperationalConfigSnapshotSchema.parse({
+    state: "EMPTY",
+    activeVersion: null,
+    draftVersion: {
+      id: "10000000-0000-4000-8000-000000000001",
+      version: 2,
+      status: "DRAFT",
+      contentHash,
+      createdAt: "2026-07-16T03:00:00+09:00",
+      config: {
+        schemaVersion: "OPERATIONAL_CONFIG_V1",
+        mode: "PAPER",
+        killSwitch: false,
+        freshness: {
+          quote: {
+            planMaxAgeSeconds: 300,
+            preSubmitMaxAgeSeconds: 30,
+            futureToleranceSeconds: 10,
+          },
+          calendar: { maxAgeSeconds: 86_400, futureToleranceSeconds: 10 },
+        },
+        limits: {
+          minimumOrderGrossMinor: "10000",
+          feeBufferMinor: "1000",
+          maxSingleOrderGrossMinor: "100000",
+          maxDailyGrossMinor: "300000",
+          maxDailyTurnoverBasisPoints: 1_000,
+          maxAbsolutePriceChangeBasisPoints: 500,
+          maxInstrumentWeightBasisPoints: 4_000,
+          maxAssetClassWeightBasisPoints: 7_000,
+          maxRiskyWeightBasisPoints: 8_000,
+        },
+        live: {
+          enabled: false,
+          marketCountry: "KR",
+          allowedSession: "REGULAR_MARKET",
+          orderType: "LIMIT",
+          timeInForce: "DAY",
+          accountAllowlistHmacs: [],
+          manualApprovalRequired: true,
+          approvalTtlSeconds: 300,
+          maxSingleOrderGrossMinor: "50000",
+          maxDailyGrossMinor: "150000",
+          tinyLiveMaxGrossMinor: "50000",
+        },
+      },
+    },
+    killSwitch: "UNKNOWN",
+    livePromotion: "UNKNOWN",
+    liveOrdersEnabled: false,
+  });
+}

@@ -18,7 +18,6 @@ describe("DashboardSnapshotSchema", () => {
       managedCashSource: "UNSET",
       unmanagedHoldings: [],
       blockReason: null,
-      liveOrdersEnabled: false,
       allocations: [
         {
           id: "core",
@@ -57,7 +56,6 @@ describe("DashboardSnapshotSchema", () => {
         protectiveAction: "주문 계획을 차단했습니다.",
         nextAction: "목표 비중을 설정하세요.",
       },
-      liveOrdersEnabled: false,
       allocations: [
         {
           id: "KR:005930",
@@ -92,7 +90,6 @@ describe("DashboardSnapshotSchema", () => {
       allocations: [],
       unmanagedHoldings: [],
       blockReason: null,
-      liveOrdersEnabled: false,
     };
 
     expect(

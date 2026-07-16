@@ -4,38 +4,113 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import type {
+  CancelOrderReceiptContract,
+  ExecuteRebalancePlanReceiptContract,
   InstrumentCandidateContract,
   TargetSettingsDraftInputContract,
 } from "@portfolio-rebalancer/contracts";
 
 import {
+  activateEngineOperationalDraft,
   activateEngineTargetDraft,
+  cancelEngineOrder,
   createEngineRebalancePlan,
+  createEngineLivePlanApproval,
   createEngineShadowPlan,
   createEngineTargetDraft,
   EngineConsoleRequestError,
+  executeEngineRebalancePlan,
+  reconcileEngineOrder,
+  recoverEngineUnknownOrder,
+  saveEngineCurrentAccountOperationalDraft,
+  saveEngineLivePromotion,
   searchEngineInstrumentCatalog,
+  setEngineKillSwitch,
   validateEngineInstrument,
 } from "@/server/engine-console";
 import { refreshEngineDashboard } from "@/server/engine-dashboard";
+import {
+  OperatorAuthError,
+  requireOperatorMutation,
+  type OperatorAuditContext,
+} from "@/server/operator-auth";
 import { targetSettingsInputFromFormData } from "@/server/target-settings-input";
 
-export async function refreshPortfolioAction() {
+export async function refreshPortfolioAction(formData: FormData) {
+  await requireActionOperator(formData, "/troubleshooting");
   await refreshEngineDashboard();
   revalidatePath("/", "layout");
   redirect("/troubleshooting");
 }
 
-export async function createShadowPlanAction() {
+export async function createShadowPlanAction(formData: FormData) {
+  await requireActionOperator(formData, "/rebalancing");
   return createRebalancePlan("SHADOW");
 }
 
 export async function createRebalancePlanAction(formData: FormData) {
+  await requireActionOperator(formData, "/rebalancing");
   const mode = formData.get("mode");
   if (mode !== "SHADOW" && mode !== "PAPER" && mode !== "LIVE") {
     redirect("/rebalancing?status=plan-mode-invalid");
   }
   return createRebalancePlan(mode);
+}
+
+export async function executePaperPlanAction(formData: FormData) {
+  const operator = await requireActionOperator(formData, "/rebalancing");
+  const planId = requiredUuid(formData, "planId");
+  if (!planId) redirect("/rebalancing?status=execute-input-invalid");
+  let status = "paper-execute-unavailable";
+  try {
+    const receipt = await executeEngineRebalancePlan(
+      { planId, mode: "PAPER", approvalIds: [] },
+      operator,
+    );
+    status = executionReceiptStatus(receipt);
+  } catch (error) {
+    status = orderActionStatus(error, "paper-execute-unavailable");
+  }
+  revalidateOrderViews();
+  redirect(`/rebalancing?status=${status}`);
+}
+
+export async function executeLivePlanAction(formData: FormData) {
+  const operator = await requireActionOperator(formData, "/rebalancing", true);
+  const planId = requiredUuid(formData, "planId");
+  const planHash = stringField(formData, "planHash");
+  const confirmation = stringField(formData, "confirmation");
+  if (
+    !planId ||
+    !/^[a-f0-9]{64}$/.test(planHash) ||
+    confirmation !== "LIVE 주문 계획과 금액을 확인했습니다"
+  ) {
+    redirect("/rebalancing?status=live-confirmation-required");
+  }
+  let status = "live-execute-unavailable";
+  try {
+    const approvalReceipt = await createEngineLivePlanApproval(
+      {
+        planId,
+        planHash,
+        confirmation,
+      },
+      operator,
+    );
+    const executionReceipt = await executeEngineRebalancePlan(
+      {
+        planId,
+        mode: "LIVE",
+        approvalIds: approvalReceipt.approvals.map(({ approvalId }) => approvalId),
+      },
+      operator,
+    );
+    status = executionReceiptStatus(executionReceipt);
+  } catch (error) {
+    status = orderActionStatus(error, "live-execute-unavailable");
+  }
+  revalidateOrderViews();
+  redirect(`/rebalancing?status=${status}`);
 }
 
 async function createRebalancePlan(mode: "SHADOW" | "PAPER" | "LIVE") {
@@ -74,6 +149,7 @@ export async function saveTargetDraftAction(
   _previousState: SaveTargetDraftActionState,
   formData: FormData,
 ): Promise<SaveTargetDraftActionState> {
+  await requireActionOperator(formData, "/settings");
   let input: TargetSettingsDraftInputContract;
   try {
     input = targetSettingsInputFromFormData(formData);
@@ -101,6 +177,7 @@ export async function searchTargetInstrumentAction(
   _previousState: SearchTargetInstrumentActionState,
   formData: FormData,
 ): Promise<SearchTargetInstrumentActionState> {
+  await requireActionOperator(formData, "/settings");
   const rawQuery = formData.get("instrumentQuery");
   const query = typeof rawQuery === "string" ? rawQuery.trim() : "";
   const lookupMode = formData.get("lookupMode");
@@ -173,6 +250,7 @@ export async function searchTargetInstrumentAction(
 }
 
 export async function activateTargetDraftAction(formData: FormData) {
+  await requireActionOperator(formData, "/settings");
   let status: string | null = "activate-invalid";
   const rawVersion = formData.get("version");
   if (typeof rawVersion === "string" && /^\d+$/.test(rawVersion)) {
@@ -192,6 +270,226 @@ export async function activateTargetDraftAction(formData: FormData) {
   }
   revalidatePath("/", "layout");
   redirect(status === null ? "/settings" : `/settings?status=${status}`);
+}
+
+export async function saveOperationalConfigDraftAction(formData: FormData) {
+  await requireActionOperator(formData, "/settings");
+  let status = "operational-draft-saved";
+  try {
+    const mode = stringField(formData, "mode");
+    if (mode !== "PAPER" && mode !== "LIVE") throw new Error("MODE_INVALID");
+    const liveEnabled = mode === "LIVE" && formData.get("liveEnabled") === "on";
+    const config = {
+      schemaVersion: "OPERATIONAL_CONFIG_V1",
+      mode,
+      killSwitch: false,
+      freshness: {
+        quote: {
+          planMaxAgeSeconds: 300,
+          preSubmitMaxAgeSeconds: 30,
+          futureToleranceSeconds: 10,
+        },
+        calendar: {
+          maxAgeSeconds: 86_400,
+          futureToleranceSeconds: 10,
+        },
+      },
+      limits: {
+        minimumOrderGrossMinor: positiveIntegerField(formData, "minimumOrderWon"),
+        feeBufferMinor: nonNegativeIntegerField(formData, "feeBufferWon"),
+        maxSingleOrderGrossMinor: positiveIntegerField(formData, "maxSingleOrderWon"),
+        maxDailyGrossMinor: positiveIntegerField(formData, "maxDailyGrossWon"),
+        maxDailyTurnoverBasisPoints: 1_000,
+        maxAbsolutePriceChangeBasisPoints: 500,
+        maxInstrumentWeightBasisPoints: 4_000,
+        maxAssetClassWeightBasisPoints: 7_000,
+        maxRiskyWeightBasisPoints: 8_000,
+      },
+      live: {
+        enabled: liveEnabled,
+        marketCountry: "KR",
+        allowedSession: "REGULAR_MARKET",
+        orderType: "LIMIT",
+        timeInForce: "DAY",
+        accountAllowlistHmacs: [],
+        manualApprovalRequired: true,
+        approvalTtlSeconds: integerField(formData, "approvalTtlSeconds", 1, 600),
+        maxSingleOrderGrossMinor: positiveIntegerField(formData, "liveMaxSingleOrderWon"),
+        maxDailyGrossMinor: positiveIntegerField(formData, "liveMaxDailyGrossWon"),
+        tinyLiveMaxGrossMinor: positiveIntegerField(formData, "tinyLiveMaxWon"),
+      },
+    };
+    if (mode === "LIVE" && !liveEnabled) {
+      throw new Error("LIVE_ENABLE_REQUIRED");
+    }
+    await saveEngineCurrentAccountOperationalDraft(config);
+  } catch (error) {
+    status =
+      error instanceof EngineConsoleRequestError
+        ? operationalActionStatus(error.code)
+        : "operational-input-invalid";
+  }
+  revalidatePath("/", "layout");
+  redirect(`/settings?status=${status}`);
+}
+
+export async function activateOperationalConfigDraftAction(formData: FormData) {
+  await requireActionOperator(formData, "/settings");
+  const version = integerFieldOrNull(formData, "version", 1, Number.MAX_SAFE_INTEGER);
+  const contentHash = stringField(formData, "contentHash");
+  const confirmation = stringField(formData, "confirmation");
+  let status = "operational-activated";
+  if (
+    version === null ||
+    !/^[a-f0-9]{64}$/.test(contentHash) ||
+    confirmation !== "운영 설정을 적용합니다"
+  ) {
+    status = "operational-input-invalid";
+  } else {
+    try {
+      await activateEngineOperationalDraft({
+        version,
+        contentHash,
+        confirmation,
+      });
+    } catch (error) {
+      status =
+        error instanceof EngineConsoleRequestError
+          ? operationalActionStatus(error.code)
+          : "operational-unavailable";
+    }
+  }
+  revalidatePath("/", "layout");
+  redirect(`/settings?status=${status}`);
+}
+
+export async function setLivePromotionAction(formData: FormData) {
+  const state = stringField(formData, "state");
+  const operator = await requireActionOperator(formData, "/settings", state === "GRANTED");
+  const reason = stringField(formData, "reason");
+  let status = "live-promotion-updated";
+  if ((state !== "GRANTED" && state !== "REVOKED") || reason.length < 8) {
+    status = "operational-input-invalid";
+  } else {
+    try {
+      const snapshot = await saveEngineLivePromotion(
+        {
+          state,
+          reason,
+          confirmation: state === "GRANTED" ? "극소액 Live 승격" : "Live 권한 회수",
+        },
+        operator,
+      );
+      if (snapshot.livePromotion !== state) status = "operational-unavailable";
+    } catch (error) {
+      status =
+        error instanceof EngineConsoleRequestError
+          ? operationalActionStatus(error.code)
+          : "operational-unavailable";
+    }
+  }
+  revalidatePath("/", "layout");
+  redirect(`/settings?status=${status}`);
+}
+
+export async function setKillSwitchAction(formData: FormData) {
+  const state = stringField(formData, "state");
+  const operator = await requireActionOperator(formData, "/settings", state === "DISENGAGED");
+  const reason = stringField(formData, "reason");
+  let status = state === "ENGAGED" ? "kill-switch-engaged" : "kill-switch-disengaged";
+  if ((state !== "ENGAGED" && state !== "DISENGAGED") || reason.length < 8) {
+    status = "operational-input-invalid";
+  } else {
+    try {
+      const snapshot = await setEngineKillSwitch(
+        {
+          state,
+          reason,
+          confirmation: state === "ENGAGED" ? "킬 스위치 작동" : "킬 스위치 해제",
+        },
+        operator,
+      );
+      if (snapshot.killSwitch !== state) status = "operational-unavailable";
+    } catch (error) {
+      status = orderActionStatus(error, "operational-unavailable");
+    }
+  }
+  revalidatePath("/", "layout");
+  redirect(`/settings?status=${status}`);
+}
+
+export async function cancelOrderAction(formData: FormData) {
+  const operator = await requireActionOperator(formData, "/orders", true);
+  const orderId = requiredUuid(formData, "orderId");
+  const reason = stringField(formData, "reason");
+  const confirmation = stringField(formData, "confirmation");
+  let status = "cancel-requested";
+  if (!orderId || reason.length < 8 || confirmation !== "미체결 주문 취소를 요청합니다") {
+    status = "order-input-invalid";
+  } else {
+    try {
+      const receipt = await cancelEngineOrder({ orderId, reason, confirmation }, operator);
+      status = cancelReceiptStatus(receipt);
+    } catch (error) {
+      status = orderActionStatus(error, "cancel-unavailable");
+    }
+  }
+  revalidateOrderViews();
+  redirect(`/orders?status=${status}`);
+}
+
+export async function reconcileOrderAction(formData: FormData) {
+  const operator = await requireActionOperator(formData, "/orders");
+  const orderId = requiredUuid(formData, "orderId");
+  let status = "order-reconciled";
+  if (!orderId) {
+    status = "order-input-invalid";
+  } else {
+    try {
+      await reconcileEngineOrder(orderId, operator);
+    } catch (error) {
+      status = orderActionStatus(error, "reconcile-unavailable");
+    }
+  }
+  revalidateOrderViews();
+  redirect(`/orders?status=${status}`);
+}
+
+export async function recoverUnknownOrderAction(formData: FormData) {
+  const operator = await requireActionOperator(formData, "/orders", true);
+  const orderId = requiredUuid(formData, "orderId");
+  const resolvedState = stringField(formData, "resolvedState");
+  let status = "order-recovered";
+  if (
+    !orderId ||
+    !["PENDING", "PARTIAL_FILLED", "FILLED", "CANCELED", "REJECTED"].includes(resolvedState)
+  ) {
+    status = "order-input-invalid";
+  } else {
+    try {
+      await recoverEngineUnknownOrder(
+        {
+          orderId,
+          resolvedState: resolvedState as
+            "PENDING" | "PARTIAL_FILLED" | "FILLED" | "CANCELED" | "REJECTED",
+          brokerEvidenceReference: stringField(formData, "brokerEvidenceReference"),
+          brokerOrderId: stringField(formData, "brokerOrderId"),
+          limitPriceMinor: positiveIntegerField(formData, "limitPriceWon"),
+          filledQuantity: nonNegativeIntegerField(formData, "filledQuantity"),
+          filledGrossMinor: nonNegativeIntegerField(formData, "filledGrossWon"),
+          feeMinor: nonNegativeIntegerField(formData, "feeWon"),
+        },
+        operator,
+      );
+    } catch (error) {
+      status =
+        error instanceof EngineConsoleRequestError
+          ? orderActionStatus(error, "recover-unavailable")
+          : "order-input-invalid";
+    }
+  }
+  revalidateOrderViews();
+  redirect(`/orders?status=${status}`);
 }
 
 function isExactInstrumentQuery(query: string): boolean {
@@ -255,4 +553,155 @@ function shadowPlanErrorStatus(code: string | null): string {
     default:
       return "plan-unavailable";
   }
+}
+
+function requiredUuid(formData: FormData, field: string): string | null {
+  const value = stringField(formData, field);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    ? value
+    : null;
+}
+
+function stringField(formData: FormData, field: string): string {
+  const value = formData.get(field);
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function positiveIntegerField(formData: FormData, field: string): string {
+  const value = stringField(formData, field);
+  if (!/^[1-9]\d*$/.test(value)) throw new Error(`${field.toUpperCase()}_INVALID`);
+  return value;
+}
+
+function nonNegativeIntegerField(formData: FormData, field: string): string {
+  const value = stringField(formData, field);
+  if (!/^(?:0|[1-9]\d*)$/.test(value)) throw new Error(`${field.toUpperCase()}_INVALID`);
+  return value;
+}
+
+function integerField(formData: FormData, field: string, minimum: number, maximum: number): number {
+  const value = integerFieldOrNull(formData, field, minimum, maximum);
+  if (value === null) throw new Error(`${field.toUpperCase()}_INVALID`);
+  return value;
+}
+
+function integerFieldOrNull(
+  formData: FormData,
+  field: string,
+  minimum: number,
+  maximum: number,
+): number | null {
+  const raw = stringField(formData, field);
+  if (!/^\d+$/.test(raw)) return null;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value >= minimum && value <= maximum ? value : null;
+}
+
+function executionReceiptStatus(receipt: ExecuteRebalancePlanReceiptContract): string {
+  if (receipt.mode === "PAPER") {
+    switch (receipt.outcome) {
+      case "COMPLETED":
+        return "paper-executed";
+      case "PENDING":
+        return "paper-execution-pending";
+      case "BLOCKED":
+        return "paper-execution-blocked";
+      case "REFRESH_REQUIRED":
+        return "paper-refresh-required";
+    }
+  }
+  switch (receipt.outcome) {
+    case "COMPLETED":
+      return "live-order-completed";
+    case "PENDING":
+      return "live-order-pending";
+    case "BLOCKED":
+      return "order-execution-blocked";
+    case "REFRESH_REQUIRED":
+      return "live-refresh-required";
+  }
+}
+
+function cancelReceiptStatus(receipt: CancelOrderReceiptContract): string {
+  switch (receipt.outcome) {
+    case "REQUEST_ACCEPTED":
+      return "cancel-requested";
+    case "REJECTED":
+      return "cancel-rejected";
+    case "BLOCKED":
+      return "cancel-blocked";
+    case "UNKNOWN":
+      return "cancel-unknown";
+  }
+}
+
+async function requireActionOperator(
+  formData: FormData,
+  returnTo: "/orders" | "/rebalancing" | "/settings" | "/troubleshooting",
+  recentReauthentication: boolean = false,
+): Promise<OperatorAuditContext> {
+  try {
+    return await requireOperatorMutation(formData, { recentReauthentication });
+  } catch (error) {
+    if (error instanceof OperatorAuthError) {
+      const encodedReturnTo = encodeURIComponent(returnTo);
+      if (error.code === "AUTH_REAUTH_REQUIRED") {
+        redirect(`/auth/reauth?returnTo=${encodedReturnTo}`);
+      }
+      if (error.code === "AUTH_UNAUTHENTICATED" || error.code === "AUTH_NOT_CONFIGURED") {
+        redirect(`/auth/login?returnTo=${encodedReturnTo}`);
+      }
+    }
+    redirect(`${returnTo}?status=operator-security-blocked`);
+  }
+}
+
+function orderActionStatus(error: unknown, fallback: string): string {
+  if (!(error instanceof EngineConsoleRequestError)) return fallback;
+  switch (error.code) {
+    case "ORDER_INPUT_INVALID":
+      return "order-input-invalid";
+    case "ORDER_APPROVAL_INVALID":
+    case "ORDER_APPROVAL_STALE":
+      return "live-approval-stale";
+    case "ORDER_EXECUTION_BLOCKED":
+      return "order-execution-blocked";
+    case "ORDER_CANCEL_BLOCKED":
+      return "cancel-blocked";
+    case "ORDER_RECOVERY_BLOCKED":
+      return "recovery-blocked";
+    case "ORDER_NOT_FOUND":
+      return "order-not-found";
+    default:
+      return fallback;
+  }
+}
+
+function operationalActionStatus(code: string | null): string {
+  switch (code) {
+    case "OPERATIONAL_CONFIG_INPUT_INVALID":
+      return "operational-input-invalid";
+    case "OPERATIONAL_CONFIG_ACCOUNT_MISSING":
+      return "operational-account-missing";
+    case "OPERATIONAL_CONFIG_CONTENT_REUSED":
+      return "operational-content-reused";
+    case "OPERATIONAL_CONFIG_DRAFT_STALE":
+    case "OPERATIONAL_CONFIG_HASH_MISMATCH":
+      return "operational-draft-stale";
+    case "LIVE_PROMOTION_KILL_SWITCH_BLOCKED":
+      return "live-kill-switch-blocked";
+    case "LIVE_PROMOTION_POLICY_BLOCKED":
+      return "live-policy-blocked";
+    case "LIVE_PROMOTION_REVOKE_REQUIRED":
+      return "live-revoke-required";
+    default:
+      return "operational-unavailable";
+  }
+}
+
+function revalidateOrderViews(): void {
+  revalidatePath("/rebalancing");
+  revalidatePath("/orders");
+  revalidatePath("/settings");
+  revalidatePath("/", "layout");
 }

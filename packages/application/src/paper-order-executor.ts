@@ -241,12 +241,7 @@ export function simulatePaperLimitDayOrder(
       ? evidence.quotePriceMinor <= input.order.limitPriceMinor
       : evidence.quotePriceMinor >= input.order.limitPriceMinor;
   if (!quoteCrossed) {
-    return noFillResult(
-      input,
-      "LIMIT_NOT_CROSSED",
-      "PAPER_LIMIT_NOT_CROSSED",
-      evidenceResult,
-    );
+    return noFillResult(input, "LIMIT_NOT_CROSSED", "PAPER_LIMIT_NOT_CROSSED", evidenceResult);
   }
 
   if (simulation.fillQuantity === 0n) {

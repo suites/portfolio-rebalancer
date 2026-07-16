@@ -37,7 +37,6 @@ describe("rebalance plan presenter", () => {
     await expect(getLatestRebalancePlan(repository as never)).resolves.toEqual({
       state: "NO_PLAN",
       latest: null,
-      liveOrdersEnabled: false,
     });
   });
 
@@ -45,7 +44,6 @@ describe("rebalance plan presenter", () => {
     expect(unavailableRebalancePlanSnapshot()).toEqual({
       state: "UNAVAILABLE",
       latest: null,
-      liveOrdersEnabled: false,
     });
   });
 });

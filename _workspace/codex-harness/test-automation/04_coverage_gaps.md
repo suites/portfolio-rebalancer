@@ -22,3 +22,9 @@
 - API schema 변경 감지 CI
 - log와 모든 오류 경로의 secret 마스킹
 - 프로세스 종료·저장 실패·알림 실패 복구
+
+## Runtime DB role 후속 공백
+
+- 실제 Supabase/Supavisor custom role bootstrap과 pooled URL 표본
+- production migration identity가 CREATEROLE/DB owner인지 배포 전 doctor 검사
+- future migration이 새 `FOR UPDATE` 대상을 추가할 때 allowlist 누락을 자동 탐지하는 catalog contract

@@ -33,7 +33,6 @@ describe("dashboard presenter with snapshot-bound target", () => {
     ]);
     expect(dashboard.managedCashMinor).toBeNull();
     expect(dashboard.managedCashSource).toBe("UNSET");
-    expect(dashboard.liveOrdersEnabled).toBe(false);
   });
 
   it("활성 설정과 snapshot 고정 버전이 다르면 과거 snapshot 재해석을 차단한다", async () => {

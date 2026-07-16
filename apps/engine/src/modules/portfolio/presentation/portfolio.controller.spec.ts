@@ -289,7 +289,7 @@ describe("NestJS engine HTTP contract", () => {
 
 async function createHarness(environment: NodeJS.ProcessEnv) {
   const config = loadEngineConfig({
-    DATABASE_URL: "postgresql://local:local@127.0.0.1:15432/local",
+    DATABASE_RUNTIME_URL: "postgresql://local_runtime:local@127.0.0.1:15432/local",
     ...environment,
   });
   const portfolio = {
@@ -306,8 +306,6 @@ async function createHarness(environment: NodeJS.ProcessEnv) {
       ConsoleRecordsSnapshotSchema.parse({
         state: "READY",
         records: [],
-        orderLedgerState: "NOT_IMPLEMENTED",
-        liveOrdersEnabled: false,
       }),
     ),
     targetSettings: vi.fn().mockResolvedValue(
@@ -321,14 +319,12 @@ async function createHarness(environment: NodeJS.ProcessEnv) {
         requiresCollection: false,
         assets: [],
         holdings: [],
-        liveOrdersEnabled: false,
       }),
     ),
     rebalancePlan: vi.fn().mockResolvedValue(
       RebalancePlanSnapshotSchema.parse({
         state: "NO_PLAN",
         latest: null,
-        liveOrdersEnabled: false,
       }),
     ),
     createRebalancePlan: vi.fn(),
@@ -377,7 +373,6 @@ function rebalancePlanSnapshot() {
       deferredBuyNeeds: [],
       projectedAllocations: [],
     },
-    liveOrdersEnabled: false,
   });
 }
 

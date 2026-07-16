@@ -30,3 +30,12 @@
 - `AllocationBand` 이탈을 `attention`으로 표시하고 접근 가능한 범위 설명 제공
 - Button의 native disabled 속성
 - StatusBanner의 영역과 제목을 고유 accessible ID로 연결
+
+## Runtime DB role
+
+- migration URL은 `DATABASE_URL`, runtime URL은 `DATABASE_RUNTIME_URL`만 선택
+- local 기본 owner/runtime username 분리
+- 같은 DB principal URL 차단과 Supabase pooler suffix 정규화
+- safe runtime role row 허용
+- owner session, superuser, CREATEROLE, object owner, public CREATE, TRUNCATE, migration ledger 접근 거부
+- bootstrap SQL의 INSERT/UPDATE/DELETE allowlist와 future default revoke 정적 계약

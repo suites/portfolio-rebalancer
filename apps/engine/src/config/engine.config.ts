@@ -3,8 +3,10 @@ import { resolve } from "node:path";
 import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
 
+import { resolveRuntimeDatabaseUrl } from "@portfolio-rebalancer/database";
+
 const EnvironmentSchema = z.object({
-  DATABASE_URL: z.string().min(1),
+  DATABASE_RUNTIME_URL: z.string().min(1),
   TOSSINVEST_CLIENT_ID: z.string().min(1).optional(),
   TOSSINVEST_CLIENT_SECRET: z.string().min(1).optional(),
   TOSSINVEST_ACCOUNT_SEQ: z.coerce.number().int().safe().positive().optional(),
@@ -24,12 +26,7 @@ export function loadEngineConfig(environment: NodeJS.ProcessEnv): EngineConfig {
     ...environment,
     ENGINE_HOST: environment.ENGINE_HOST ?? (environment.VERCEL === "1" ? "0.0.0.0" : undefined),
     ENGINE_PORT: environment.PORT ?? environment.ENGINE_PORT,
-    DATABASE_URL:
-      environment.POSTGRES_PRISMA_URL ??
-      environment.DATABASE_URL ??
-      (environment.VERCEL === "1"
-        ? undefined
-        : "postgresql://portfolio:portfolio_local@127.0.0.1:15432/portfolio_rebalancer"),
+    DATABASE_RUNTIME_URL: resolveRuntimeDatabaseUrl(environment),
   });
   if (!result.success) {
     const missing = result.error.issues.map(({ path }) => path.join(".")).join(", ");

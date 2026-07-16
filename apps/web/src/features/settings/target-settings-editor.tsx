@@ -46,8 +46,10 @@ const initialSaveState: SaveTargetDraftActionState = {
 
 export function TargetSettingsEditor({
   settings,
+  csrfToken,
 }: {
   readonly settings: TargetSettingsSnapshotContract;
+  readonly csrfToken: string;
 }) {
   const editable = settings.draftVersion ?? settings.activeVersion;
   const [instruments, setInstruments] = useState<EditableInstrument[]>(() =>
@@ -140,6 +142,7 @@ export function TargetSettingsEditor({
           </p>
         </div>
         <form action={searchAction} className={styles.lookupForm}>
+          <input type="hidden" name="_csrf" value={csrfToken} />
           <label htmlFor="instrument-query">종목명, 국내 종목코드 또는 미국 티커</label>
           <div className={styles.lookupControls}>
             <input
@@ -237,6 +240,7 @@ export function TargetSettingsEditor({
       ) : null}
 
       <form className={styles.settingsForm} action={saveAction}>
+        <input type="hidden" name="_csrf" value={csrfToken} />
         <fieldset className={styles.allocationFieldset}>
           <legend>목표 비중 예시</legend>
           <p className={styles.fieldDescription}>

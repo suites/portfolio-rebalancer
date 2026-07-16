@@ -56,7 +56,6 @@ describe("PortfolioScreen", () => {
         protectiveAction: "계획을 차단했습니다.",
         nextAction: "설정을 확인하세요.",
       },
-      liveOrdersEnabled: false,
     });
 
     const html = renderToStaticMarkup(<PortfolioScreen snapshot={snapshot} />);

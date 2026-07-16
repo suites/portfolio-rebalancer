@@ -31,16 +31,10 @@ export interface OrderTransitionDecision {
 }
 
 export type ReconciledBrokerState =
-  | "PENDING"
-  | "PARTIAL_FILLED"
-  | "FILLED"
-  | "CANCELED"
-  | "REJECTED";
+  "PENDING" | "PARTIAL_FILLED" | "FILLED" | "CANCELED" | "REJECTED";
 
 export type AmbiguousOrderRecoveryAction =
-  | "APPLY_RECONCILED_STATE"
-  | "RECONCILE_ONLY"
-  | "TRANSITION_UNKNOWN_BLOCKED";
+  "APPLY_RECONCILED_STATE" | "RECONCILE_ONLY" | "TRANSITION_UNKNOWN_BLOCKED";
 
 export interface AmbiguousOrderRecoveryDecision {
   readonly action: AmbiguousOrderRecoveryAction;
@@ -62,14 +56,7 @@ const ALLOWED_TRANSITIONS: Readonly<Record<OrderState, readonly OrderState[]>> =
   FILLED: [],
   CANCELED: [],
   REJECTED: [],
-  UNKNOWN: [
-    "PENDING",
-    "PARTIAL_FILLED",
-    "FILLED",
-    "CANCELED",
-    "REJECTED",
-    "UNKNOWN_BLOCKED",
-  ],
+  UNKNOWN: ["PENDING", "PARTIAL_FILLED", "FILLED", "CANCELED", "REJECTED", "UNKNOWN_BLOCKED"],
   UNKNOWN_BLOCKED: ["PENDING", "PARTIAL_FILLED", "FILLED", "CANCELED", "REJECTED"],
 };
 
@@ -103,10 +90,7 @@ export function evaluateOrderTransition(input: {
         message: "부분체결 누계가 증가한 진행 이벤트를 기록할 수 있습니다.",
       };
     }
-    return blocked(
-      "ORDER_STATE_UNCHANGED",
-      "같은 주문 상태를 중복 기록하지 않습니다.",
-    );
+    return blocked("ORDER_STATE_UNCHANGED", "같은 주문 상태를 중복 기록하지 않습니다.");
   }
   if (IMMUTABLE_TERMINAL_STATES.has(input.from)) {
     return blocked(

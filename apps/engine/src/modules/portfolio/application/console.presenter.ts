@@ -22,7 +22,6 @@ export async function getTargetSettings(
       requiresCollection: false,
       assets: [],
       holdings: [],
-      liveOrdersEnabled: false,
     });
   }
 
@@ -77,7 +76,6 @@ export async function getTargetSettings(
       currentBasisPointHundredths:
         total === 0n ? 0 : Number((holding.marketValueKrwMinor * 1_000_000n) / total),
     })),
-    liveOrdersEnabled: false,
   });
 }
 
@@ -99,8 +97,6 @@ export async function getConsoleRecords(
       errorCode: record.errorCode,
       checks: record.snapshot?.checks ?? [],
     })),
-    orderLedgerState: "NOT_IMPLEMENTED",
-    liveOrdersEnabled: false,
   });
 }
 
@@ -108,8 +104,6 @@ export function unavailableConsoleRecords(): ConsoleRecordsSnapshotContract {
   return ConsoleRecordsSnapshotSchema.parse({
     state: "UNAVAILABLE",
     records: [],
-    orderLedgerState: "NOT_IMPLEMENTED",
-    liveOrdersEnabled: false,
   });
 }
 

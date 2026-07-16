@@ -8,6 +8,7 @@ import {
   LivePromotionCommandSchema,
   OperationalConfigSchema,
   OperationalConfigSnapshotSchema,
+  SaveCurrentAccountOperationalConfigDraftInputSchema,
 } from "./operational-config";
 
 const validConfig = {
@@ -52,6 +53,22 @@ const validConfig = {
 };
 
 describe("OperationalConfigSchema", () => {
+  it("현재 계좌용 웹 명령은 HMAC 대신 명시적 account scope와 원본 config만 받는다", () => {
+    expect(
+      SaveCurrentAccountOperationalConfigDraftInputSchema.safeParse({
+        accountScope: "CURRENT_ACCOUNT",
+        config: { ...validConfig, live: { ...validConfig.live, accountAllowlistHmacs: [] } },
+      }).success,
+    ).toBe(true);
+    expect(
+      SaveCurrentAccountOperationalConfigDraftInputSchema.safeParse({
+        accountScope: "ARBITRARY_ACCOUNT",
+        accountNumber: "12345678",
+        config: validConfig,
+      }).success,
+    ).toBe(false);
+  });
+
   it("기본 실행 모드는 PAPER이고 live는 기본 비활성화한다", () => {
     const parsed = OperationalConfigSchema.parse({
       ...validConfig,
