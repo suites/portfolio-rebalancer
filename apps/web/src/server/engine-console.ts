@@ -96,6 +96,7 @@ function unavailableTargetSettings(): TargetSettingsSnapshotContract {
     draftVersion: null,
     requiresCollection: false,
     assets: [],
+    holdings: [],
     liveOrdersEnabled: false,
   });
 }

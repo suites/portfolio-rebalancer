@@ -14,6 +14,10 @@ RuntimeLease.
   확정 lower/upper와 함께 보존한다. 기존 행은 `CUSTOM/LEGACY_V1`으로 migration한다.
 - `TargetConfigVersion.cashPolicy` JSONB는 `UNSET`, `EXCLUDED`, `FIXED_KRW` 정책을
   버전과 함께 보존한다.
+- `TargetAllocation.compositionPolicy` JSONB는 `PRESERVE_CURRENT_V1`, `CASH_V1` 또는
+  legacy 단일 종목 정책을 보존한다.
+- `TargetInstrument.configVersionId`와 복합 FK는 부모 allocation의 버전 일치를 보장하고,
+  `(configVersionId, marketCountry, symbol)` UNIQUE가 버전 내 복수 자산군 배정을 막는다.
 - `PortfolioSnapshot.securitiesValueMinor`는 주식 평가액이고 DB CHECK가
   `totalValueMinor = securitiesValueMinor + COALESCE(managedCashMinor, 0)`을 보장한다.
 - snapshot의 target version ID와 managed cash는 같은 fenced transaction에서 결정한다.

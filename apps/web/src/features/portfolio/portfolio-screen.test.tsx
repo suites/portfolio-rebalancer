@@ -6,7 +6,7 @@ import { DashboardSnapshotSchema } from "@portfolio-rebalancer/contracts";
 import { PortfolioScreen } from "./portfolio-screen";
 
 describe("PortfolioScreen", () => {
-  it("실제 allocation을 caption과 column header가 있는 native table로 표시한다", () => {
+  it("자산군과 구성 종목, 관리되지 않는 보유종목을 native table과 별도 영역에 표시한다", () => {
     const snapshot = DashboardSnapshotSchema.parse({
       state: "BLOCKED",
       mode: "SHADOW",
@@ -15,25 +15,44 @@ describe("PortfolioScreen", () => {
       accountLabel: "****1234",
       observedAt: "2026-07-16T03:00:00.000Z",
       conclusion: "BLOCKED",
-      totalValueMinor: "1000000",
+      securitiesValueMinor: "1000100",
+      totalValueMinor: "1000100",
       managedCashMinor: null,
       managedCashSource: "UNSET",
       allocations: [
         {
-          id: "US:AAPL",
-          label: "Apple",
-          description: "NASDAQ · USD · 1주",
+          id: "CORE",
+          label: "핵심 공격자산",
+          description: "장기 성장 핵심 자산 · 1개 구성 종목",
           valueMinor: "1000000",
-          currentBasisPointHundredths: 1_000_000,
-          targetBasisPoints: null,
-          lowerBasisPoints: null,
-          upperBasisPoints: null,
-          bandStatus: "TARGET_NOT_CONFIGURED",
+          currentBasisPointHundredths: 999_900,
+          targetBasisPoints: 10_000,
+          lowerBasisPoints: 9_500,
+          upperBasisPoints: 10_000,
+          bandStatus: "IN_RANGE",
+          instruments: [
+            {
+              id: "US:AAPL",
+              label: "Apple",
+              description: "US · USD · 1주",
+              valueMinor: "1000000",
+              currentWithinAssetBasisPointHundredths: 1_000_000,
+              targetWithinAssetPoints: 10_000,
+            },
+          ],
+        },
+      ],
+      unmanagedHoldings: [
+        {
+          id: "US:BRK.B",
+          label: "Berkshire",
+          description: "US · USD · 1주",
+          valueMinor: "100",
         },
       ],
       blockReason: {
-        code: "TARGET_CONFIG_MISSING",
-        problem: "목표가 없습니다.",
+        code: "UNMANAGED_ASSET",
+        problem: "관리되지 않는 보유종목이 있습니다.",
         protectiveAction: "계획을 차단했습니다.",
         nextAction: "설정을 확인하세요.",
       },
@@ -46,6 +65,8 @@ describe("PortfolioScreen", () => {
     expect(html).toContain("<caption>");
     expect(html).toContain('scope="col"');
     expect(html).toContain("Apple");
-    expect(html).toContain("목표 미설정");
+    expect(html).toContain("핵심 공격자산");
+    expect(html).toContain("관리되지 않는 보유종목");
+    expect(html).toContain("Berkshire");
   });
 });

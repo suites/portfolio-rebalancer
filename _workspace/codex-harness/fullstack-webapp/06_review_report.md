@@ -8,13 +8,16 @@
 - 통화별 buying-power를 불변 저장하고 `valuationEligible=false`로 고정했다.
 - 보유주식 평가액, 매수 가능 금액과 관리 현금을 UI에서 분리했다.
 - 로컬 PostgreSQL `127.0.0.1:15432/portfolio_rebalancer`에 migration을 적용했다.
-- `pnpm verify`는 변경 후 112개 테스트를 포함해 통과했다.
+- `pnpm verify`는 변경 후 123개 테스트를 포함해 통과했다.
 - collection fencing/heartbeat와 최신 수집 계좌 범위 고정을 완료했다.
 - 목표 입력을 서버 확정 `AUTO/MIXED_V1` 밴드로 단순화하고 policy version을 저장한다.
 - `marketCountry + symbol` 정규 키와 별도 `listingMarket` metadata를 분리했다.
 - 관리 현금을 고정 원화 금액 또는 평가 제외로 명시하고 buying-power와 분리했다.
 - snapshot의 주식 평가액, 관리 현금과 총액 DB 불변식 및 ACTIVE 정책 원자 고정을 구현했다.
 - legacy snapshot 4개 backfill 결과 합계 불일치 0개, 두 CHECK와 immutable trigger 활성 상태를 확인했다.
+- 현재 보유종목을 SAFE/CORE/SATELLITE로 분류하고 CASH를 포함한 네 자산군 목표로 전환했다.
+- `PRESERVE_CURRENT_V1` 내부 비중과 버전 단위 종목 UNIQUE/복합 FK를 구현했다.
+- 로컬 기존 instrument 2개 backfill에서 null·버전 불일치·중복 0개를 확인하고 중복 insert가 `P2010`으로 롤백됨을 확인했다.
 
 - 실제 주문 전송 차단 유지: 통과
 - 브라우저/Next의 Toss secret 접근 금지: 통과
@@ -33,6 +36,6 @@
 - 주문 계획·원장·paper 체결·복구: 이번 범위 밖, 화면에서 안전한 빈 상태 유지
 - URL query만으로 설정·재점검 성공 표시 불가: 통과
 - `pnpm verify` format/lint/typecheck/test/build: 통과
-- 계약 8, engine 45, web 11을 포함한 전체 workspace 112개 단위 테스트: 통과
+- 계약 11, domain 21, engine 48, web 12를 포함한 전체 workspace 123개 단위 테스트: 통과
 - 실제 브라우저 수동 320px·VoiceOver 검증: 실행 가능한 브라우저 연결이 없어 UI-5 후속으로 유지
 - 실제 PostgreSQL 동시성 통합 테스트와 6개 라우트 브라우저 E2E: 후속 보강 필요

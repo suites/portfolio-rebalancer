@@ -87,26 +87,30 @@ model TargetAllocation {
   lowerBasisPoints  Int    @map("lower_basis_points")
   upperBasisPoints  Int    @map("upper_basis_points")
   bandPolicy        Json   @map("band_policy") @db.JsonB
+  compositionPolicy Json   @map("composition_policy") @db.JsonB
 
   configVersion TargetConfigVersion @relation(fields: [configVersionId], references: [id], onDelete: Restrict)
   instruments   TargetInstrument[]
 
   @@unique([configVersionId, assetKey])
+  @@unique([id, configVersionId], map: "target_allocation_id_config_version_id_key")
   @@map("target_allocation")
 }
 
 model TargetInstrument {
   id                String  @id @default(uuid()) @db.Uuid
   allocationId      String  @map("allocation_id") @db.Uuid
+  configVersionId   String  @map("config_version_id") @db.Uuid
   marketCountry     String  @map("market")
   listingMarket     String? @map("listing_market")
   symbol            String
   currency          String
   withinAssetPoints Int     @map("within_asset_points")
 
-  allocation TargetAllocation @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+  allocation TargetAllocation @relation(fields: [allocationId, configVersionId], references: [id, configVersionId], onDelete: Restrict)
 
   @@unique([allocationId, marketCountry, symbol], map: "target_instrument_allocation_id_market_symbol_key")
+  @@unique([configVersionId, marketCountry, symbol], map: "target_instrument_config_version_id_market_symbol_key")
   @@map("target_instrument")
 }
 
@@ -157,7 +161,7 @@ model PortfolioSnapshot {
   validationStatus      SnapshotValidationStatus @map("validation_status")
   baseCurrency          String                   @map("base_currency")
   managedCashMinor      BigInt?                  @map("managed_cash_minor")
-  securitiesValueMinor BigInt                   @map("securities_value_minor")
+  securitiesValueMinor  BigInt                   @map("securities_value_minor")
   totalValueMinor       BigInt                   @map("total_value_minor")
   usdKrwRate            String?                  @map("usd_krw_rate")
   digest                String                   @db.Char(64)

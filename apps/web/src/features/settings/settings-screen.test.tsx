@@ -21,6 +21,7 @@ describe("SettingsScreen", () => {
       draftVersion: null,
       requiresCollection: false,
       assets: [],
+      holdings: [],
       liveOrdersEnabled: false,
     });
 
@@ -39,6 +40,7 @@ describe("SettingsScreen", () => {
       draftVersion: null,
       requiresCollection: false,
       assets: [],
+      holdings: [],
       liveOrdersEnabled: false,
     });
 
@@ -59,16 +61,36 @@ describe("SettingsScreen", () => {
       requiresCollection: false,
       assets: [
         {
-          assetKey: "KR:005930",
-          label: "삼성전자",
-          description: "KR · KRW · 1주",
-          currentBasisPointHundredths: 1_000_000,
+          assetKey: "SAFE",
+          label: "안전자산",
+          description: "채권·현금성 등 변동성 완충 자산",
+          currentBasisPointHundredths: null,
+        },
+        {
+          assetKey: "CORE",
+          label: "핵심 공격자산",
+          description: "장기 성장을 담당하는 광범위 핵심 자산",
+          currentBasisPointHundredths: null,
+        },
+        {
+          assetKey: "SATELLITE",
+          label: "위성 공격자산",
+          description: "개별주·테마 등 변동성이 큰 보조 자산",
+          currentBasisPointHundredths: null,
         },
         {
           assetKey: "CASH",
           label: "관리 현금",
           description: "평가에 포함할 관리 현금을 아직 선택하지 않았습니다.",
           currentBasisPointHundredths: null,
+        },
+      ],
+      holdings: [
+        {
+          instrumentKey: "KR:005930",
+          label: "삼성전자",
+          description: "KR · KRW · 1주",
+          currentBasisPointHundredths: 1_000_000,
         },
       ],
       liveOrdersEnabled: false,
@@ -82,6 +104,10 @@ describe("SettingsScreen", () => {
     expect(html).toContain("목표의 25%, 최대 ±5%p");
     expect(html).toContain('name="cashMode"');
     expect(html).toContain('name="managedCashWon"');
+    expect(html).toContain('name="instrumentClass"');
+    expect(html).toContain("안전자산");
+    expect(html).toContain("핵심 공격자산");
+    expect(html).toContain("위성 공격자산");
     expect(html).toContain("계산 전");
   });
 });

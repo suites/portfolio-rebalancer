@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const basisPoints = z.number().int().min(0).max(10_000);
+const minorUnitString = z.string().regex(/^\d+$/);
 
 export const DashboardBlockReasonSchema = z.object({
   code: z.enum([
@@ -32,12 +33,25 @@ export const DashboardAllocationSchema = z
     id: z.string().min(1),
     label: z.string().min(1),
     description: z.string().min(1),
-    valueMinor: z.string().regex(/^\d+$/),
+    valueMinor: minorUnitString,
     currentBasisPointHundredths: z.number().int().min(0).max(1_000_000),
     targetBasisPoints: basisPoints.nullable(),
     lowerBasisPoints: basisPoints.nullable(),
     upperBasisPoints: basisPoints.nullable(),
     bandStatus: z.enum(["IN_RANGE", "OUTSIDE_BAND", "TARGET_NOT_CONFIGURED"]),
+    instruments: z
+      .array(
+        z.object({
+          id: z.string().min(1),
+          label: z.string().min(1),
+          description: z.string().min(1),
+          valueMinor: minorUnitString,
+          currentWithinAssetBasisPointHundredths: z.number().int().min(0).max(1_000_000),
+          targetWithinAssetPoints: basisPoints,
+        }),
+      )
+      .max(100)
+      .default([]),
   })
   .superRefine((allocation, context) => {
     const targets = [
@@ -73,6 +87,13 @@ export const DashboardBuyingPowerSchema = z.object({
   valuationEligible: z.literal(false),
 });
 
+export const DashboardUnmanagedHoldingSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  description: z.string().min(1),
+  valueMinor: minorUnitString,
+});
+
 export const DashboardSnapshotSchema = z
   .object({
     state: z.enum(["READY", "EMPTY", "BLOCKED"]),
@@ -82,11 +103,13 @@ export const DashboardSnapshotSchema = z
     accountLabel: z.string().min(1).nullable(),
     observedAt: z.iso.datetime({ offset: true }).nullable(),
     conclusion: z.enum(["NO_ACTION", "REBALANCE_REQUIRED", "BLOCKED"]),
-    totalValueMinor: z.string().regex(/^\d+$/).nullable(),
-    managedCashMinor: z.string().regex(/^\d+$/).nullable(),
+    securitiesValueMinor: minorUnitString.nullable(),
+    totalValueMinor: minorUnitString.nullable(),
+    managedCashMinor: minorUnitString.nullable(),
     managedCashSource: z.enum(["UNSET", "EXCLUDED", "USER_FIXED"]),
     buyingPower: z.array(DashboardBuyingPowerSchema).max(2).default([]),
     allocations: z.array(DashboardAllocationSchema),
+    unmanagedHoldings: z.array(DashboardUnmanagedHoldingSchema).default([]),
     blockReason: DashboardBlockReasonSchema.nullable(),
     liveOrdersEnabled: z.literal(false),
   })
@@ -110,6 +133,20 @@ export const DashboardSnapshotSchema = z
         code: "custom",
         path: ["managedCashMinor"],
         message: "사용자 고정 관리 현금에는 금액이 필요합니다.",
+      });
+    }
+    if (
+      snapshot.securitiesValueMinor !== null &&
+      snapshot.totalValueMinor !== null &&
+      snapshot.totalValueMinor !==
+        (
+          BigInt(snapshot.securitiesValueMinor) + BigInt(snapshot.managedCashMinor ?? "0")
+        ).toString()
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["totalValueMinor"],
+        message: "총 관리 자산은 주식 평가액과 관리 현금의 합이어야 합니다.",
       });
     }
   });

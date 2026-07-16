@@ -57,6 +57,11 @@ export type StoredCashPolicy =
       readonly amountMinor: string;
     };
 
+export type StoredCompositionPolicy =
+  | { readonly mode: "PRESERVE_CURRENT"; readonly version: "PRESERVE_CURRENT_V1" }
+  | { readonly mode: "NONE"; readonly version: "CASH_V1" }
+  | { readonly mode: "LEGACY_SINGLE"; readonly version: string };
+
 export interface StoredTargetAllocationInput {
   readonly assetKey: string;
   readonly label: string;
@@ -71,6 +76,7 @@ export interface StoredTargetAllocationInput {
         readonly lowerBasisPoints: number;
         readonly upperBasisPoints: number;
       };
+  readonly compositionPolicy: StoredCompositionPolicy;
   readonly instruments: readonly StoredTargetInstrumentInput[];
 }
 
@@ -288,7 +294,14 @@ export class PrismaPortfolioRepository {
         holdings: { orderBy: [{ marketCountry: "asc" }, { symbol: "asc" }] },
         buyingPower: { orderBy: { currency: "asc" } },
         targetConfigVersion: {
-          include: { allocations: { orderBy: { assetKey: "asc" } } },
+          include: {
+            allocations: {
+              orderBy: { assetKey: "asc" },
+              include: {
+                instruments: { orderBy: [{ marketCountry: "asc" }, { symbol: "asc" }] },
+              },
+            },
+          },
         },
       },
     });
@@ -315,12 +328,26 @@ export class PrismaPortfolioRepository {
       this.database.targetConfigVersion.findFirst({
         where: { config: { accountId: snapshot.accountId }, status: "ACTIVE" },
         orderBy: { version: "desc" },
-        include: { allocations: { orderBy: { assetKey: "asc" } } },
+        include: {
+          allocations: {
+            orderBy: { assetKey: "asc" },
+            include: {
+              instruments: { orderBy: [{ marketCountry: "asc" }, { symbol: "asc" }] },
+            },
+          },
+        },
       }),
       this.database.targetConfigVersion.findFirst({
         where: { config: { accountId: snapshot.accountId }, status: "DRAFT" },
         orderBy: { version: "desc" },
-        include: { allocations: { orderBy: { assetKey: "asc" } } },
+        include: {
+          allocations: {
+            orderBy: { assetKey: "asc" },
+            include: {
+              instruments: { orderBy: [{ marketCountry: "asc" }, { symbol: "asc" }] },
+            },
+          },
+        },
       }),
     ]);
     return { snapshot, activeVersion, draftVersion };
@@ -338,6 +365,7 @@ export class PrismaPortfolioRepository {
         lowerBasisPoints: allocation.lowerBasisPoints,
         upperBasisPoints: allocation.upperBasisPoints,
         bandPolicy: allocation.bandPolicy,
+        compositionPolicy: allocation.compositionPolicy,
         instruments: [...allocation.instruments].sort((left, right) => {
           const leftKey = `${left.marketCountry}:${left.symbol}`;
           const rightKey = `${right.marketCountry}:${right.symbol}`;
@@ -345,13 +373,14 @@ export class PrismaPortfolioRepository {
         }),
       }));
     const source: Prisma.InputJsonObject = {
-      version: 4,
+      version: 5,
       cashPolicy: { ...input.cashPolicy },
       sourceSnapshotId: input.sourceSnapshotId,
       sourceSnapshotDigest: input.sourceSnapshotDigest,
       allocations: canonical.map((allocation) => ({
         ...allocation,
         bandPolicy: { ...allocation.bandPolicy },
+        compositionPolicy: { ...allocation.compositionPolicy },
         instruments: allocation.instruments.map((instrument) => ({ ...instrument })),
       })),
     };
@@ -378,7 +407,14 @@ export class PrismaPortfolioRepository {
         });
         const existing = await transaction.targetConfigVersion.findUnique({
           where: { configId_contentHash: { configId: config.id, contentHash } },
-          include: { allocations: { orderBy: { assetKey: "asc" } } },
+          include: {
+            allocations: {
+              orderBy: { assetKey: "asc" },
+              include: {
+                instruments: { orderBy: [{ marketCountry: "asc" }, { symbol: "asc" }] },
+              },
+            },
+          },
         });
         await transaction.targetConfigVersion.updateMany({
           where: {
@@ -393,7 +429,14 @@ export class PrismaPortfolioRepository {
           return transaction.targetConfigVersion.update({
             where: { id: existing.id },
             data: { status: "DRAFT" },
-            include: { allocations: { orderBy: { assetKey: "asc" } } },
+            include: {
+              allocations: {
+                orderBy: { assetKey: "asc" },
+                include: {
+                  instruments: { orderBy: [{ marketCountry: "asc" }, { symbol: "asc" }] },
+                },
+              },
+            },
           });
         }
 
@@ -418,6 +461,7 @@ export class PrismaPortfolioRepository {
                 lowerBasisPoints: allocation.lowerBasisPoints,
                 upperBasisPoints: allocation.upperBasisPoints,
                 bandPolicy: { ...allocation.bandPolicy },
+                compositionPolicy: { ...allocation.compositionPolicy },
                 ...(allocation.instruments.length === 0
                   ? {}
                   : {
@@ -428,7 +472,14 @@ export class PrismaPortfolioRepository {
               })),
             },
           },
-          include: { allocations: { orderBy: { assetKey: "asc" } } },
+          include: {
+            allocations: {
+              orderBy: { assetKey: "asc" },
+              include: {
+                instruments: { orderBy: [{ marketCountry: "asc" }, { symbol: "asc" }] },
+              },
+            },
+          },
         });
       },
       { isolationLevel: "Serializable" },
@@ -445,7 +496,14 @@ export class PrismaPortfolioRepository {
         });
         const target = await transaction.targetConfigVersion.findFirst({
           where: { config: { accountId: input.accountId }, version: input.version },
-          include: { allocations: { orderBy: { assetKey: "asc" } } },
+          include: {
+            allocations: {
+              orderBy: { assetKey: "asc" },
+              include: {
+                instruments: { orderBy: [{ marketCountry: "asc" }, { symbol: "asc" }] },
+              },
+            },
+          },
         });
         if (
           !latestSnapshot ||
@@ -466,7 +524,14 @@ export class PrismaPortfolioRepository {
         return transaction.targetConfigVersion.update({
           where: { id: target.id },
           data: { status: "ACTIVE" },
-          include: { allocations: { orderBy: { assetKey: "asc" } } },
+          include: {
+            allocations: {
+              orderBy: { assetKey: "asc" },
+              include: {
+                instruments: { orderBy: [{ marketCountry: "asc" }, { symbol: "asc" }] },
+              },
+            },
+          },
         });
       },
       { isolationLevel: "Serializable" },

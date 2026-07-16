@@ -25,6 +25,10 @@ const allocations = [
       lowerBasisPoints: 9_000,
       upperBasisPoints: 10_000,
     },
+    compositionPolicy: {
+      mode: "LEGACY_SINGLE" as const,
+      version: "LEGACY_V1",
+    },
     instruments: [
       {
         marketCountry: "US",
@@ -91,7 +95,7 @@ describe("PrismaPortfolioRepository target settings", () => {
       createHash("sha256")
         .update(
           JSON.stringify({
-            version: 4,
+            version: 5,
             cashPolicy,
             sourceSnapshotId: "snapshot-1",
             sourceSnapshotDigest: "digest-1",
@@ -101,7 +105,7 @@ describe("PrismaPortfolioRepository target settings", () => {
         .digest("hex"),
     );
     expect(createInput?.data.cashPolicy).toEqual(cashPolicy);
-    expect(createInput?.data.source.version).toBe(4);
+    expect(createInput?.data.source.version).toBe(5);
     expect(createInput?.data.source.cashPolicy).toEqual(cashPolicy);
     expect(createInput?.data.source.sourceSnapshotId).toBe("snapshot-1");
     expect(createInput?.data.source.sourceSnapshotDigest).toBe("digest-1");

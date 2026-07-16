@@ -4,8 +4,24 @@ export function targetSettingsInputFromFormData(formData: FormData) {
   const assetKeys = formData.getAll("assetKey");
   const targets = formData.getAll("targetPercent");
   if (assetKeys.length === 0 || targets.length !== assetKeys.length) {
-    throw new Error("모든 보유자산의 목표 비중을 입력하세요.");
+    throw new Error("모든 자산군의 목표 비중을 입력하세요.");
   }
+  const instrumentKeys = formData.getAll("instrumentKey");
+  const instrumentClasses = formData.getAll("instrumentClass");
+  if (instrumentKeys.length !== instrumentClasses.length) {
+    throw new Error("모든 보유종목의 자산군을 선택하세요.");
+  }
+  const memberships = new Map<string, string[]>();
+  instrumentKeys.forEach((rawKey, index) => {
+    const instrumentKey = requiredString(rawKey);
+    const assetClass = requiredString(instrumentClasses[index]);
+    if (assetClass !== "SAFE" && assetClass !== "CORE" && assetClass !== "SATELLITE") {
+      throw new Error("보유종목은 안전자산, 핵심 공격자산 또는 위성 공격자산으로 분류하세요.");
+    }
+    const assigned = memberships.get(assetClass) ?? [];
+    assigned.push(instrumentKey);
+    memberships.set(assetClass, assigned);
+  });
   const cashMode = requiredString(formData.get("cashMode"));
   const cashPolicy =
     cashMode === "EXCLUDED"
@@ -25,6 +41,7 @@ export function targetSettingsInputFromFormData(formData: FormData) {
     allocations: assetKeys.map((key, index) => ({
       assetKey: requiredString(key),
       targetBasisPoints: percentToBasisPoints(requiredString(targets[index])),
+      instrumentKeys: memberships.get(requiredString(key)) ?? [],
       bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
     })),
   });

@@ -126,6 +126,39 @@ export function SettingsScreen({
                     총 관리 자산과 현금 비중에 포함됩니다.
                   </p>
                 </fieldset>
+                <fieldset className={styles.allocationFieldset}>
+                  <legend>현재 보유종목 분류</legend>
+                  <p className={styles.fieldDescription}>
+                    각 종목을 안전자산, 핵심 공격자산 또는 위성 공격자산 중 한 곳에 배치하세요.
+                    자산군 내부 목표는 현재 평가액 비율을 보존합니다.
+                  </p>
+                  <div className={styles.settingsForm}>
+                    {settings.holdings.map((holding) => (
+                      <div className={styles.fieldGrid} key={holding.instrumentKey}>
+                        <input type="hidden" name="instrumentKey" value={holding.instrumentKey} />
+                        <label>
+                          {holding.label} 자산군
+                          <select
+                            name="instrumentClass"
+                            defaultValue={assignedAssetClass(editable, holding.instrumentKey)}
+                            required
+                          >
+                            <option value="" disabled>
+                              선택하세요
+                            </option>
+                            <option value="SAFE">안전자산</option>
+                            <option value="CORE">핵심 공격자산</option>
+                            <option value="SATELLITE">위성 공격자산</option>
+                          </select>
+                        </label>
+                        <p className={styles.fieldDescription}>
+                          {holding.description} · 현재{" "}
+                          {formatCurrentWeight(holding.currentBasisPointHundredths)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </fieldset>
                 {settings.assets.map((asset) => {
                   const configured = editable?.allocations.find(
                     ({ assetKey }) => assetKey === asset.assetKey,
@@ -208,6 +241,16 @@ export function SettingsScreen({
                         <span>
                           {formatBasisPoints(allocation.lowerBasisPoints)}–
                           {formatBasisPoints(allocation.upperBasisPoints)}
+                          {allocation.instruments.length > 0
+                            ? ` · ${allocation.instruments
+                                .map(
+                                  (instrument) =>
+                                    `${instrument.symbol} ${formatBasisPoints(
+                                      instrument.withinAssetPoints,
+                                    )}`,
+                                )
+                                .join(", ")}`
+                            : ""}
                         </span>
                       </div>
                       <Badge tone="info">
@@ -232,6 +275,22 @@ export function SettingsScreen({
       </div>
     </>
   );
+}
+
+function assignedAssetClass(
+  version: TargetSettingsSnapshotContract["draftVersion"],
+  instrumentKey: string,
+): "" | "SAFE" | "CORE" | "SATELLITE" {
+  const allocation = version?.allocations.find(
+    ({ assetKey, instruments }) =>
+      (assetKey === "SAFE" || assetKey === "CORE" || assetKey === "SATELLITE") &&
+      instruments.some((instrument) => instrument.instrumentKey === instrumentKey),
+  );
+  return allocation?.assetKey === "SAFE" ||
+    allocation?.assetKey === "CORE" ||
+    allocation?.assetKey === "SATELLITE"
+    ? allocation.assetKey
+    : "";
 }
 
 function cashPolicyLabel(

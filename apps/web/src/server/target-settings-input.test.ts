@@ -17,10 +17,16 @@ describe("target settings form parser", () => {
     const formData = new FormData();
     formData.append("cashMode", "FIXED_KRW");
     formData.append("managedCashWon", "1000000");
-    formData.append("assetKey", "US:AAPL");
-    formData.append("targetPercent", "55");
-    formData.append("assetKey", "US:BRK.B");
-    formData.append("targetPercent", "35");
+    formData.append("instrumentKey", "US:AAPL");
+    formData.append("instrumentClass", "SATELLITE");
+    formData.append("instrumentKey", "US:BRK.B");
+    formData.append("instrumentClass", "SATELLITE");
+    formData.append("assetKey", "SAFE");
+    formData.append("targetPercent", "0");
+    formData.append("assetKey", "CORE");
+    formData.append("targetPercent", "0");
+    formData.append("assetKey", "SATELLITE");
+    formData.append("targetPercent", "90");
     formData.append("assetKey", "CASH");
     formData.append("targetPercent", "10");
 
@@ -32,18 +38,27 @@ describe("target settings form parser", () => {
       },
       allocations: [
         {
-          assetKey: "US:AAPL",
-          targetBasisPoints: 5_500,
+          assetKey: "SAFE",
+          targetBasisPoints: 0,
+          instrumentKeys: [],
           bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
         },
         {
-          assetKey: "US:BRK.B",
-          targetBasisPoints: 3_500,
+          assetKey: "CORE",
+          targetBasisPoints: 0,
+          instrumentKeys: [],
+          bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
+        },
+        {
+          assetKey: "SATELLITE",
+          targetBasisPoints: 9_000,
+          instrumentKeys: ["US:AAPL", "US:BRK.B"],
           bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
         },
         {
           assetKey: "CASH",
           targetBasisPoints: 1_000,
+          instrumentKeys: [],
           bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
         },
       ],
@@ -53,7 +68,13 @@ describe("target settings form parser", () => {
   it("현금을 제외할 때는 금액 입력 없이 CASH 목표 0%를 허용한다", () => {
     const formData = new FormData();
     formData.append("cashMode", "EXCLUDED");
-    formData.append("assetKey", "US:AAPL");
+    formData.append("instrumentKey", "US:AAPL");
+    formData.append("instrumentClass", "SATELLITE");
+    formData.append("assetKey", "SAFE");
+    formData.append("targetPercent", "0");
+    formData.append("assetKey", "CORE");
+    formData.append("targetPercent", "0");
+    formData.append("assetKey", "SATELLITE");
     formData.append("targetPercent", "100");
     formData.append("assetKey", "CASH");
     formData.append("targetPercent", "0");
@@ -62,6 +83,15 @@ describe("target settings form parser", () => {
       mode: "EXCLUDED",
       version: "CASH_V1",
     });
+  });
+
+  it("보유종목의 자산군이 비어 있으면 거부한다", () => {
+    const formData = new FormData();
+    formData.append("cashMode", "EXCLUDED");
+    formData.append("instrumentKey", "US:AAPL");
+    formData.append("instrumentClass", "");
+
+    expect(() => targetSettingsInputFromFormData(formData)).toThrow("모든 자산군");
   });
 
   it("관리 현금은 선행 0 없는 PostgreSQL bigint 범위의 원 단위 정수만 허용한다", () => {

@@ -7,14 +7,13 @@ const minorUnitString = z
   .refine((value) => BigInt(value) <= 9_223_372_036_854_775_807n, {
     message: "금액이 저장 가능한 범위를 넘었습니다.",
   });
-const assetKey = z.union([
-  z
-    .string()
-    .min(3)
-    .max(160)
-    .regex(/^[^:]+:[^:]+$/),
-  z.literal("CASH"),
-]);
+const instrumentKey = z
+  .string()
+  .min(3)
+  .max(160)
+  .regex(/^[^:]+:[^:]+$/);
+export const TargetAssetClassKeySchema = z.enum(["SAFE", "CORE", "SATELLITE", "CASH"]);
+const storedAssetKey = z.union([instrumentKey, TargetAssetClassKeySchema]);
 
 const AutoBandPolicySchema = z.object({
   mode: z.literal("AUTO"),
@@ -69,8 +68,9 @@ export const TargetStoredCashPolicySchema = z.discriminatedUnion("mode", [
 ]);
 
 export const TargetAllocationInputSchema = z.object({
-  assetKey,
+  assetKey: TargetAssetClassKeySchema,
   targetBasisPoints: basisPoints,
+  instrumentKeys: z.array(instrumentKey).max(100),
   bandPolicy: TargetBandPolicyInputSchema.default({
     mode: "AUTO",
     version: "MIXED_V1",
@@ -84,11 +84,16 @@ export const TargetSettingsDraftInputSchema = z
   })
   .superRefine(({ cashPolicy, allocations }, context) => {
     const keys = allocations.map(({ assetKey: key }) => key);
-    if (new Set(keys).size !== keys.length) {
+    const requiredKeys = TargetAssetClassKeySchema.options;
+    if (
+      allocations.length !== requiredKeys.length ||
+      requiredKeys.some((key) => !keys.includes(key)) ||
+      new Set(keys).size !== keys.length
+    ) {
       context.addIssue({
         code: "custom",
         path: ["allocations"],
-        message: "자산은 한 번씩만 설정할 수 있습니다.",
+        message: "SAFE, CORE, SATELLITE, CASH 자산군을 정확히 한 번씩 설정해야 합니다.",
       });
     }
 
@@ -108,15 +113,46 @@ export const TargetSettingsDraftInputSchema = z
         path: ["allocations"],
         message: "관리 현금 목표(CASH)를 포함해야 합니다.",
       });
-    } else if (cashPolicy.mode === "EXCLUDED" && cashAllocation.targetBasisPoints !== 0) {
+    } else {
+      if (cashAllocation.instrumentKeys.length !== 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["allocations"],
+          message: "CASH 자산군에는 종목을 포함할 수 없습니다.",
+        });
+      }
+      if (cashPolicy.mode === "EXCLUDED" && cashAllocation.targetBasisPoints !== 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["allocations"],
+          message: "현금을 제외할 때 CASH 목표 비중은 0%여야 합니다.",
+        });
+      }
+    }
+
+    const assignedInstrumentKeys = allocations
+      .filter(({ assetKey: key }) => key !== "CASH")
+      .flatMap(({ instrumentKeys }) => instrumentKeys);
+    if (new Set(assignedInstrumentKeys).size !== assignedInstrumentKeys.length) {
       context.addIssue({
         code: "custom",
         path: ["allocations"],
-        message: "현금을 제외할 때 CASH 목표 비중은 0%여야 합니다.",
+        message: "같은 종목을 여러 자산군에 포함할 수 없습니다.",
       });
     }
 
     allocations.forEach((allocation, index) => {
+      if (
+        allocation.assetKey !== "CASH" &&
+        allocation.targetBasisPoints > 0 &&
+        allocation.instrumentKeys.length === 0
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["allocations", index],
+          message: "목표가 0%보다 큰 자산군에는 종목이 하나 이상 필요합니다.",
+        });
+      }
       if (
         allocation.bandPolicy.mode === "CUSTOM" &&
         (allocation.bandPolicy.lowerBasisPoints > allocation.targetBasisPoints ||
@@ -131,14 +167,40 @@ export const TargetSettingsDraftInputSchema = z
     });
   });
 
+export const TargetCompositionPolicySchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("PRESERVE_CURRENT"),
+    version: z.literal("PRESERVE_CURRENT_V1"),
+  }),
+  z.object({
+    mode: z.literal("NONE"),
+    version: z.literal("CASH_V1"),
+  }),
+  z.object({
+    mode: z.literal("LEGACY_SINGLE"),
+    version: z.string().min(1),
+  }),
+]);
+
+export const TargetSettingsInstrumentSchema = z.object({
+  instrumentKey,
+  marketCountry: z.enum(["KR", "US"]),
+  listingMarket: z.string().min(1).nullable(),
+  symbol: z.string().min(1),
+  currency: z.enum(["KRW", "USD"]),
+  withinAssetPoints: basisPoints,
+});
+
 export const TargetSettingsAllocationSchema = z
   .object({
-    assetKey,
+    assetKey: storedAssetKey,
     label: z.string().min(1),
     targetBasisPoints: basisPoints,
     lowerBasisPoints: basisPoints,
     upperBasisPoints: basisPoints,
     bandPolicy: TargetResolvedBandPolicySchema,
+    compositionPolicy: TargetCompositionPolicySchema,
+    instruments: z.array(TargetSettingsInstrumentSchema).max(100),
   })
   .superRefine((allocation, context) => {
     if (
@@ -154,6 +216,17 @@ export const TargetSettingsAllocationSchema = z
     ) {
       context.addIssue({ code: "custom", message: "수동 밴드 정책과 저장된 범위가 다릅니다." });
     }
+    const instrumentTotal = allocation.instruments.reduce(
+      (sum, instrument) => sum + instrument.withinAssetPoints,
+      0,
+    );
+    if (
+      allocation.assetKey === "CASH"
+        ? allocation.instruments.length !== 0 || allocation.compositionPolicy.mode !== "NONE"
+        : allocation.instruments.length > 0 && instrumentTotal !== 10_000
+    ) {
+      context.addIssue({ code: "custom", message: "자산군 내부 종목 비중이 올바르지 않습니다." });
+    }
   });
 
 export const TargetSettingsVersionSchema = z.object({
@@ -165,10 +238,17 @@ export const TargetSettingsVersionSchema = z.object({
 });
 
 export const TargetSettingsAssetSchema = z.object({
-  assetKey,
+  assetKey: TargetAssetClassKeySchema,
   label: z.string().min(1),
   description: z.string().min(1),
   currentBasisPointHundredths: z.number().int().min(0).max(1_000_000).nullable(),
+});
+
+export const TargetSettingsHoldingSchema = z.object({
+  instrumentKey,
+  label: z.string().min(1),
+  description: z.string().min(1),
+  currentBasisPointHundredths: z.number().int().min(0).max(1_000_000),
 });
 
 export const TargetSettingsSnapshotSchema = z.object({
@@ -180,6 +260,7 @@ export const TargetSettingsSnapshotSchema = z.object({
   draftVersion: TargetSettingsVersionSchema.nullable(),
   requiresCollection: z.boolean(),
   assets: z.array(TargetSettingsAssetSchema),
+  holdings: z.array(TargetSettingsHoldingSchema),
   liveOrdersEnabled: z.literal(false),
 });
 

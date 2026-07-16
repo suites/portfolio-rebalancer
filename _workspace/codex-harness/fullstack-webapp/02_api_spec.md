@@ -52,13 +52,27 @@
   },
   "allocations": [
     {
-      "assetKey": "KR:005930",
+      "assetKey": "SAFE",
+      "targetBasisPoints": 0,
+      "instrumentKeys": [],
+      "bandPolicy": { "mode": "AUTO", "version": "MIXED_V1" }
+    },
+    {
+      "assetKey": "CORE",
+      "targetBasisPoints": 0,
+      "instrumentKeys": [],
+      "bandPolicy": { "mode": "AUTO", "version": "MIXED_V1" }
+    },
+    {
+      "assetKey": "SATELLITE",
       "targetBasisPoints": 9000,
+      "instrumentKeys": ["KR:005930"],
       "bandPolicy": { "mode": "AUTO", "version": "MIXED_V1" }
     },
     {
       "assetKey": "CASH",
       "targetBasisPoints": 1000,
+      "instrumentKeys": [],
       "bandPolicy": { "mode": "AUTO", "version": "MIXED_V1" }
     }
   ]
@@ -66,7 +80,8 @@
 ```
 
 응답과 저장 버전에는 확정된 `lowerBasisPoints`, `upperBasisPoints`와 같은
-`bandPolicy`가 포함된다. `CUSTOM_V1`은 고급 호출에서만 명시적 범위를 받는다.
+`bandPolicy`, 서버 label, `compositionPolicy`와 각 종목의 `withinAssetPoints`가
+포함된다. `CUSTOM_V1`은 고급 호출에서만 명시적 범위를 받는다.
 
 - `GET /internal/v1/health`: live 주문 비활성 상태
 - `GET /internal/v1/dashboard`: 저장된 최신 실제 snapshot

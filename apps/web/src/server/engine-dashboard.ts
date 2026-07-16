@@ -44,11 +44,13 @@ function engineUnavailableDashboard(): DashboardSnapshotContract {
     accountLabel: null,
     observedAt: null,
     conclusion: "BLOCKED",
+    securitiesValueMinor: null,
     totalValueMinor: null,
     managedCashMinor: null,
     managedCashSource: "UNSET",
     buyingPower: [],
     allocations: [],
+    unmanagedHoldings: [],
     blockReason: {
       code: "ENGINE_UNAVAILABLE",
       problem: "포트폴리오 엔진에 연결할 수 없습니다.",

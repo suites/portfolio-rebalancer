@@ -14,6 +14,7 @@ describe("getTargetSettings", () => {
           observedAt: new Date("2026-07-16T03:00:00.000Z"),
           targetConfigVersionId: null,
           targetConfigVersion: null,
+          securitiesValueMinor: 1_000_000n,
           totalValueMinor: 1_000_000n,
           managedCashMinor: null,
           holdings: [
@@ -39,12 +40,25 @@ describe("getTargetSettings", () => {
           },
           allocations: [
             {
-              assetKey: "US:AAPL",
-              label: "Apple",
+              assetKey: "SATELLITE",
+              label: "위성 공격자산",
               targetBasisPoints: 9_000,
               lowerBasisPoints: 8_500,
               upperBasisPoints: 9_500,
               bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
+              compositionPolicy: {
+                mode: "PRESERVE_CURRENT",
+                version: "PRESERVE_CURRENT_V1",
+              },
+              instruments: [
+                {
+                  marketCountry: "US",
+                  listingMarket: null,
+                  symbol: "AAPL",
+                  currency: "USD",
+                  withinAssetPoints: 10_000,
+                },
+              ],
             },
             {
               assetKey: "CASH",
@@ -53,6 +67,8 @@ describe("getTargetSettings", () => {
               lowerBasisPoints: 750,
               upperBasisPoints: 1_250,
               bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
+              compositionPolicy: { mode: "NONE", version: "CASH_V1" },
+              instruments: [],
             },
           ],
         },
@@ -72,6 +88,15 @@ describe("getTargetSettings", () => {
       label: "관리 현금",
       currentBasisPointHundredths: null,
     });
+    expect(result.assets.find(({ assetKey }) => assetKey === "SATELLITE")).toMatchObject({
+      currentBasisPointHundredths: 1_000_000,
+    });
+    expect(result.holdings).toEqual([
+      expect.objectContaining({
+        instrumentKey: "US:AAPL",
+        label: "Apple",
+      }),
+    ]);
     expect(result.requiresCollection).toBe(true);
   });
 });

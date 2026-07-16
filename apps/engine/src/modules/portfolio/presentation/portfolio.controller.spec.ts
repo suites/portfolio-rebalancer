@@ -143,12 +143,24 @@ describe("NestJS engine HTTP contract", () => {
         },
         allocations: [
           {
-            assetKey: "US:AAPL",
+            assetKey: "SAFE",
+            targetBasisPoints: 0,
+            instrumentKeys: [],
+          },
+          {
+            assetKey: "CORE",
+            targetBasisPoints: 0,
+            instrumentKeys: [],
+          },
+          {
+            assetKey: "SATELLITE",
             targetBasisPoints: 9_999,
+            instrumentKeys: ["US:AAPL"],
           },
           {
             assetKey: "CASH",
             targetBasisPoints: 0,
+            instrumentKeys: [],
           },
         ],
       },
@@ -195,6 +207,7 @@ async function createHarness(environment: NodeJS.ProcessEnv) {
         draftVersion: null,
         requiresCollection: false,
         assets: [],
+        holdings: [],
         liveOrdersEnabled: false,
       }),
     ),

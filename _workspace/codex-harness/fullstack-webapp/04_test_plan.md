@@ -23,6 +23,10 @@
 - 기본 Web form에 목표 필드만 존재하고 CUSTOM 역전 범위는 계약에서 거부
 - 같은 미국 종목은 listing market과 무관하게 `US:symbol` 하나로 식별
 - Web form에서 관리 현금 정책과 `CASH` 목표 제출, nullable 현재 비중은 `계산 전` 표시
+- `SAFE/CORE/SATELLITE/CASH` 정확한 cardinality와 모든 현재 보유종목의 단일 membership
+- largest-remainder, canonical tie-break, 입력 순서 불변, 일부/전체 0원 정책
+- 버전 내 같은 종목의 다른 allocation insert가 DB UNIQUE로 거부되고 롤백됨
+- dashboard 자산군 합산, 구성 종목 표시와 unmanaged holding 별도 차단
 
 - Toss 계좌·보유·환율 런타임 schema rejection
 - USD/KRW bigint 환산과 KRW fractional rejection

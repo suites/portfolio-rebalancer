@@ -9,7 +9,10 @@ import {
   type TargetSettingsDraftInputContract,
   type TargetSettingsSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
-import { resolveAutoAllocationBand } from "@portfolio-rebalancer/domain";
+import {
+  resolveAutoAllocationBand,
+  resolvePreserveCurrentWithinAssetPoints,
+} from "@portfolio-rebalancer/domain";
 
 import { ENGINE_CONFIG } from "../../../config/engine-config.token";
 import { assertVercelEgressConfigured, type EngineConfig } from "../../../config/engine.config";
@@ -81,20 +84,21 @@ export class PortfolioService {
       );
     }
 
-    const requested = new Map(
-      parsed.allocations.map((allocation) => [allocation.assetKey, allocation]),
-    );
     const holdings = new Map(
       snapshot.holdings.map((holding) => [`${holding.marketCountry}:${holding.symbol}`, holding]),
     );
+    const assignedInstrumentKeys = parsed.allocations
+      .filter(({ assetKey }) => assetKey !== "CASH")
+      .flatMap(({ instrumentKeys }) => instrumentKeys);
     if (
-      requested.size !== holdings.size + 1 ||
-      !requested.has("CASH") ||
-      [...requested.keys()].some((key) => key !== "CASH" && !holdings.has(key))
+      assignedInstrumentKeys.length !== holdings.size ||
+      new Set(assignedInstrumentKeys).size !== assignedInstrumentKeys.length ||
+      assignedInstrumentKeys.some((key) => !holdings.has(key)) ||
+      [...holdings.keys()].some((key) => !assignedInstrumentKeys.includes(key))
     ) {
       throw new TargetSettingsError(
         "ASSET_SET_MISMATCH",
-        "목표 설정은 CASH와 최신 스냅샷의 모든 보유자산을 정확히 한 번씩 포함해야 합니다.",
+        "모든 최신 보유종목을 안전자산, 핵심 공격자산 또는 위성 공격자산 중 정확히 한 곳에 포함해야 합니다.",
       );
     }
 
@@ -103,34 +107,75 @@ export class PortfolioService {
       sourceSnapshotId: snapshot.id,
       sourceSnapshotDigest: snapshot.digest,
       cashPolicy: parsed.cashPolicy,
-      allocations: [...requested.entries()].map(([key, allocation]) => {
-        if (key === "CASH") {
+      allocations: parsed.allocations.map((allocation) => {
+        if (allocation.assetKey === "CASH") {
           const band = resolveTargetBand(allocation);
           return {
             ...allocation,
             ...band,
-            label: "관리 현금",
+            label: assetClassLabel(allocation.assetKey),
+            compositionPolicy: { mode: "NONE" as const, version: "CASH_V1" as const },
             instruments: [],
           };
         }
-        const holding = holdings.get(key);
-        if (!holding) {
-          throw new TargetSettingsError("ASSET_SET_MISMATCH", "보유자산을 찾을 수 없습니다.");
+        const classHoldings = allocation.instrumentKeys.map((instrumentKey) => {
+          const holding = holdings.get(instrumentKey);
+          if (!holding) {
+            throw new TargetSettingsError(
+              "ASSET_SET_MISMATCH",
+              "최신 스냅샷에서 자산군 구성 종목을 찾을 수 없습니다.",
+            );
+          }
+          return { instrumentKey, holding };
+        });
+        let resolved;
+        try {
+          resolved = resolvePreserveCurrentWithinAssetPoints(
+            classHoldings.map(({ instrumentKey, holding }) => ({
+              instrumentKey,
+              valueMinor: holding.marketValueKrwMinor,
+            })),
+          );
+        } catch (error) {
+          if (classHoldings.length === 0) {
+            resolved = {
+              policyVersion: "PRESERVE_CURRENT_V1" as const,
+              instruments: [],
+            };
+          } else {
+            throw new TargetSettingsError(
+              "CLASS_VALUE_UNAVAILABLE",
+              error instanceof Error
+                ? error.message
+                : "자산군 내부 비중을 현재 평가액으로 확정할 수 없습니다.",
+            );
+          }
         }
         const band = resolveTargetBand(allocation);
         return {
           ...allocation,
           ...band,
-          label: holding.name,
-          instruments: [
-            {
+          label: assetClassLabel(allocation.assetKey),
+          compositionPolicy: {
+            mode: "PRESERVE_CURRENT" as const,
+            version: resolved.policyVersion,
+          },
+          instruments: resolved.instruments.map(({ instrumentKey, withinAssetPoints }) => {
+            const holding = holdings.get(instrumentKey);
+            if (!holding) {
+              throw new TargetSettingsError(
+                "ASSET_SET_MISMATCH",
+                "최신 스냅샷에서 자산군 구성 종목을 찾을 수 없습니다.",
+              );
+            }
+            return {
               marketCountry: holding.marketCountry,
               listingMarket: null,
               symbol: holding.symbol,
               currency: holding.currency,
-              withinAssetPoints: 10_000,
-            },
-          ],
+              withinAssetPoints: Number(withinAssetPoints),
+            };
+          }),
         };
       }),
     });
@@ -155,6 +200,12 @@ export class PortfolioService {
       throw new TargetSettingsError(
         "DRAFT_NOT_FOUND",
         "현재 검토 대기 중인 목표 설정 초안과 요청 버전이 일치하지 않습니다.",
+      );
+    }
+    if (!isAssetClassDraft(draftVersion.allocations)) {
+      throw new TargetSettingsError(
+        "LEGACY_DRAFT_REQUIRES_RECREATE",
+        "이전 개별 종목 형식의 초안은 적용할 수 없습니다. 현재 보유종목을 자산군으로 분류해 새 초안을 저장하세요.",
       );
     }
     if (!targetSourceMatchesSnapshot(draftVersion.source, snapshot.id, snapshot.digest)) {
@@ -208,6 +259,19 @@ export class PortfolioService {
   }
 }
 
+function assetClassLabel(assetKey: "SAFE" | "CORE" | "SATELLITE" | "CASH"): string {
+  switch (assetKey) {
+    case "SAFE":
+      return "안전자산";
+    case "CORE":
+      return "핵심 공격자산";
+    case "SATELLITE":
+      return "위성 공격자산";
+    case "CASH":
+      return "관리 현금";
+  }
+}
+
 function resolveTargetBand(allocation: TargetSettingsDraftInputContract["allocations"][number]): {
   readonly lowerBasisPoints: number;
   readonly upperBasisPoints: number;
@@ -233,6 +297,17 @@ function targetSourceMatchesSnapshot(
   if (source === null || Array.isArray(source) || typeof source !== "object") return false;
   const record = source as Record<string, unknown>;
   return record.sourceSnapshotId === snapshotId && record.sourceSnapshotDigest === snapshotDigest;
+}
+
+function isAssetClassDraft(allocations: readonly { readonly assetKey: string }[]): boolean {
+  const keys = new Set(allocations.map(({ assetKey }) => assetKey));
+  return (
+    keys.size === 4 &&
+    keys.has("SAFE") &&
+    keys.has("CORE") &&
+    keys.has("SATELLITE") &&
+    keys.has("CASH")
+  );
 }
 
 function collectionErrorCode(error: unknown): BlockCode {

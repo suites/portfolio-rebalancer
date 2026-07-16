@@ -10,11 +10,17 @@ describe("dashboard presenter with snapshot-bound target", () => {
     );
 
     expect(dashboard.blockReason?.code).toBe("MANAGED_CASH_MISSING");
-    expect(dashboard.allocations[0]).toMatchObject({
+    expect(dashboard.allocations.find(({ id }) => id === "CORE")).toMatchObject({
       targetBasisPoints: 6_000,
       lowerBasisPoints: 5_500,
       upperBasisPoints: 6_500,
       bandStatus: "OUTSIDE_BAND",
+      instruments: [
+        expect.objectContaining({
+          id: "US:AAPL",
+          targetWithinAssetPoints: 10_000,
+        }),
+      ],
     });
     expect(dashboard.buyingPower).toEqual([
       {
@@ -53,6 +59,47 @@ describe("dashboard presenter with snapshot-bound target", () => {
       targetBasisPoints: 0,
       bandStatus: "IN_RANGE",
     });
+    expect(dashboard.securitiesValueMinor).toBe("1000000");
+    expect(dashboard.unmanagedHoldings).toEqual([]);
+  });
+
+  it("어느 자산군에도 없는 현재 보유종목은 자동 매도하지 않고 별도로 차단한다", async () => {
+    const state = dashboardState({ managedCashMinor: 0n });
+    const target = state.snapshot.targetConfigVersion;
+    const dashboard = await getDashboard(
+      repositoryWith({
+        ...state,
+        snapshot: {
+          ...state.snapshot,
+          targetConfigVersion: {
+            ...target,
+            allocations: target.allocations.map((allocation) =>
+              allocation.assetKey === "SATELLITE"
+                ? {
+                    ...allocation,
+                    targetBasisPoints: 0,
+                    lowerBasisPoints: 0,
+                    upperBasisPoints: 0,
+                    instruments: [],
+                  }
+                : allocation.assetKey === "CORE"
+                  ? {
+                      ...allocation,
+                      targetBasisPoints: 10_000,
+                      lowerBasisPoints: 9_500,
+                      upperBasisPoints: 10_000,
+                    }
+                  : allocation,
+            ),
+          },
+        },
+      }),
+    );
+
+    expect(dashboard.blockReason?.code).toBe("UNMANAGED_ASSET");
+    expect(dashboard.unmanagedHoldings).toEqual([
+      expect.objectContaining({ id: "US:BRK.B", label: "Berkshire" }),
+    ]);
   });
 });
 
@@ -111,22 +158,65 @@ function dashboardState({ managedCashMinor }: { readonly managedCashMinor: bigin
             : { mode: "EXCLUDED", version: "CASH_V1" },
         allocations: [
           {
-            assetKey: "US:AAPL",
-            targetBasisPoints: 6_000,
-            lowerBasisPoints: 5_500,
-            upperBasisPoints: 6_500,
-          },
-          {
-            assetKey: "US:BRK.B",
-            targetBasisPoints: 4_000,
-            lowerBasisPoints: 3_500,
-            upperBasisPoints: 4_500,
-          },
-          {
-            assetKey: "CASH",
+            assetKey: "SAFE",
+            label: "안전자산",
             targetBasisPoints: 0,
             lowerBasisPoints: 0,
             upperBasisPoints: 0,
+            compositionPolicy: {
+              mode: "PRESERVE_CURRENT",
+              version: "PRESERVE_CURRENT_V1",
+            },
+            instruments: [],
+          },
+          {
+            assetKey: "CORE",
+            label: "핵심 공격자산",
+            targetBasisPoints: 6_000,
+            lowerBasisPoints: 5_500,
+            upperBasisPoints: 6_500,
+            compositionPolicy: {
+              mode: "PRESERVE_CURRENT",
+              version: "PRESERVE_CURRENT_V1",
+            },
+            instruments: [
+              {
+                marketCountry: "US",
+                listingMarket: null,
+                symbol: "AAPL",
+                currency: "USD",
+                withinAssetPoints: 10_000,
+              },
+            ],
+          },
+          {
+            assetKey: "SATELLITE",
+            label: "위성 공격자산",
+            targetBasisPoints: 4_000,
+            lowerBasisPoints: 3_500,
+            upperBasisPoints: 4_500,
+            compositionPolicy: {
+              mode: "PRESERVE_CURRENT",
+              version: "PRESERVE_CURRENT_V1",
+            },
+            instruments: [
+              {
+                marketCountry: "US",
+                listingMarket: null,
+                symbol: "BRK.B",
+                currency: "USD",
+                withinAssetPoints: 10_000,
+              },
+            ],
+          },
+          {
+            assetKey: "CASH",
+            label: "관리 현금",
+            targetBasisPoints: 0,
+            lowerBasisPoints: 0,
+            upperBasisPoints: 0,
+            compositionPolicy: { mode: "NONE", version: "CASH_V1" },
+            instruments: [],
           },
         ],
       },

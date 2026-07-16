@@ -18,6 +18,9 @@ import styles from "@/features/console/console.module.css";
 
 export function PortfolioScreen({ snapshot }: { readonly snapshot: DashboardSnapshotContract }) {
   const observedAt = formatObservedAt(snapshot.observedAt);
+  const holdingCount =
+    snapshot.allocations.reduce((sum, allocation) => sum + allocation.instruments.length, 0) +
+    snapshot.unmanagedHoldings.length;
   return (
     <>
       <ConsolePageHeader
@@ -45,7 +48,7 @@ export function PortfolioScreen({ snapshot }: { readonly snapshot: DashboardSnap
           />
           <SummaryCard
             label="보유자산"
-            value={`${snapshot.allocations.length}개`}
+            value={`${holdingCount}개`}
             description="최근 계좌의 보유 종목"
           />
           <SummaryCard
@@ -121,6 +124,18 @@ export function PortfolioScreen({ snapshot }: { readonly snapshot: DashboardSnap
                         <span className={styles.assetName}>
                           <strong>{allocation.label}</strong>
                           <span>{allocation.description}</span>
+                          {allocation.instruments.length > 0 ? (
+                            <span>
+                              {allocation.instruments
+                                .map(
+                                  (instrument) =>
+                                    `${instrument.label} ${formatBasisPoints(
+                                      instrument.targetWithinAssetPoints,
+                                    )}`,
+                                )
+                                .join(" · ")}
+                            </span>
+                          ) : null}
                         </span>
                       </td>
                       <td data-numeric="true">{formatWon(allocation.valueMinor)}</td>
@@ -149,6 +164,29 @@ export function PortfolioScreen({ snapshot }: { readonly snapshot: DashboardSnap
               </table>
             </div>
           </Surface>
+
+          {snapshot.unmanagedHoldings.length > 0 ? (
+            <Surface className={styles.surface} aria-labelledby="unmanaged-title">
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 id="unmanaged-title">관리되지 않는 보유종목</h2>
+                  <p>자동 매도하지 않으며 새 목표 설정 전까지 거래를 차단합니다.</p>
+                </div>
+                <Badge tone="blocked">{snapshot.unmanagedHoldings.length}개</Badge>
+              </div>
+              <ul className={styles.statusList}>
+                {snapshot.unmanagedHoldings.map((holding) => (
+                  <li key={holding.id}>
+                    <div>
+                      <strong>{holding.label}</strong>
+                      <span>{holding.description}</span>
+                    </div>
+                    <span>{formatWon(holding.valueMinor)}</span>
+                  </li>
+                ))}
+              </ul>
+            </Surface>
+          ) : null}
         </div>
       </div>
     </>

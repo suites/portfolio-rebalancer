@@ -34,6 +34,9 @@
 - 관리 현금 정책은 `EXCLUDED/CASH_V1` 또는 `FIXED_KRW/CASH_V1`이며 목표 버전에 저장한다.
 - 최종 fenced snapshot 트랜잭션이 고정할 ACTIVE 버전의 정책과 ID를 함께 읽어
   `securities + managed cash = total`을 확정한다.
+- 신규 목표는 `SAFE/CORE/SATELLITE/CASH` 네 자산군이고 모든 현재 보유종목을 비현금
+  자산군 중 정확히 한 곳에 배치한다.
+- 자산군 내부 비중은 `PRESERVE_CURRENT_V1` largest-remainder로 초안 시점에 고정한다.
 - 목표 입력은 기본 `AUTO/MIXED_V1`이며 server domain 함수가 확정 범위를 만든다.
 - 목표 설정 버전은 밴드 정책 모드·버전과 확정 lower/upper를 함께 저장한다.
 - 보유·목표·대사 키에서 KOSPI/NASDAQ 같은 listing market을 사용하지 않는다.
@@ -55,7 +58,7 @@ Browser -> apps/web (Next.js, Vercel)
 - Next App Router의 공통 App Shell을 모든 콘솔 페이지가 재사용하고, 현재 경로 판별만 작은 client island로 둔다.
 - 홈·포트폴리오·리밸런싱·기초 진단은 하나의 dashboard 계약을 재사용한다.
 - 주문·기록은 현재 계좌로 제한한 CollectionRun과 SnapshotCheck의 안전한 요약만 조회하고 redacted 원문도 전달하지 않는다.
-- 현재 목표 설정은 모든 보유 종목과 `CASH`를 요구하고 합계 10000bp, 고유 asset key,
+- 현재 목표 설정은 네 자산군, 모든 보유 종목의 단일 membership, 합계 10000bp,
   하한 <= 목표 <= 상한과 현금 정책을 engine에서 검증한다.
 - 목표 초안은 원본 snapshot ID와 digest를 source/hash에 포함하고 저장·적용 transaction에서 최신 snapshot을 다시 확인한다.
 - 활성 설정은 새 수집에서 snapshot의 targetConfigVersionId로 고정하며 과거 snapshot을 새 설정으로 재해석하지 않는다.

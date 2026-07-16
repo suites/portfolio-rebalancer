@@ -18,18 +18,27 @@ const validInput = {
   },
   allocations: [
     {
-      assetKey: "US:AAPL",
-      targetBasisPoints: 5_500,
+      assetKey: "SAFE" as const,
+      targetBasisPoints: 0,
+      instrumentKeys: [],
       bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
     {
-      assetKey: "US:BRK.B",
-      targetBasisPoints: 3_500,
+      assetKey: "CORE" as const,
+      targetBasisPoints: 0,
+      instrumentKeys: [],
       bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
     {
-      assetKey: "CASH",
+      assetKey: "SATELLITE" as const,
+      targetBasisPoints: 9_000,
+      instrumentKeys: ["US:AAPL", "US:BRK.B"],
+      bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
+    },
+    {
+      assetKey: "CASH" as const,
       targetBasisPoints: 1_000,
+      instrumentKeys: [],
       bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
   ],
@@ -51,25 +60,37 @@ describe("PortfolioService target settings", () => {
       version: "CASH_V1",
       amountMinor: "100000",
     });
-    expect(draftInput?.allocations.find(({ assetKey }) => assetKey === "US:AAPL")).toMatchObject({
-      label: "Apple",
-      targetBasisPoints: 5_500,
-      lowerBasisPoints: 5_000,
-      upperBasisPoints: 6_000,
+    expect(draftInput?.allocations.find(({ assetKey }) => assetKey === "SATELLITE")).toMatchObject({
+      label: "위성 공격자산",
+      targetBasisPoints: 9_000,
+      lowerBasisPoints: 8_500,
+      upperBasisPoints: 9_500,
       bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
+      compositionPolicy: {
+        mode: "PRESERVE_CURRENT",
+        version: "PRESERVE_CURRENT_V1",
+      },
       instruments: [
         {
           marketCountry: "US",
           listingMarket: null,
           symbol: "AAPL",
           currency: "USD",
-          withinAssetPoints: 10_000,
+          withinAssetPoints: 6_000,
+        },
+        {
+          marketCountry: "US",
+          listingMarket: null,
+          symbol: "BRK.B",
+          currency: "USD",
+          withinAssetPoints: 4_000,
         },
       ],
     });
     expect(draftInput?.allocations.find(({ assetKey }) => assetKey === "CASH")).toMatchObject({
       label: "관리 현금",
       targetBasisPoints: 1_000,
+      compositionPolicy: { mode: "NONE", version: "CASH_V1" },
       instruments: [],
     });
   });
@@ -84,13 +105,27 @@ describe("PortfolioService target settings", () => {
       },
       allocations: [
         {
-          assetKey: "US:AAPL",
-          targetBasisPoints: 9_000,
+          assetKey: "SAFE" as const,
+          targetBasisPoints: 0,
+          instrumentKeys: [],
           bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
         },
         {
-          assetKey: "CASH",
+          assetKey: "CORE" as const,
+          targetBasisPoints: 0,
+          instrumentKeys: [],
+          bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
+        },
+        {
+          assetKey: "SATELLITE" as const,
+          targetBasisPoints: 9_000,
+          instrumentKeys: ["US:AAPL"],
+          bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
+        },
+        {
+          assetKey: "CASH" as const,
           targetBasisPoints: 1_000,
+          instrumentKeys: [],
           bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
         },
       ],
@@ -126,6 +161,35 @@ describe("PortfolioService target settings", () => {
     } satisfies Partial<TargetSettingsError>);
     expect(repository.activateTargetDraft).not.toHaveBeenCalled();
   });
+
+  it("이전 개별 종목 형식의 초안은 새 자산군 초안으로 다시 만들게 한다", async () => {
+    const service = createService(
+      repositoryMock({
+        draftVersion: {
+          version: 2,
+          source: {
+            sourceSnapshotId: "55555555-5555-4555-8555-555555555555",
+            sourceSnapshotDigest: "digest-current",
+          },
+          allocations: [{ assetKey: "US:AAPL" }, { assetKey: "CASH" }],
+        },
+      }),
+    );
+
+    await expect(service.activateTargetDraft(2)).rejects.toMatchObject({
+      code: "LEGACY_DRAFT_REQUIRES_RECREATE",
+    } satisfies Partial<TargetSettingsError>);
+  });
+
+  it("현재 평가액 합계가 0인 자산군을 임의 균등 비중으로 바꾸지 않는다", async () => {
+    const repository = repositoryMock({ holdingValues: [0n, 0n] });
+    const service = createService(repository);
+
+    await expect(service.createTargetDraft(validInput)).rejects.toMatchObject({
+      code: "CLASS_VALUE_UNAVAILABLE",
+    } satisfies Partial<TargetSettingsError>);
+    expect(repository.createTargetDraft).not.toHaveBeenCalled();
+  });
 });
 
 function createService(repository: ReturnType<typeof repositoryMock>) {
@@ -137,20 +201,23 @@ function createService(repository: ReturnType<typeof repositoryMock>) {
 }
 
 function repositoryMock(options?: {
+  readonly holdingValues?: readonly [bigint, bigint];
   readonly draftVersion?: {
     readonly version: number;
     readonly source: Record<string, unknown>;
+    readonly allocations?: readonly { readonly assetKey: string }[];
   };
 }) {
+  const [appleValue, berkshireValue] = options?.holdingValues ?? [600_000n, 400_000n];
   const snapshot = {
     id: "55555555-5555-4555-8555-555555555555",
     digest: "digest-current",
     accountId: "44444444-4444-4444-8444-444444444444",
     account: { maskedNumber: "****1234" },
     observedAt: new Date("2026-07-16T03:00:00.000Z"),
-    securitiesValueMinor: 1_000_000n,
+    securitiesValueMinor: appleValue + berkshireValue,
     managedCashMinor: null,
-    totalValueMinor: 1_000_000n,
+    totalValueMinor: appleValue + berkshireValue,
     targetConfigVersionId: null,
     targetConfigVersion: null,
     holdings: [
@@ -160,7 +227,7 @@ function repositoryMock(options?: {
         name: "Apple",
         currency: "USD",
         quantity: "1",
-        marketValueKrwMinor: 600_000n,
+        marketValueKrwMinor: appleValue,
       },
       {
         marketCountry: "US",
@@ -168,7 +235,7 @@ function repositoryMock(options?: {
         name: "Berkshire",
         currency: "USD",
         quantity: "1",
-        marketValueKrwMinor: 400_000n,
+        marketValueKrwMinor: berkshireValue,
       },
     ],
   };
@@ -176,7 +243,14 @@ function repositoryMock(options?: {
     targetSettingsState: vi.fn().mockResolvedValue({
       snapshot,
       activeVersion: null,
-      draftVersion: options?.draftVersion ?? null,
+      draftVersion: options?.draftVersion
+        ? {
+            ...options.draftVersion,
+            allocations:
+              options.draftVersion.allocations ??
+              validInput.allocations.map(({ assetKey }) => ({ assetKey })),
+          }
+        : null,
     }),
     createTargetDraft: vi
       .fn<(input: StoredTargetDraftInput) => Promise<object>>()

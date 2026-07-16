@@ -30,6 +30,7 @@ export async function getDashboard(
       accountLabel: snapshot.account.maskedNumber,
       observedAt: snapshot.observedAt.toISOString(),
       conclusion: "BLOCKED",
+      securitiesValueMinor: snapshot.securitiesValueMinor.toString(),
       totalValueMinor: "0",
       managedCashMinor: snapshot.managedCashMinor?.toString() ?? null,
       managedCashSource,
@@ -41,6 +42,7 @@ export async function getDashboard(
         valuationEligible: false,
       })),
       allocations: [],
+      unmanagedHoldings: [],
       blockReason: reasonFor("EMPTY_HOLDINGS"),
       liveOrdersEnabled: false,
     });
@@ -48,82 +50,92 @@ export async function getDashboard(
 
   const total = snapshot.totalValueMinor;
   const pinnedTarget = snapshot.targetConfigVersion;
-  const targets = new Map(
-    pinnedTarget?.allocations.map((allocation) => [allocation.assetKey, allocation]) ?? [],
+  const holdings = new Map(
+    snapshot.holdings.map((holding) => [`${holding.marketCountry}:${holding.symbol}`, holding]),
   );
-  const allocations = snapshot.holdings.map((holding) => {
-    const id = `${holding.marketCountry}:${holding.symbol}`;
-    const target = targets.get(id);
-    const common = {
-      id,
+  const managedHoldingKeys = new Set<string>();
+  const allocations = pinnedTarget
+    ? pinnedTarget.allocations.map((target) => {
+        if (target.assetKey === "CASH") {
+          const valueMinor = snapshot.managedCashMinor ?? 0n;
+          return presentTargetAllocation({
+            id: target.assetKey,
+            label: target.label,
+            description:
+              managedCashSource === "EXCLUDED"
+                ? "포트폴리오 평가에서 제외"
+                : managedCashSource === "USER_FIXED"
+                  ? "사용자가 정한 고정 원화 관리금액"
+                  : "관리 현금 기준이 아직 스냅샷에 반영되지 않음",
+            valueMinor,
+            totalValueMinor: total,
+            target,
+            targetConfigured: snapshot.managedCashMinor !== null,
+            instruments: [],
+          });
+        }
+        const targetHoldings = target.instruments.map((instrument) => {
+          const instrumentKey = `${instrument.marketCountry}:${instrument.symbol}`;
+          const holding = holdings.get(instrumentKey);
+          if (holding) managedHoldingKeys.add(instrumentKey);
+          return { instrumentKey, instrument, holding };
+        });
+        const valueMinor = targetHoldings.reduce(
+          (sum, { holding }) => sum + (holding?.marketValueKrwMinor ?? 0n),
+          0n,
+        );
+        return presentTargetAllocation({
+          id: target.assetKey,
+          label: target.label,
+          description: targetAllocationDescription(target.assetKey, targetHoldings.length),
+          valueMinor,
+          totalValueMinor: total,
+          target,
+          targetConfigured: true,
+          instruments: targetHoldings.map(({ instrumentKey, instrument, holding }) => ({
+            id: instrumentKey,
+            label: holding?.name ?? instrument.symbol,
+            description: holding
+              ? `${holding.marketCountry} · ${holding.currency} · ${holding.quantity}주`
+              : `${instrument.marketCountry} · ${instrument.currency} · 현재 미보유`,
+            valueMinor: (holding?.marketValueKrwMinor ?? 0n).toString(),
+            currentWithinAssetBasisPointHundredths:
+              valueMinor === 0n
+                ? 0
+                : Number(((holding?.marketValueKrwMinor ?? 0n) * 1_000_000n) / valueMinor),
+            targetWithinAssetPoints: instrument.withinAssetPoints,
+          })),
+        });
+      })
+    : snapshot.holdings.map((holding) => ({
+        id: `${holding.marketCountry}:${holding.symbol}`,
+        label: holding.name,
+        description: `${holding.marketCountry} · ${holding.currency} · ${holding.quantity}주`,
+        valueMinor: holding.marketValueKrwMinor.toString(),
+        currentBasisPointHundredths:
+          total === 0n ? 0 : Number((holding.marketValueKrwMinor * 1_000_000n) / total),
+        targetBasisPoints: null,
+        lowerBasisPoints: null,
+        upperBasisPoints: null,
+        bandStatus: "TARGET_NOT_CONFIGURED" as const,
+        instruments: [],
+      }));
+  const unmanagedHoldings = snapshot.holdings
+    .filter((holding) => !managedHoldingKeys.has(`${holding.marketCountry}:${holding.symbol}`))
+    .map((holding) => ({
+      id: `${holding.marketCountry}:${holding.symbol}`,
       label: holding.name,
       description: `${holding.marketCountry} · ${holding.currency} · ${holding.quantity}주`,
       valueMinor: holding.marketValueKrwMinor.toString(),
-      currentBasisPointHundredths:
-        total === 0n ? 0 : Number((holding.marketValueKrwMinor * 1_000_000n) / total),
-    };
-    if (!target || total <= 0n) {
-      return {
-        ...common,
-        targetBasisPoints: null,
-        lowerBasisPoints: null,
-        upperBasisPoints: null,
-        bandStatus: "TARGET_NOT_CONFIGURED" as const,
-      };
-    }
-    const outside = isOutsideAllocationBand({
-      valueMinor: holding.marketValueKrwMinor,
-      totalValueMinor: total,
-      lowerBasisPoints: BigInt(target.lowerBasisPoints),
-      upperBasisPoints: BigInt(target.upperBasisPoints),
-    });
-    return {
-      ...common,
-      targetBasisPoints: target.targetBasisPoints,
-      lowerBasisPoints: target.lowerBasisPoints,
-      upperBasisPoints: target.upperBasisPoints,
-      bandStatus: outside ? ("OUTSIDE_BAND" as const) : ("IN_RANGE" as const),
-    };
-  });
-  const cashTarget = targets.get("CASH");
-  if (snapshot.managedCashMinor !== null || cashTarget) {
-    const valueMinor = snapshot.managedCashMinor ?? 0n;
-    const common = {
-      id: "CASH",
-      label: "관리 현금",
-      description:
-        managedCashSource === "EXCLUDED"
-          ? "포트폴리오 평가에서 제외"
-          : managedCashSource === "USER_FIXED"
-            ? "사용자가 정한 고정 원화 관리금액"
-            : "관리 현금 기준이 아직 스냅샷에 반영되지 않음",
-      valueMinor: valueMinor.toString(),
-      currentBasisPointHundredths: total === 0n ? 0 : Number((valueMinor * 1_000_000n) / total),
-    };
-    if (!cashTarget || total <= 0n || snapshot.managedCashMinor === null) {
-      allocations.push({
-        ...common,
-        targetBasisPoints: null,
-        lowerBasisPoints: null,
-        upperBasisPoints: null,
-        bandStatus: "TARGET_NOT_CONFIGURED" as const,
-      });
-    } else {
-      const outside = isOutsideAllocationBand({
-        valueMinor,
-        totalValueMinor: total,
-        lowerBasisPoints: BigInt(cashTarget.lowerBasisPoints),
-        upperBasisPoints: BigInt(cashTarget.upperBasisPoints),
-      });
-      allocations.push({
-        ...common,
-        targetBasisPoints: cashTarget.targetBasisPoints,
-        lowerBasisPoints: cashTarget.lowerBasisPoints,
-        upperBasisPoints: cashTarget.upperBasisPoints,
-        bandStatus: outside ? ("OUTSIDE_BAND" as const) : ("IN_RANGE" as const),
-      });
-    }
-  }
+    }));
+  const targetIntegrityInvalid =
+    pinnedTarget?.allocations.some(
+      (allocation) =>
+        (allocation.assetKey === "CASH" && allocation.instruments.length !== 0) ||
+        (allocation.assetKey !== "CASH" &&
+          allocation.targetBasisPoints > 0 &&
+          allocation.instruments.length === 0),
+    ) ?? false;
 
   let blockCode: DashboardBlockReasonContract["code"] | null = null;
   if (activeTargetVersionId !== (pinnedTarget?.id ?? null)) {
@@ -133,9 +145,9 @@ export async function getDashboard(
   } else if (snapshot.managedCashMinor === null) {
     blockCode = "MANAGED_CASH_MISSING";
   } else if (
-    allocations.some(({ bandStatus }) => bandStatus === "TARGET_NOT_CONFIGURED") ||
-    targets.size !== snapshot.holdings.length + 1 ||
-    !targets.has("CASH")
+    unmanagedHoldings.length > 0 ||
+    targetIntegrityInvalid ||
+    !pinnedTarget.allocations.some(({ assetKey }) => assetKey === "CASH")
   ) {
     blockCode = "UNMANAGED_ASSET";
   }
@@ -149,6 +161,7 @@ export async function getDashboard(
     accountLabel: snapshot.account.maskedNumber,
     observedAt: snapshot.observedAt.toISOString(),
     conclusion: blockCode ? "BLOCKED" : outsideBand ? "REBALANCE_REQUIRED" : "NO_ACTION",
+    securitiesValueMinor: snapshot.securitiesValueMinor.toString(),
     totalValueMinor: total.toString(),
     managedCashMinor: snapshot.managedCashMinor?.toString() ?? null,
     managedCashSource,
@@ -160,6 +173,7 @@ export async function getDashboard(
       valuationEligible: false,
     })),
     allocations,
+    unmanagedHoldings,
     blockReason: blockCode ? reasonFor(blockCode) : null,
     liveOrdersEnabled: false,
   });
@@ -176,14 +190,86 @@ export function blockedDashboard(
     accountLabel: null,
     observedAt: null,
     conclusion: "BLOCKED",
+    securitiesValueMinor: null,
     totalValueMinor: null,
     managedCashMinor: null,
     managedCashSource: "UNSET",
     buyingPower: [],
     allocations: [],
+    unmanagedHoldings: [],
     blockReason: reasonFor(code),
     liveOrdersEnabled: false,
   });
+}
+
+function presentTargetAllocation(input: {
+  readonly id: string;
+  readonly label: string;
+  readonly description: string;
+  readonly valueMinor: bigint;
+  readonly totalValueMinor: bigint;
+  readonly targetConfigured: boolean;
+  readonly target: {
+    readonly targetBasisPoints: number;
+    readonly lowerBasisPoints: number;
+    readonly upperBasisPoints: number;
+  };
+  readonly instruments: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly description: string;
+    readonly valueMinor: string;
+    readonly currentWithinAssetBasisPointHundredths: number;
+    readonly targetWithinAssetPoints: number;
+  }[];
+}) {
+  const common = {
+    id: input.id,
+    label: input.label,
+    description: input.description,
+    valueMinor: input.valueMinor.toString(),
+    currentBasisPointHundredths:
+      input.totalValueMinor === 0n
+        ? 0
+        : Number((input.valueMinor * 1_000_000n) / input.totalValueMinor),
+    instruments: input.instruments,
+  };
+  if (!input.targetConfigured || input.totalValueMinor <= 0n) {
+    return {
+      ...common,
+      targetBasisPoints: null,
+      lowerBasisPoints: null,
+      upperBasisPoints: null,
+      bandStatus: "TARGET_NOT_CONFIGURED" as const,
+    };
+  }
+  const outside = isOutsideAllocationBand({
+    valueMinor: input.valueMinor,
+    totalValueMinor: input.totalValueMinor,
+    lowerBasisPoints: BigInt(input.target.lowerBasisPoints),
+    upperBasisPoints: BigInt(input.target.upperBasisPoints),
+  });
+  return {
+    ...common,
+    targetBasisPoints: input.target.targetBasisPoints,
+    lowerBasisPoints: input.target.lowerBasisPoints,
+    upperBasisPoints: input.target.upperBasisPoints,
+    bandStatus: outside ? ("OUTSIDE_BAND" as const) : ("IN_RANGE" as const),
+  };
+}
+
+function targetAllocationDescription(assetKey: string, instrumentCount: number): string {
+  const count = `${instrumentCount}개 구성 종목`;
+  switch (assetKey) {
+    case "SAFE":
+      return `변동성 완충 자산 · ${count}`;
+    case "CORE":
+      return `장기 성장 핵심 자산 · ${count}`;
+    case "SATELLITE":
+      return `개별주·테마 보조 자산 · ${count}`;
+    default:
+      return count;
+  }
 }
 
 function reasonFor(code: DashboardBlockReasonContract["code"]): DashboardBlockReasonContract {
