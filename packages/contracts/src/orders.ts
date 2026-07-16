@@ -133,6 +133,20 @@ export const KillSwitchCommandSchema = z
     }
   });
 
+export const CancelOrderInputSchema = z.strictObject({
+  orderId: z.uuid(),
+  reason: z.string().trim().min(8).max(500),
+  confirmation: z.literal("미체결 주문 취소를 요청합니다"),
+});
+
+export const CancelOrderReceiptSchema = z.strictObject({
+  orderId: z.uuid(),
+  outcome: z.enum(["REQUEST_ACCEPTED", "REJECTED", "BLOCKED", "UNKNOWN"]),
+  currentState: OrderLedgerStateSchema,
+  brokerActionOrderId: z.string().min(1).nullable(),
+  message: z.string().min(1),
+});
+
 export const RecoverUnknownOrderInputSchema = z.strictObject({
   orderId: z.uuid(),
   resolvedState: z.enum(["PENDING", "PARTIAL_FILLED", "FILLED", "CANCELED", "REJECTED"]),
@@ -149,4 +163,6 @@ export type LivePlanApprovalReceiptContract = z.infer<typeof LivePlanApprovalRec
 export type OrdersSnapshotContract = z.infer<typeof OrdersSnapshotSchema>;
 export type ExecuteRebalancePlanReceiptContract = z.infer<typeof ExecuteRebalancePlanReceiptSchema>;
 export type KillSwitchCommandContract = z.infer<typeof KillSwitchCommandSchema>;
+export type CancelOrderInputContract = z.infer<typeof CancelOrderInputSchema>;
+export type CancelOrderReceiptContract = z.infer<typeof CancelOrderReceiptSchema>;
 export type RecoverUnknownOrderInputContract = z.infer<typeof RecoverUnknownOrderInputSchema>;

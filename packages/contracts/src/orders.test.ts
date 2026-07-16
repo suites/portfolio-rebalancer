@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CancelOrderInputSchema,
+  CancelOrderReceiptSchema,
   CreateLivePlanApprovalInputSchema,
   ExecuteRebalancePlanInputSchema,
   KillSwitchCommandSchema,
@@ -75,6 +77,33 @@ describe("order operation contracts", () => {
         confirmation: "킬 스위치 작동",
       }).success,
     ).toBe(false);
+  });
+
+  it("취소는 주문 ID, 사유와 고정 확인 문구만 받아 브로커 ID를 서버에서 조회한다", () => {
+    expect(
+      CancelOrderInputSchema.safeParse({
+        orderId,
+        reason: "현재 목표 비중을 다시 검토하기 위한 취소",
+        confirmation: "미체결 주문 취소를 요청합니다",
+      }).success,
+    ).toBe(true);
+    expect(
+      CancelOrderInputSchema.safeParse({
+        orderId,
+        reason: "취소",
+        confirmation: "확인",
+        brokerOrderId: "browser-must-not-supply-this",
+      }).success,
+    ).toBe(false);
+    expect(
+      CancelOrderReceiptSchema.safeParse({
+        orderId,
+        outcome: "REQUEST_ACCEPTED",
+        currentState: "PENDING",
+        brokerActionOrderId: "broker-cancel-order-1",
+        message: "취소 요청을 접수했습니다. 최종 취소 상태는 브로커 조회로 다시 확인합니다.",
+      }).success,
+    ).toBe(true);
   });
 
   it("UNKNOWN_BLOCKED 복구는 브로커 증거와 누적 체결값을 요구한다", () => {
