@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createBlockedShadowRebalancePlan,
   createShadowRebalancePlan,
   type CreateShadowPlanInput,
   type ShadowPlanAssetClassInput,
@@ -112,6 +113,17 @@ function sellFirstInput(): CreateShadowPlanInput {
 }
 
 describe("createShadowRebalancePlan", () => {
+  it("외부 증거 점검 실패도 같은 canonical BLOCKED 결과로 고정한다", () => {
+    const input = sellFirstInput();
+    const first = createBlockedShadowRebalancePlan(input, "COMMISSION_UNVERIFIED");
+    const second = createBlockedShadowRebalancePlan(input, "COMMISSION_UNVERIFIED");
+
+    expect(first.status).toBe("BLOCKED");
+    expect(first.reasonCodes).toEqual(["COMMISSION_UNVERIFIED"]);
+    expect(first.executableOrders).toEqual([]);
+    expect(first.planHash).toBe(second.planHash);
+  });
+
   it("모든 자산과 내부 종목 비중이 범위 안이면 NO_ACTION을 재현한다", () => {
     const result = createShadowRebalancePlan(
       planInput(

@@ -43,7 +43,14 @@ export type ShadowPlanReasonCode =
   | "UNSUPPORTED_ORDER_PREREQUISITE"
   | "SELLABLE_QUANTITY_MISSING"
   | "SELLABLE_QUANTITY_INSUFFICIENT"
-  | "CALCULATION_INPUT_INVALID";
+  | "CALCULATION_INPUT_INVALID"
+  | "SNAPSHOT_NOT_VERIFIED"
+  | "TARGET_CONFIG_NOT_PINNED"
+  | "QUOTE_STALE"
+  | "MARKET_CALENDAR_STALE"
+  | "MARKET_SESSION_UNVERIFIED"
+  | "TRADE_RESTRICTION_UNVERIFIED"
+  | "COMMISSION_UNVERIFIED";
 
 export type DeferredBuyReasonCode =
   | "SELL_PHASE_MUST_RECONCILE"
@@ -390,6 +397,22 @@ export function createShadowRebalancePlan(input: CreateShadowPlanInput): ShadowP
   } catch {
     return blockedResult(input, "CALCULATION_INPUT_INVALID");
   }
+}
+
+export function createBlockedShadowRebalancePlan(
+  input: CreateShadowPlanInput,
+  reasonCode: Extract<
+    ShadowPlanReasonCode,
+    | "SNAPSHOT_NOT_VERIFIED"
+    | "TARGET_CONFIG_NOT_PINNED"
+    | "QUOTE_STALE"
+    | "MARKET_CALENDAR_STALE"
+    | "MARKET_SESSION_UNVERIFIED"
+    | "TRADE_RESTRICTION_UNVERIFIED"
+    | "COMMISSION_UNVERIFIED"
+  >,
+): ShadowPlanResult {
+  return blockedResult(input, reasonCode);
 }
 
 function validateAndNormalizeInput(
