@@ -1,8 +1,22 @@
 import { z } from "zod";
 
-const decimalString = z.string().regex(/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/);
-const nonNegativeDecimalString = z.string().regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/);
+const decimalString = z
+  .string()
+  .max(30)
+  .regex(/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/);
+const nonNegativeDecimalString = z
+  .string()
+  .max(30)
+  .regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/);
 const nullableDecimal = decimalString.nullable();
+const isoOffsetDateTime = z.iso.datetime({ offset: true });
+const isoDate = z.iso.date();
+const currency = z.enum(["KRW", "USD"]);
+const marketCountry = z.enum(["KR", "US"]);
+const symbol = z
+  .string()
+  .min(1)
+  .regex(/^[A-Za-z0-9.-]+$/);
 
 const priceByCurrency = z.object({
   krw: nullableDecimal,
@@ -83,20 +97,126 @@ export const TossExchangeRateResponseSchema = z.object({
     midRate: decimalString,
     basisPoint: decimalString,
     rateChangeType: z.string().min(1),
-    validFrom: z.iso.datetime({ offset: true }),
-    validUntil: z.iso.datetime({ offset: true }),
+    validFrom: isoOffsetDateTime,
+    validUntil: isoOffsetDateTime,
   }),
 });
 
 export const TossBuyingPowerResponseSchema = z.object({
   result: z.object({
-    currency: z.enum(["KRW", "USD"]),
+    currency,
     cashBuyingPower: nonNegativeDecimalString,
   }),
 });
 
+export const TossPriceSchema = z.object({
+  symbol,
+  timestamp: isoOffsetDateTime.nullable().optional(),
+  lastPrice: decimalString,
+  currency,
+});
+
+export const TossPricesResponseSchema = z.object({
+  result: z.array(TossPriceSchema).max(200),
+});
+
+export const TossOrderbookEntrySchema = z.object({
+  price: decimalString,
+  volume: decimalString,
+});
+
+export const TossOrderbookResponseSchema = z.object({
+  result: z.object({
+    timestamp: isoOffsetDateTime.nullable().optional(),
+    currency,
+    asks: z.array(TossOrderbookEntrySchema),
+    bids: z.array(TossOrderbookEntrySchema),
+  }),
+});
+
+export const TossPriceLimitResponseSchema = z.object({
+  result: z.object({
+    timestamp: isoOffsetDateTime,
+    upperLimitPrice: decimalString.nullable().optional(),
+    lowerLimitPrice: decimalString.nullable().optional(),
+    currency,
+  }),
+});
+
+const tossSessionIntervalSchema = z.object({
+  startTime: isoOffsetDateTime,
+  endTime: isoOffsetDateTime,
+});
+
+export const TossKrPreMarketSessionSchema = tossSessionIntervalSchema.extend({
+  singlePriceAuctionStartTime: isoOffsetDateTime.nullable().optional(),
+});
+
+export const TossKrRegularMarketSessionSchema = tossSessionIntervalSchema.extend({
+  singlePriceAuctionStartTime: isoOffsetDateTime.nullable().optional(),
+});
+
+export const TossKrAfterMarketSessionSchema = tossSessionIntervalSchema.extend({
+  singlePriceAuctionEndTime: isoOffsetDateTime.nullable().optional(),
+});
+
+export const TossKrMarketDaySchema = z.object({
+  date: isoDate,
+  integrated: z
+    .object({
+      preMarket: TossKrPreMarketSessionSchema.nullable().optional(),
+      regularMarket: TossKrRegularMarketSessionSchema.nullable().optional(),
+      afterMarket: TossKrAfterMarketSessionSchema.nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+});
+
+export const TossKrMarketCalendarResponseSchema = z.object({
+  result: z.object({
+    today: TossKrMarketDaySchema,
+    previousBusinessDay: TossKrMarketDaySchema,
+    nextBusinessDay: TossKrMarketDaySchema,
+  }),
+});
+
+export const TossUsMarketSessionSchema = tossSessionIntervalSchema;
+
+export const TossUsMarketDaySchema = z.object({
+  date: isoDate,
+  dayMarket: TossUsMarketSessionSchema.nullable().optional(),
+  preMarket: TossUsMarketSessionSchema.nullable().optional(),
+  regularMarket: TossUsMarketSessionSchema.nullable().optional(),
+  afterMarket: TossUsMarketSessionSchema.nullable().optional(),
+});
+
+export const TossUsMarketCalendarResponseSchema = z.object({
+  result: z.object({
+    today: TossUsMarketDaySchema,
+    previousBusinessDay: TossUsMarketDaySchema,
+    nextBusinessDay: TossUsMarketDaySchema,
+  }),
+});
+
+export const TossSellableQuantityResponseSchema = z.object({
+  result: z.object({
+    sellableQuantity: decimalString,
+  }),
+});
+
+export const TossCommissionSchema = z.object({
+  marketCountry,
+  commissionRate: decimalString,
+  startDate: isoDate.nullable().optional(),
+  endDate: isoDate.nullable().optional(),
+});
+
+export const TossCommissionsResponseSchema = z.object({
+  result: z.array(TossCommissionSchema),
+});
+
 export const TossStockInfoSchema = z.object({
-  symbol: z.string().regex(/^[A-Za-z0-9.-]+$/),
+  symbol,
   name: z.string().min(1),
   englishName: z.string().min(1),
   isinCode: z.string().min(1),
@@ -115,8 +235,8 @@ export const TossStockInfoSchema = z.object({
   isCommonShare: z.boolean(),
   status: z.enum(["SCHEDULED", "ACTIVE", "DELISTED"]),
   currency: z.enum(["KRW", "USD"]),
-  listDate: z.iso.date().nullable().optional(),
-  delistDate: z.iso.date().nullable().optional(),
+  listDate: isoDate.nullable().optional(),
+  delistDate: isoDate.nullable().optional(),
   sharesOutstanding: nonNegativeDecimalString,
   leverageFactor: decimalString.nullable().optional(),
   koreanMarketDetail: z
@@ -137,8 +257,8 @@ export const TossStocksResponseSchema = z.object({
 export const TossStockWarningSchema = z.object({
   warningType: z.string().min(1),
   exchange: z.string().min(1).nullable().optional(),
-  startDate: z.iso.date().nullable().optional(),
-  endDate: z.iso.date().nullable().optional(),
+  startDate: isoDate.nullable().optional(),
+  endDate: isoDate.nullable().optional(),
 });
 
 export const TossStockWarningsResponseSchema = z.object({
@@ -150,6 +270,22 @@ export type TossHoldingItem = z.infer<typeof TossHoldingItemSchema>;
 export type TossHoldingsResponse = z.infer<typeof TossHoldingsResponseSchema>;
 export type TossExchangeRateResponse = z.infer<typeof TossExchangeRateResponseSchema>;
 export type TossBuyingPowerResponse = z.infer<typeof TossBuyingPowerResponseSchema>;
+export type TossPrice = z.infer<typeof TossPriceSchema>;
+export type TossPricesResponse = z.infer<typeof TossPricesResponseSchema>;
+export type TossOrderbookEntry = z.infer<typeof TossOrderbookEntrySchema>;
+export type TossOrderbookResponse = z.infer<typeof TossOrderbookResponseSchema>;
+export type TossPriceLimitResponse = z.infer<typeof TossPriceLimitResponseSchema>;
+export type TossKrPreMarketSession = z.infer<typeof TossKrPreMarketSessionSchema>;
+export type TossKrRegularMarketSession = z.infer<typeof TossKrRegularMarketSessionSchema>;
+export type TossKrAfterMarketSession = z.infer<typeof TossKrAfterMarketSessionSchema>;
+export type TossKrMarketDay = z.infer<typeof TossKrMarketDaySchema>;
+export type TossKrMarketCalendarResponse = z.infer<typeof TossKrMarketCalendarResponseSchema>;
+export type TossUsMarketSession = z.infer<typeof TossUsMarketSessionSchema>;
+export type TossUsMarketDay = z.infer<typeof TossUsMarketDaySchema>;
+export type TossUsMarketCalendarResponse = z.infer<typeof TossUsMarketCalendarResponseSchema>;
+export type TossSellableQuantityResponse = z.infer<typeof TossSellableQuantityResponseSchema>;
+export type TossCommission = z.infer<typeof TossCommissionSchema>;
+export type TossCommissionsResponse = z.infer<typeof TossCommissionsResponseSchema>;
 export type TossStockInfo = z.infer<typeof TossStockInfoSchema>;
 export type TossStocksResponse = z.infer<typeof TossStocksResponseSchema>;
 export type TossStockWarning = z.infer<typeof TossStockWarningSchema>;

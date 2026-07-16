@@ -3,9 +3,16 @@ import { describe, expect, it } from "vitest";
 import {
   TossAccountsResponseSchema,
   TossBuyingPowerResponseSchema,
+  TossCommissionsResponseSchema,
   TossHoldingsResponseSchema,
+  TossKrMarketCalendarResponseSchema,
+  TossOrderbookResponseSchema,
+  TossPriceLimitResponseSchema,
+  TossPricesResponseSchema,
+  TossSellableQuantityResponseSchema,
   TossStockWarningsResponseSchema,
   TossStocksResponseSchema,
+  TossUsMarketCalendarResponseSchema,
 } from "./read-models";
 
 describe("Toss read response schemas", () => {
@@ -146,5 +153,165 @@ describe("Toss read response schemas", () => {
         result: [{ warningType: "VI_STATIC", startDate: "2026-03-26T09:00:00+09:00" }],
       }).success,
     ).toBe(false);
+  });
+
+  it("공식 decimal 문자열 최대 길이 30자를 모든 신규 시세 계약에 적용한다", () => {
+    expect(
+      TossPricesResponseSchema.safeParse({
+        result: [
+          {
+            symbol: "005930",
+            timestamp: null,
+            lastPrice: "1".repeat(30),
+            currency: "KRW",
+          },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      TossPricesResponseSchema.safeParse({
+        result: [
+          {
+            symbol: "005930",
+            timestamp: null,
+            lastPrice: "1".repeat(31),
+            currency: "KRW",
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      TossCommissionsResponseSchema.safeParse({
+        result: [{ marketCountry: "KR", commissionRate: "0." + "1".repeat(29) }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("시세·호가·가격 제한의 공식 nullable/empty 응답을 전송 스키마에서 허용한다", () => {
+    expect(TossPricesResponseSchema.safeParse({ result: [] }).success).toBe(true);
+    expect(
+      TossPricesResponseSchema.safeParse({
+        result: [{ symbol: "AAPL", lastPrice: "0", currency: "USD" }],
+      }).success,
+    ).toBe(true);
+    expect(
+      TossOrderbookResponseSchema.safeParse({
+        result: { timestamp: null, currency: "KRW", asks: [], bids: [] },
+      }).success,
+    ).toBe(true);
+    expect(
+      TossPriceLimitResponseSchema.safeParse({
+        result: {
+          timestamp: "2026-03-25T09:30:00.123+09:00",
+          upperLimitPrice: null,
+          lowerLimitPrice: null,
+          currency: "USD",
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("캘린더의 휴장일·부분 세션·nullable 단일가 경계를 전송 스키마에서 허용한다", () => {
+    expect(
+      TossKrMarketCalendarResponseSchema.safeParse({
+        result: {
+          today: { date: "2026-03-25", integrated: null },
+          previousBusinessDay: {
+            date: "2026-03-24",
+            integrated: {
+              preMarket: null,
+              regularMarket: {
+                startTime: "2026-03-24T09:00:00+09:00",
+                singlePriceAuctionStartTime: null,
+                endTime: "2026-03-24T15:30:00+09:00",
+              },
+            },
+          },
+          nextBusinessDay: { date: "2026-03-26" },
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      TossUsMarketCalendarResponseSchema.safeParse({
+        result: {
+          today: {
+            date: "2026-03-25",
+            dayMarket: null,
+            preMarket: null,
+            regularMarket: null,
+            afterMarket: null,
+          },
+          previousBusinessDay: { date: "2026-03-24" },
+          nextBusinessDay: { date: "2026-03-26" },
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("매도 가능 수량과 수수료의 빈 배열·nullable 유효기간은 원본 단계에서 보존한다", () => {
+    expect(
+      TossSellableQuantityResponseSchema.safeParse({
+        result: { sellableQuantity: "-1.5" },
+      }).success,
+    ).toBe(true);
+    expect(TossCommissionsResponseSchema.safeParse({ result: [] }).success).toBe(true);
+    expect(
+      TossCommissionsResponseSchema.safeParse({
+        result: [
+          {
+            marketCountry: "US",
+            commissionRate: "0.1",
+            startDate: null,
+            endDate: null,
+          },
+          { marketCountry: "KR", commissionRate: "0.015" },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("provider date-time은 offset을, 캘린더와 수수료 날짜는 ISO date를 요구한다", () => {
+    expect(
+      TossPricesResponseSchema.safeParse({
+        result: [
+          {
+            symbol: "005930",
+            timestamp: "2026-03-25T09:30:00",
+            lastPrice: "72000",
+            currency: "KRW",
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      TossKrMarketCalendarResponseSchema.safeParse({
+        result: {
+          today: { date: "2026-02-30" },
+          previousBusinessDay: { date: "2026-02-27" },
+          nextBusinessDay: { date: "2026-03-02" },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      TossCommissionsResponseSchema.safeParse({
+        result: [{ marketCountry: "KR", commissionRate: "0.015", startDate: "2026-01" }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("성공 응답 스키마는 result 누락을 모두 거부한다", () => {
+    const schemas = [
+      TossPricesResponseSchema,
+      TossOrderbookResponseSchema,
+      TossPriceLimitResponseSchema,
+      TossKrMarketCalendarResponseSchema,
+      TossUsMarketCalendarResponseSchema,
+      TossSellableQuantityResponseSchema,
+      TossCommissionsResponseSchema,
+    ];
+
+    for (const schema of schemas) {
+      expect(schema.safeParse({}).success).toBe(false);
+    }
   });
 });
