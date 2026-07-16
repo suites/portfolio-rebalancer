@@ -1,56 +1,86 @@
-import type {
-  AccountId,
-  BrokerConditionalOrderSummary,
-  BrokerAccount,
-  BrokerInstrument,
-  BrokerOrderSummary,
-  BuyingPowerQuote,
-  CommissionQuote,
-  HoldingPosition,
-  MarketSession,
-  OrderBookSnapshot,
-  PriceQuote,
-  SellableQuantityQuote,
-  SymbolCode,
-} from "./models";
 import type { Currency } from "@portfolio-rebalancer/domain";
 
+import type {
+  AccountId,
+  BrokerAccount,
+  BrokerConditionalOrderSummary,
+  BrokerInstrument,
+  BrokerOrderSummary,
+  BrokerReadResult,
+  BuyingPowerQuote,
+  CommissionRateSchedule,
+  HoldingPosition,
+  InstrumentIdentifier,
+  IsoDate,
+  MarketCalendar,
+  MarketCountry,
+  OrderBookSnapshot,
+  PriceLimitQuote,
+  PriceQuote,
+  SellableQuantityQuote,
+} from "./models";
+
 export interface AccountReader {
-  listAccounts(): Promise<readonly BrokerAccount[]>;
+  listAccounts(): Promise<BrokerReadResult<readonly BrokerAccount[]>>;
 }
 
 export interface HoldingsReader {
-  getHoldings(accountId: AccountId): Promise<readonly HoldingPosition[]>;
+  getHoldings(accountId: AccountId): Promise<BrokerReadResult<readonly HoldingPosition[]>>;
 }
 
 export interface QuoteReader {
-  getQuotes(symbols: readonly SymbolCode[]): Promise<readonly PriceQuote[]>;
+  getQuotes(
+    instruments: readonly InstrumentIdentifier[],
+  ): Promise<BrokerReadResult<readonly PriceQuote[]>>;
 }
 
 export interface OrderBookReader {
-  getOrderBook(symbol: SymbolCode): Promise<OrderBookSnapshot>;
+  getOrderBook(instrument: InstrumentIdentifier): Promise<BrokerReadResult<OrderBookSnapshot>>;
+}
+
+export interface PriceLimitReader {
+  getPriceLimit(instrument: InstrumentIdentifier): Promise<BrokerReadResult<PriceLimitQuote>>;
 }
 
 export interface InstrumentReader {
-  getInstruments(symbols: readonly SymbolCode[]): Promise<readonly BrokerInstrument[]>;
+  getInstruments(
+    instruments: readonly InstrumentIdentifier[],
+  ): Promise<BrokerReadResult<readonly BrokerInstrument[]>>;
 }
 
 export interface MarketCalendarReader {
-  getMarketSession(marketCountry: "KR" | "US"): Promise<MarketSession>;
+  getMarketCalendar(
+    marketCountry: MarketCountry,
+    date?: IsoDate,
+  ): Promise<BrokerReadResult<MarketCalendar>>;
 }
 
 export interface OrderReader {
-  listOpenOrders(accountId: AccountId): Promise<readonly BrokerOrderSummary[]>;
+  listOpenOrders(accountId: AccountId): Promise<BrokerReadResult<readonly BrokerOrderSummary[]>>;
 }
 
 export interface ConditionalOrderReader {
-  listConditionalOrders(accountId: AccountId): Promise<readonly BrokerConditionalOrderSummary[]>;
+  listConditionalOrders(
+    accountId: AccountId,
+  ): Promise<BrokerReadResult<readonly BrokerConditionalOrderSummary[]>>;
 }
 
-export interface PreTradeReader {
-  getBuyingPower(accountId: AccountId, currency: Currency): Promise<BuyingPowerQuote>;
-  getSellableQuantity(accountId: AccountId, symbol: SymbolCode): Promise<SellableQuantityQuote>;
-  getCommission(accountId: AccountId, symbol: SymbolCode): Promise<CommissionQuote>;
+export interface BuyingPowerReader {
+  getBuyingPower(
+    accountId: AccountId,
+    currency: Currency,
+  ): Promise<BrokerReadResult<BuyingPowerQuote>>;
+}
+
+export interface SellableQuantityReader {
+  getSellableQuantity(
+    accountId: AccountId,
+    instrument: InstrumentIdentifier,
+  ): Promise<BrokerReadResult<SellableQuantityQuote>>;
+}
+
+export interface CommissionReader {
+  getCommissionSchedule(accountId: AccountId): Promise<BrokerReadResult<CommissionRateSchedule>>;
 }
 
 export interface BrokerReadPorts {
@@ -58,9 +88,12 @@ export interface BrokerReadPorts {
   readonly holdings: HoldingsReader;
   readonly quotes: QuoteReader;
   readonly orderBook: OrderBookReader;
+  readonly priceLimits: PriceLimitReader;
   readonly instruments: InstrumentReader;
   readonly marketCalendar: MarketCalendarReader;
   readonly orders: OrderReader;
   readonly conditionalOrders: ConditionalOrderReader;
-  readonly preTrade: PreTradeReader;
+  readonly buyingPower: BuyingPowerReader;
+  readonly sellableQuantity: SellableQuantityReader;
+  readonly commissions: CommissionReader;
 }
