@@ -11,6 +11,9 @@
 - Dashboard 계약의 `valuationEligible`는 `false`만 허용
 - Web에서 KRW·USD를 서로 합산하지 않고 통화별 표시
 - 실제 주문 메서드와 네트워크 쓰기 호출 0회
+- heartbeat 실패 시 계좌·스냅샷 쓰기 없음
+- 최종 transaction fencing token 불일치 시 snapshot evidence 쓰기 없음
+- 최신 dashboard snapshot을 최근 수집 계좌로 제한
 
 - Toss 계좌·보유·환율 런타임 schema rejection
 - USD/KRW bigint 환산과 KRW fractional rejection

@@ -204,6 +204,13 @@ function reasonFor(code: DashboardBlockReasonContract["code"]): DashboardBlockRe
         problem: "다른 실제 계좌 수집이 진행 중입니다.",
         nextAction: "잠시 뒤 저장된 최신 스냅샷을 다시 확인하세요.",
       };
+    case "COLLECTION_LEASE_LOST":
+      return {
+        ...common,
+        code,
+        problem: "수집 도중 실행 소유권이 만료되거나 다른 실행으로 이전되었습니다.",
+        nextAction: "현재 실행의 저장을 중단했습니다. 진행 중인 수집이 끝난 뒤 다시 확인하세요.",
+      };
     default:
       return {
         ...common,

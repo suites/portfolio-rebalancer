@@ -8,8 +8,8 @@
 - 통화별 buying-power를 불변 저장하고 `valuationEligible=false`로 고정했다.
 - 보유주식 평가액, 매수 가능 금액과 관리 현금을 UI에서 분리했다.
 - 로컬 PostgreSQL `127.0.0.1:15432/portfolio_rebalancer`에 migration을 적용했다.
-- `pnpm verify`는 변경 후 91개 테스트를 포함해 통과했다.
-- 남은 우선 안전 결함은 collection fencing/heartbeat와 계좌 범위 고정이다.
+- `pnpm verify`는 변경 후 96개 테스트를 포함해 통과했다.
+- collection fencing/heartbeat와 최신 수집 계좌 범위 고정을 완료했다.
 
 - 실제 주문 전송 차단 유지: 통과
 - 브라우저/Next의 Toss secret 접근 금지: 통과
@@ -21,7 +21,7 @@
 - NestJS Guard 분리와 기존 HTTP 응답 계약: 통과
 - feature-first 폴더와 singleton PrismaService 구성: 통과
 - Vercel `src/main.ts` zero-config 진입점: 로컬 검증 통과, Preview 배포 확인 필요
-- collection lease fencing/heartbeat: 후속 보강 필요
+- collection lease fencing/heartbeat: owner·token heartbeat와 최종 transaction 재검증 통과
 - 홈 외 실제 라우트와 모바일 내비게이션: 통과, 6개 SSR 경로 HTTP 200
 - 버전형 목표 설정 UI와 snapshot 고정: 통과, DRAFT/ACTIVE 분리와 ID·digest 경쟁 조건 차단
 - 수집 기록과 fail-closed 진단 화면: 통과, 현재 계좌 제한과 첫 실패 기록 포함

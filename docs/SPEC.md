@@ -300,7 +300,7 @@ clientOrderId = short_hash(canonical_order_intent) + version
 - 외부 API의 추적용 request ID
 - 알림 전송 결과
 
-수평 확장되는 Vercel Function을 고려합니다. 현재 Toss 수집은 PostgreSQL의 만료 lease와 fencing token으로 직렬화하며, 계획 저장·논리 주문 고유성·일일 한도 예약도 향후 PostgreSQL 트랜잭션으로 묶습니다. 정상 종료에서는 lease를 해제하고 비정상 종료는 만료와 복구 절차로 처리합니다.
+수평 확장되는 Vercel Function을 고려합니다. 현재 Toss 수집은 PostgreSQL의 만료 lease와 fencing token으로 직렬화합니다. 수집기는 계좌 선택 뒤와 최종 저장 전에 owner·fencing token이 일치하는 lease를 heartbeat하며, 스냅샷 저장 트랜잭션은 DB `NOW()` 기준으로 만료되지 않은 같은 token을 `FOR UPDATE`로 다시 확인합니다. 소유권을 잃은 실행은 `COLLECTION_LEASE_LOST`로 실패하고 어떤 스냅샷 증거도 쓰지 않습니다. 최신 화면과 목표 설정은 전체 DB의 최신값이 아니라 가장 최근 수집 계좌로 범위를 제한합니다. 계획 저장·논리 주문 고유성·일일 한도 예약도 향후 PostgreSQL 트랜잭션으로 묶습니다. 정상 종료에서는 owner·token이 모두 일치할 때만 lease를 해제하고 비정상 종료는 만료와 복구 절차로 처리합니다.
 
 비밀키, 액세스 토큰 및 전체 계좌번호는 로그에 저장하지 않습니다.
 

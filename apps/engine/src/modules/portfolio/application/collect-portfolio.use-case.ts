@@ -7,6 +7,7 @@ import {
 } from "@portfolio-rebalancer/broker-toss";
 
 import type {
+  CollectionLease,
   PrismaPortfolioRepository,
   StoredBuyingPowerInput,
   StoredHoldingInput,
@@ -25,7 +26,8 @@ export interface CollectPortfolioOptions {
 
 export async function collectPortfolio(options: CollectPortfolioOptions): Promise<void> {
   const leaseOwner = randomUUID();
-  if (!(await options.repository.acquireCollectionLease(leaseOwner))) {
+  const lease = await options.repository.acquireCollectionLease(leaseOwner);
+  if (!lease) {
     throw new CollectionError(
       "COLLECTION_IN_PROGRESS",
       "다른 토스증권 데이터 수집이 이미 진행 중입니다.",
@@ -36,6 +38,7 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
     const observedAt = (options.now ?? (() => new Date()))();
     const accounts = await options.source.listAccounts();
     const selected = selectAccount(accounts, options.selectedAccountSeq);
+    await assertCollectionLease(options.repository, lease);
     const account = await options.repository.upsertAccount({
       externalRefHmac: createAccountReference(selected.accountNo, options.accountReferenceKey),
       maskedNumber: maskAccountNumber(selected.accountNo),
@@ -105,7 +108,8 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
           };
         },
       );
-      await options.repository.completeCollection({
+      await assertCollectionLease(options.repository, lease);
+      const completed = await options.repository.completeCollection({
         runId: run.id,
         accountId: account.id,
         observedAt,
@@ -113,6 +117,7 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
         usdKrwRate: exchangeResponse?.result.rate ?? null,
         holdings,
         buyingPower,
+        lease,
         rawResponses: [
           {
             operationId: "getAccounts",
@@ -150,6 +155,7 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
             : []),
         ],
       });
+      if (!completed) throw collectionLeaseLost();
     } catch (error) {
       const collectionError =
         error instanceof CollectionError
@@ -164,8 +170,23 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
       throw collectionError;
     }
   } finally {
-    await options.repository.releaseCollectionLease(leaseOwner);
+    await options.repository.releaseCollectionLease(lease);
   }
+}
+
+async function assertCollectionLease(
+  repository: PrismaPortfolioRepository,
+  lease: CollectionLease,
+): Promise<void> {
+  if (!(await repository.heartbeatCollectionLease(lease))) throw collectionLeaseLost();
+}
+
+function collectionLeaseLost(): CollectionError {
+  return new CollectionError(
+    "COLLECTION_LEASE_LOST",
+    "수집 도중 실행 소유권을 잃어 새 스냅샷을 저장하지 않았습니다.",
+    "진행 중인 수집이 끝난 뒤 최신 상태를 다시 확인하세요.",
+  );
 }
 
 function validateBuyingPowerCurrency(actual: string, expected: "KRW" | "USD"): void {

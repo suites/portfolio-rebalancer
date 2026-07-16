@@ -20,6 +20,7 @@ export const DashboardBlockReasonSchema = z.object({
     "ENGINE_UNAVAILABLE",
     "EGRESS_NOT_CONFIRMED",
     "COLLECTION_IN_PROGRESS",
+    "COLLECTION_LEASE_LOST",
   ]),
   problem: z.string().min(1),
   protectiveAction: z.string().min(1),

@@ -213,6 +213,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
   it("매수 가능 금액을 관리 현금과 분리된 append-only snapshot 자식으로 저장한다", async () => {
     const createSnapshot = vi.fn().mockResolvedValue({ id: "snapshot-1" });
     const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([{ fencingToken: 1n }]),
       targetConfigVersion: {
         findFirst: vi.fn().mockResolvedValue(null),
       },
@@ -241,6 +242,10 @@ describe("PrismaPortfolioRepository collection evidence", () => {
         { currency: "USD", amount: "10.5", valueKrwMinor: 14_490n },
       ],
       rawResponses: [],
+      lease: {
+        owner: "11111111-1111-4111-8111-111111111111",
+        fencingToken: 1n,
+      },
     });
 
     const snapshotInput = createSnapshot.mock.calls[0]?.[0] as
@@ -282,6 +287,95 @@ describe("PrismaPortfolioRepository collection evidence", () => {
         ],
       },
     });
+  });
+
+  it("최종 트랜잭션에서 fencing token이 일치하지 않으면 어떤 증거도 쓰지 않는다", async () => {
+    const createMany = vi.fn();
+    const createSnapshot = vi.fn();
+    const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      targetConfigVersion: {
+        findFirst: vi.fn(),
+      },
+      rawBrokerResponse: {
+        createMany,
+      },
+      portfolioSnapshot: {
+        create: createSnapshot,
+      },
+      collectionRun: {
+        update: vi.fn(),
+      },
+    };
+    const repository = repositoryWithTransaction(transaction);
+
+    await expect(
+      repository.completeCollection({
+        runId: "run-1",
+        accountId: "account-1",
+        observedAt: new Date("2026-07-16T03:00:00.000Z"),
+        totalValueMinor: 0n,
+        usdKrwRate: null,
+        holdings: [],
+        buyingPower: [],
+        rawResponses: [],
+        lease: {
+          owner: "11111111-1111-4111-8111-111111111111",
+          fencingToken: 1n,
+        },
+      }),
+    ).resolves.toBe(false);
+    expect(createMany).not.toHaveBeenCalled();
+    expect(createSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("취득·heartbeat·해제에서 owner와 fencing token을 함께 사용한다", async () => {
+    const deleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    const database = {
+      $queryRaw: vi.fn().mockResolvedValue([{ fencingToken: 7n }]),
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      runtimeLease: { deleteMany },
+    } as unknown as DatabaseClient;
+    const repository = new PrismaPortfolioRepository(database);
+    const owner = "11111111-1111-4111-8111-111111111111";
+
+    const lease = await repository.acquireCollectionLease(owner);
+
+    expect(lease).toEqual({ owner, fencingToken: 7n });
+    await expect(
+      repository.heartbeatCollectionLease(lease as NonNullable<typeof lease>),
+    ).resolves.toBe(true);
+    await repository.releaseCollectionLease(lease as NonNullable<typeof lease>);
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: {
+        key: "toss-portfolio-collection",
+        owner,
+        fencingToken: 7n,
+      },
+    });
+  });
+});
+
+describe("PrismaPortfolioRepository account scope", () => {
+  it("dashboard는 최신 수집 계좌의 snapshot만 조회한다", async () => {
+    const findSnapshot = vi.fn().mockResolvedValue(null);
+    const database = {
+      collectionRun: {
+        findFirst: vi.fn().mockResolvedValue({ accountId: "account-2" }),
+      },
+      portfolioSnapshot: {
+        findFirst: findSnapshot,
+      },
+    } as unknown as DatabaseClient;
+    const repository = new PrismaPortfolioRepository(database);
+
+    await expect(repository.latestDashboardState()).resolves.toEqual({
+      snapshot: null,
+      activeTargetVersionId: null,
+    });
+    expect(findSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { accountId: "account-2" } }),
+    );
   });
 });
 

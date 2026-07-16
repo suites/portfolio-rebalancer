@@ -34,6 +34,11 @@ export interface StoredBuyingPowerInput {
   readonly valueKrwMinor: bigint;
 }
 
+export interface CollectionLease {
+  readonly owner: string;
+  readonly fencingToken: bigint;
+}
+
 export interface StoredTargetAllocationInput {
   readonly assetKey: string;
   readonly label: string;
@@ -60,8 +65,8 @@ export interface ActivateTargetDraftInput {
 export class PrismaPortfolioRepository {
   constructor(private readonly database: DatabaseClient) {}
 
-  async acquireCollectionLease(owner: string): Promise<boolean> {
-    const acquired = await this.database.$executeRaw`
+  async acquireCollectionLease(owner: string): Promise<CollectionLease | null> {
+    const acquired = await this.database.$queryRaw<readonly { fencingToken: bigint }[]>`
       INSERT INTO "runtime_lease" ("key", "owner", "acquired_at", "expires_at", "fencing_token")
       VALUES ('toss-portfolio-collection', ${owner}::uuid, NOW(), NOW() + INTERVAL '2 minutes', 1)
       ON CONFLICT ("key") DO UPDATE
@@ -70,13 +75,31 @@ export class PrismaPortfolioRepository {
           "expires_at" = EXCLUDED."expires_at",
           "fencing_token" = "runtime_lease"."fencing_token" + 1
       WHERE "runtime_lease"."expires_at" <= NOW()
+      RETURNING "fencing_token" AS "fencingToken"
     `;
-    return acquired === 1;
+    const row = acquired[0];
+    return row ? { owner, fencingToken: row.fencingToken } : null;
   }
 
-  async releaseCollectionLease(owner: string): Promise<void> {
+  async heartbeatCollectionLease(lease: CollectionLease): Promise<boolean> {
+    const renewed = await this.database.$executeRaw`
+      UPDATE "runtime_lease"
+      SET "expires_at" = NOW() + INTERVAL '2 minutes'
+      WHERE "key" = 'toss-portfolio-collection'
+        AND "owner" = ${lease.owner}::uuid
+        AND "fencing_token" = ${lease.fencingToken}
+        AND "expires_at" > NOW()
+    `;
+    return renewed === 1;
+  }
+
+  async releaseCollectionLease(lease: CollectionLease): Promise<void> {
     await this.database.runtimeLease.deleteMany({
-      where: { key: "toss-portfolio-collection", owner },
+      where: {
+        key: "toss-portfolio-collection",
+        owner: lease.owner,
+        fencingToken: lease.fencingToken,
+      },
     });
   }
 
@@ -134,7 +157,8 @@ export class PrismaPortfolioRepository {
     readonly holdings: readonly StoredHoldingInput[];
     readonly buyingPower: readonly StoredBuyingPowerInput[];
     readonly rawResponses: readonly RedactedResponseInput[];
-  }): Promise<void> {
+    readonly lease: CollectionLease;
+  }): Promise<boolean> {
     const digest = createHash("sha256")
       .update(
         JSON.stringify({
@@ -151,7 +175,18 @@ export class PrismaPortfolioRepository {
       )
       .digest("hex");
 
-    await this.database.$transaction(async (transaction) => {
+    return this.database.$transaction(async (transaction) => {
+      const activeLease = await transaction.$queryRaw<readonly { fencingToken: bigint }[]>`
+        SELECT "fencing_token" AS "fencingToken"
+        FROM "runtime_lease"
+        WHERE "key" = 'toss-portfolio-collection'
+          AND "owner" = ${input.lease.owner}::uuid
+          AND "fencing_token" = ${input.lease.fencingToken}
+          AND "expires_at" > NOW()
+        FOR UPDATE
+      `;
+      if (activeLease.length !== 1) return false;
+
       const activeTarget = await transaction.targetConfigVersion.findFirst({
         where: { config: { accountId: input.accountId }, status: "ACTIVE" },
         select: { id: true },
@@ -211,11 +246,13 @@ export class PrismaPortfolioRepository {
           errorCode: null,
         },
       });
+      return true;
     });
   }
 
-  latestSnapshot() {
+  latestSnapshot(accountId: string) {
     return this.database.portfolioSnapshot.findFirst({
+      where: { accountId },
       orderBy: { observedAt: "desc" },
       include: {
         account: true,
@@ -229,7 +266,9 @@ export class PrismaPortfolioRepository {
   }
 
   async latestDashboardState() {
-    const snapshot = await this.latestSnapshot();
+    const accountId = await this.latestCollectionAccountId();
+    if (!accountId) return { snapshot: null, activeTargetVersionId: null };
+    const snapshot = await this.latestSnapshot(accountId);
     if (!snapshot) return { snapshot: null, activeTargetVersionId: null };
     const active = await this.database.targetConfigVersion.findFirst({
       where: { config: { accountId: snapshot.accountId }, status: "ACTIVE" },
@@ -239,7 +278,9 @@ export class PrismaPortfolioRepository {
   }
 
   async targetSettingsState() {
-    const snapshot = await this.latestSnapshot();
+    const accountId = await this.latestCollectionAccountId();
+    if (!accountId) return { snapshot: null, activeVersion: null, draftVersion: null };
+    const snapshot = await this.latestSnapshot(accountId);
     if (!snapshot) return { snapshot: null, activeVersion: null, draftVersion: null };
     const [activeVersion, draftVersion] = await Promise.all([
       this.database.targetConfigVersion.findFirst({

@@ -7,6 +7,11 @@ import {
   maskAccountNumber,
 } from "./collect-portfolio.use-case";
 
+const collectionLease = {
+  owner: "11111111-1111-4111-8111-111111111111",
+  fencingToken: 1n,
+};
+
 describe("collectPortfolio", () => {
   it("여러 계좌를 임의 선택하지 않고 보유 조회 전에 차단한다", async () => {
     const source = {
@@ -19,7 +24,7 @@ describe("collectPortfolio", () => {
       getUsdKrwRate: vi.fn(),
     };
     const repository = {
-      acquireCollectionLease: vi.fn().mockResolvedValue(true),
+      acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
       releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
     };
 
@@ -33,7 +38,7 @@ describe("collectPortfolio", () => {
       code: "ACCOUNT_SELECTION_REQUIRED",
     } satisfies Partial<CollectionError>);
     expect(source.getHoldings).not.toHaveBeenCalled();
-    expect(repository.releaseCollectionLease).toHaveBeenCalledOnce();
+    expect(repository.releaseCollectionLease).toHaveBeenCalledWith(collectionLease);
   });
 
   it("보유자산 운용 통화의 매수 가능 금액을 관리 현금과 분리해 저장한다", async () => {
@@ -52,9 +57,10 @@ describe("collectPortfolio", () => {
       ),
       getUsdKrwRate: vi.fn(),
     };
-    const completeCollection = vi.fn().mockResolvedValue(undefined);
+    const completeCollection = vi.fn().mockResolvedValue(true);
     const repository = {
-      acquireCollectionLease: vi.fn().mockResolvedValue(true),
+      acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
       releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
       upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
       startCollection: vi.fn().mockResolvedValue({ id: "run-1" }),
@@ -72,6 +78,7 @@ describe("collectPortfolio", () => {
     expect(source.getBuyingPower).toHaveBeenCalledOnce();
     expect(source.getBuyingPower).toHaveBeenCalledWith(1, "KRW");
     expect(source.getUsdKrwRate).not.toHaveBeenCalled();
+    expect(repository.heartbeatCollectionLease).toHaveBeenCalledTimes(2);
     const stored = completeCollection.mock.calls[0]?.[0] as
       | {
           totalValueMinor: bigint;
@@ -121,9 +128,10 @@ describe("collectPortfolio", () => {
         },
       }),
     };
-    const completeCollection = vi.fn().mockResolvedValue(undefined);
+    const completeCollection = vi.fn().mockResolvedValue(true);
     const repository = {
-      acquireCollectionLease: vi.fn().mockResolvedValue(true),
+      acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
       releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
       upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
       startCollection: vi.fn().mockResolvedValue({ id: "run-1" }),
@@ -174,7 +182,8 @@ describe("collectPortfolio", () => {
     const completeCollection = vi.fn();
     const failCollection = vi.fn().mockResolvedValue(undefined);
     const repository = {
-      acquireCollectionLease: vi.fn().mockResolvedValue(true),
+      acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
       releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
       upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
       startCollection: vi.fn().mockResolvedValue({ id: "run-1" }),
@@ -191,6 +200,69 @@ describe("collectPortfolio", () => {
     ).rejects.toMatchObject({ code: "DATA_INVALID" });
     expect(completeCollection).not.toHaveBeenCalled();
     expect(failCollection).toHaveBeenCalledWith("run-1", "DATA_INVALID", expect.any(Date));
+  });
+
+  it("heartbeat에서 fencing 소유권을 잃으면 계좌나 스냅샷을 저장하지 않는다", async () => {
+    const source = {
+      listAccounts: vi
+        .fn()
+        .mockResolvedValue([{ accountNo: "12345678901", accountSeq: 1, accountType: "BROKERAGE" }]),
+      getHoldings: vi.fn(),
+      getBuyingPower: vi.fn(),
+      getUsdKrwRate: vi.fn(),
+    };
+    const repository = {
+      acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      heartbeatCollectionLease: vi.fn().mockResolvedValue(false),
+      releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
+      upsertAccount: vi.fn(),
+      completeCollection: vi.fn(),
+    };
+
+    await expect(
+      collectPortfolio({
+        source,
+        repository: repository as never,
+        accountReferenceKey: "a".repeat(32),
+      }),
+    ).rejects.toMatchObject({ code: "COLLECTION_LEASE_LOST" });
+    expect(repository.upsertAccount).not.toHaveBeenCalled();
+    expect(source.getHoldings).not.toHaveBeenCalled();
+    expect(repository.completeCollection).not.toHaveBeenCalled();
+    expect(repository.releaseCollectionLease).toHaveBeenCalledWith(collectionLease);
+  });
+
+  it("최종 저장 직전 fencing 검증이 실패하면 실행을 실패로 기록한다", async () => {
+    const source = {
+      listAccounts: vi
+        .fn()
+        .mockResolvedValue([{ accountNo: "12345678901", accountSeq: 1, accountType: "BROKERAGE" }]),
+      getHoldings: vi.fn().mockResolvedValue(emptyHoldingsResponse()),
+      getBuyingPower: vi.fn().mockResolvedValue({
+        result: { currency: "KRW" as const, cashBuyingPower: "0" },
+      }),
+      getUsdKrwRate: vi.fn(),
+    };
+    const failCollection = vi.fn().mockResolvedValue(undefined);
+    const repository = {
+      acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
+      releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
+      upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
+      startCollection: vi.fn().mockResolvedValue({ id: "run-1" }),
+      completeCollection: vi.fn().mockResolvedValue(false),
+      failCollection,
+    };
+
+    await expect(
+      collectPortfolio({
+        source,
+        repository: repository as never,
+        accountReferenceKey: "a".repeat(32),
+      }),
+    ).rejects.toMatchObject({ code: "COLLECTION_LEASE_LOST" });
+    expect(failCollection).toHaveBeenCalledWith("run-1", "COLLECTION_LEASE_LOST", expect.any(Date));
+    expect(repository.releaseCollectionLease).toHaveBeenCalledWith(collectionLease);
   });
 
   it("계좌번호는 마스킹하고 HMAC 참조만 만든다", () => {

@@ -41,7 +41,7 @@
 - [x] 수집 실행, redacted 원본 응답과 불변 스냅샷 테이블 구현
 - [x] 원본 스냅샷 ID·digest를 포함한 설정 해시와 애플리케이션 버전 저장
 - [x] 전역 Toss 수집 lease와 fencing token 구현
-- [ ] 단일 호스트 lease, heartbeat 및 stale lock 복구 구현
+- [x] 수집 lease heartbeat, 만료 takeover와 owner·fencing token 기반 안전 해제 구현
 - [ ] `logical_order_id` UNIQUE 제약 구현
 - [ ] 일일 거래한도 예약과 주문 계획 저장을 하나의 트랜잭션으로 구현
 - [ ] append-only 주문 상태 이력 구현
@@ -93,7 +93,7 @@
 - [ ] request ID 감사 로그 저장
 - [x] Vercel Static IPs 또는 Secure Compute 기반 고정 출구 IP 방식 결정
 - [ ] `doctor`에서 토큰, 허용 IP, 계좌 및 조회 API를 주문 없이 점검
-- [ ] collection lease heartbeat와 fencing token 기반 최종 쓰기 검증
+- [x] collection lease heartbeat와 fencing token 기반 최종 쓰기 검증
 
 ## Phase 4 — Shadow 모드
 

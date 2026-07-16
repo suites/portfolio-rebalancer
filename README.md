@@ -29,6 +29,7 @@
 - NestJS 11과 Fastify adapter 기반 별도 engine, Next.js Web/BFF의 모노레포 분리
 - Prisma 7과 PostgreSQL 17 기반 계좌 참조·수집 실행·redacted 응답·불변 스냅샷
 - Vercel web/engine 별도 Project, 평일 09:00 KST Cron과 PostgreSQL collection lease
+- heartbeat와 fencing token 최종 재검증으로 만료된 수집기의 늦은 스냅샷 저장 차단
 
 이 범위는 실제 주문 기능이 아닙니다. 토스증권에는 확인된 별도 sandbox/paper 서버가 없으므로 향후 paper 체결은 애플리케이션 내부에서 구현합니다.
 
