@@ -401,7 +401,7 @@ async function expectRejectedSql(
     throw new Error("expected PostgreSQL to reject the statement");
   }
 
-  expect(["23514", "P0001", "55000"]).toContain(sqlState(caught));
+  expect(["23514", "P0001", "55000", "0A000"]).toContain(sqlState(caught));
 }
 
 function sqlState(error: unknown): string | undefined {

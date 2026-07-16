@@ -63,6 +63,40 @@ enum RebalancePlanStatus {
   BLOCKED
 }
 
+enum OrderLedgerState {
+  PLANNED
+  SUBMITTING
+  PENDING
+  PARTIAL_FILLED
+  FILLED
+  CANCELED
+  REJECTED
+  UNKNOWN
+  UNKNOWN_BLOCKED
+}
+
+enum KillSwitchState {
+  ENGAGED
+  DISENGAGED
+}
+
+enum BrokerOrderActionKind {
+  CANCEL
+  REPLACE
+}
+
+enum BrokerOrderEvidenceKind {
+  SUBMIT
+  RECONCILE
+  CANCEL_ATTEMPT
+  REPLACE_ATTEMPT
+}
+
+enum LivePromotionState {
+  REVOKED
+  GRANTED
+}
+
 model BrokerAccount {
   id              String   @id @default(uuid()) @db.Uuid
   broker          String
@@ -72,10 +106,17 @@ model BrokerAccount {
   firstSeenAt     DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
   lastSeenAt      DateTime @map("last_seen_at") @db.Timestamptz(6)
 
-  targetConfig   TargetConfig?
-  collectionRuns CollectionRun[]
-  snapshots      PortfolioSnapshot[]
-  rebalanceRuns  RebalanceRun[]
+  targetConfig      TargetConfig?
+  collectionRuns    CollectionRun[]
+  snapshots         PortfolioSnapshot[]
+  rebalanceRuns     RebalanceRun[]
+  ledgerOrders      OrderLedger[]
+  tradeLimits       DailyTradeLimit[]
+  approvals         ManualOrderApproval[]
+  killSwitches      KillSwitchEvent[]
+  livePromotions    LivePromotionEvent[]
+  riskEvidence      ExecutionRiskEvidence[]
+  preSubmitEvidence PreSubmitEvidence[]
 
   @@unique([broker, externalRefHmac])
   @@map("broker_account")
@@ -103,11 +144,12 @@ model TargetConfigVersion {
   cashPolicy  Json               @map("cash_policy") @db.JsonB
   createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  config         TargetConfig        @relation(fields: [configId], references: [id], onDelete: Restrict)
-  allocations    TargetAllocation[]
-  snapshots      PortfolioSnapshot[]
-  rebalanceRuns  RebalanceRun[]
-  rebalancePlans RebalancePlan[]
+  config                TargetConfig           @relation(fields: [configId], references: [id], onDelete: Restrict)
+  allocations           TargetAllocation[]
+  snapshots             PortfolioSnapshot[]
+  rebalanceRuns         RebalanceRun[]
+  rebalancePlans        RebalancePlan[]
+  rebalancePlanVersions RebalancePlanVersion[]
 
   @@unique([configId, version])
   @@unique([configId, contentHash])
@@ -307,7 +349,14 @@ model BrokerResponseValidation {
   safeErrorCode    String?                         @map("safe_error_code")
   validatedAt      DateTime                        @map("validated_at") @db.Timestamptz(6)
 
-  requestAttempt BrokerRequestAttempt @relation(fields: [requestAttemptId], references: [id], onDelete: Restrict)
+  requestAttempt            BrokerRequestAttempt @relation(fields: [requestAttemptId], references: [id], onDelete: Restrict)
+  quotePreSubmitEvidence    PreSubmitEvidence[]  @relation("PreSubmitQuoteValidation")
+  priceLimitSubmitEvidence  PreSubmitEvidence[]  @relation("PreSubmitPriceLimitValidation")
+  calendarPreSubmitEvidence PreSubmitEvidence[]  @relation("PreSubmitCalendarValidation")
+  capacityPreSubmitEvidence PreSubmitEvidence[]  @relation("PreSubmitCapacityValidation")
+  instrumentSubmitEvidence  PreSubmitEvidence[]  @relation("PreSubmitInstrumentValidation")
+  warningsPreSubmitEvidence PreSubmitEvidence[]  @relation("PreSubmitWarningsValidation")
+  openOrdersSubmitEvidence  PreSubmitEvidence[]  @relation("PreSubmitOpenOrdersValidation")
 
   @@map("broker_response_validation")
 }
@@ -327,16 +376,17 @@ model PortfolioSnapshot {
   usdKrwRate            String?                  @map("usd_krw_rate")
   digest                String                   @db.Char(64)
 
-  collectionRun       CollectionRun            @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
-  account             BrokerAccount            @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  targetConfigVersion TargetConfigVersion?     @relation(fields: [targetConfigVersionId], references: [id], onDelete: Restrict)
-  holdings            HoldingSnapshot[]
-  buyingPower         BuyingPowerSnapshot[]
-  prices              PriceSnapshot[]
-  marketCalendars     MarketCalendarSnapshot[]
-  checks              SnapshotCheck[]
-  rebalanceRuns       RebalanceRun[]
-  rebalancePlans      RebalancePlan[]
+  collectionRun         CollectionRun            @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
+  account               BrokerAccount            @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  targetConfigVersion   TargetConfigVersion?     @relation(fields: [targetConfigVersionId], references: [id], onDelete: Restrict)
+  holdings              HoldingSnapshot[]
+  buyingPower           BuyingPowerSnapshot[]
+  prices                PriceSnapshot[]
+  marketCalendars       MarketCalendarSnapshot[]
+  checks                SnapshotCheck[]
+  rebalanceRuns         RebalanceRun[]
+  rebalancePlans        RebalancePlan[]
+  rebalancePlanVersions RebalancePlanVersion[]
 
   @@index([accountId, observedAt(sort: Desc)])
   @@map("portfolio_snapshot")
@@ -388,8 +438,9 @@ model PriceSnapshot {
   providerObservedAt DateTime? @map("provider_observed_at") @db.Timestamptz(6)
   receivedAt         DateTime  @map("received_at") @db.Timestamptz(6)
 
-  snapshot       PortfolioSnapshot    @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
-  requestAttempt BrokerRequestAttempt @relation(fields: [requestAttemptId], references: [id], onDelete: Restrict)
+  snapshot          PortfolioSnapshot    @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  requestAttempt    BrokerRequestAttempt @relation(fields: [requestAttemptId], references: [id], onDelete: Restrict)
+  preSubmitEvidence PreSubmitEvidence[]
 
   @@unique([snapshotId, marketCountry, symbol], map: "price_snapshot_snapshot_market_symbol_key")
   @@index([requestAttemptId])
@@ -484,19 +535,50 @@ model RebalancePlan {
   projectedAllocations  Json                @map("projected_allocations") @db.JsonB
   createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  run                 RebalanceRun         @relation(fields: [runId], references: [id], onDelete: Restrict)
-  snapshot            PortfolioSnapshot    @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
-  targetConfigVersion TargetConfigVersion  @relation(fields: [targetConfigVersionId], references: [id], onDelete: Restrict)
-  orders              RebalancePlanOrder[]
+  run                   RebalanceRun            @relation(fields: [runId], references: [id], onDelete: Restrict)
+  snapshot              PortfolioSnapshot       @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  targetConfigVersion   TargetConfigVersion     @relation(fields: [targetConfigVersionId], references: [id], onDelete: Restrict)
+  orders                RebalancePlanOrder[]
+  versions              RebalancePlanVersion[]
+  ledgerOrders          OrderLedger[]
+  executionRiskEvidence ExecutionRiskEvidence[]
 
   @@unique([snapshotId, targetConfigVersionId, mode, planHash], map: "rebalance_plan_identity_key")
   @@index([createdAt(sort: Desc)])
   @@map("rebalance_plan")
 }
 
+model RebalancePlanVersion {
+  id                    String              @id @default(uuid()) @db.Uuid
+  planId                String              @map("plan_id") @db.Uuid
+  version               Int
+  phase                 String
+  snapshotId            String              @map("snapshot_id") @db.Uuid
+  targetConfigVersionId String              @map("target_config_version_id") @db.Uuid
+  mode                  RebalanceMode
+  status                RebalancePlanStatus
+  canonicalVersion      String              @map("canonical_version")
+  planHash              String              @map("plan_hash") @db.Char(64)
+  canonicalContent      String              @map("canonical_content") @db.Text
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  plan                  RebalancePlan           @relation(fields: [planId], references: [id], onDelete: Restrict)
+  snapshot              PortfolioSnapshot       @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  targetConfigVersion   TargetConfigVersion     @relation(fields: [targetConfigVersionId], references: [id], onDelete: Restrict)
+  orders                RebalancePlanOrder[]
+  ledgerOrders          OrderLedger[]
+  executionRiskEvidence ExecutionRiskEvidence[]
+
+  @@unique([planId, version], map: "rebalance_plan_version_plan_version_key")
+  @@unique([id, version], map: "rebalance_plan_version_id_version_key")
+  @@index([snapshotId, createdAt(sort: Desc)])
+  @@map("rebalance_plan_version")
+}
+
 model RebalancePlanOrder {
   id               String   @id @default(uuid()) @db.Uuid
   planId           String   @map("plan_id") @db.Uuid
+  planVersion      Int      @default(1) @map("plan_version")
   candidateId      String   @map("candidate_id")
   phase            String
   ordinal          Int
@@ -514,9 +596,381 @@ model RebalancePlanOrder {
   unallocatedMinor BigInt   @map("unallocated_minor")
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  plan RebalancePlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  plan              RebalancePlan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+  version           RebalancePlanVersion  @relation(fields: [planId, planVersion], references: [planId, version], onDelete: Restrict)
+  ledgerOrder       OrderLedger?
+  manualApprovals   ManualOrderApproval[]
+  preSubmitEvidence PreSubmitEvidence[]
 
-  @@unique([planId, candidateId], map: "rebalance_plan_order_plan_candidate_key")
-  @@unique([planId, phase, ordinal], map: "rebalance_plan_order_plan_phase_ordinal_key")
+  @@unique([planId, planVersion, candidateId], map: "rebalance_plan_order_plan_version_candidate_key")
+  @@unique([planId, planVersion, phase, ordinal], map: "rebalance_plan_order_plan_version_phase_ordinal_key")
   @@map("rebalance_plan_order")
+}
+
+model LivePromotionEvent {
+  id                       String             @id @default(uuid()) @db.Uuid
+  accountId                String             @map("account_id") @db.Uuid
+  version                  Int
+  state                    LivePromotionState
+  operationalConfigSha256  String             @map("operational_config_sha256") @db.Char(64)
+  accountAllowlistHmac     String             @map("account_allowlist_hmac") @db.Char(64)
+  maxSingleOrderGrossMinor BigInt             @map("max_single_order_gross_minor")
+  maxDailyGrossMinor       BigInt             @map("max_daily_gross_minor")
+  tinyLiveMaxGrossMinor    BigInt             @map("tiny_live_max_gross_minor")
+  actor                    String
+  reason                   String
+  occurredAt               DateTime           @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  createdAt                DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  account      BrokerAccount           @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  riskEvidence ExecutionRiskEvidence[]
+
+  @@unique([accountId, version], map: "live_promotion_event_account_version_key")
+  @@index([accountId, occurredAt(sort: Desc)])
+  @@map("live_promotion_event")
+}
+
+model ExecutionRiskEvidence {
+  id                         String   @id @default(uuid()) @db.Uuid
+  planId                     String   @map("plan_id") @db.Uuid
+  planVersion                Int      @map("plan_version")
+  accountId                  String   @map("account_id") @db.Uuid
+  promotionEventId           String   @map("promotion_event_id") @db.Uuid
+  operationalConfigCanonical String   @map("operational_config_canonical") @db.Text
+  operationalConfigSha256    String   @map("operational_config_sha256") @db.Char(64)
+  accountAllowlistHmac       String   @map("account_allowlist_hmac") @db.Char(64)
+  checks                     Json     @db.JsonB
+  evaluatedAt                DateTime @map("evaluated_at") @db.Timestamptz(6)
+  expiresAt                  DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt                  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  plan                     RebalancePlan                  @relation(fields: [planId], references: [id], onDelete: Restrict)
+  planVersionRecord        RebalancePlanVersion           @relation(fields: [planId, planVersion], references: [planId, version], onDelete: Restrict)
+  account                  BrokerAccount                  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  promotionEvent           LivePromotionEvent             @relation(fields: [promotionEventId], references: [id], onDelete: Restrict)
+  preSubmitEvidence        PreSubmitEvidence[]
+  submissionAuthorizations OrderSubmissionAuthorization[]
+
+  @@index([planId, planVersion, evaluatedAt(sort: Desc)])
+  @@index([accountId, expiresAt])
+  @@map("execution_risk_evidence")
+}
+
+model PreSubmitEvidence {
+  id                             String   @id @default(uuid()) @db.Uuid
+  executionRiskEvidenceId        String   @map("execution_risk_evidence_id") @db.Uuid
+  planOrderId                    String   @map("plan_order_id") @db.Uuid
+  accountId                      String   @map("account_id") @db.Uuid
+  plannedPriceSnapshotId         String   @map("planned_price_snapshot_id") @db.Uuid
+  quoteResponseValidationId      String   @map("quote_response_validation_id") @db.Uuid
+  priceLimitResponseValidationId String   @map("price_limit_response_validation_id") @db.Uuid
+  calendarResponseValidationId   String   @map("calendar_response_validation_id") @db.Uuid
+  capacityResponseValidationId   String   @map("capacity_response_validation_id") @db.Uuid
+  instrumentResponseValidationId String   @map("instrument_response_validation_id") @db.Uuid
+  warningsResponseValidationId   String   @map("warnings_response_validation_id") @db.Uuid
+  openOrdersResponseValidationId String   @map("open_orders_response_validation_id") @db.Uuid
+  plannedQuotePriceMinor         BigInt   @map("planned_quote_price_minor")
+  currentQuotePriceMinor         BigInt   @map("current_quote_price_minor")
+  lowerPriceLimitMinor           BigInt   @map("lower_price_limit_minor")
+  upperPriceLimitMinor           BigInt   @map("upper_price_limit_minor")
+  reservationBasisPriceMinor     BigInt   @map("reservation_basis_price_minor")
+  reservedGrossMinor             BigInt   @map("reserved_gross_minor")
+  checks                         Json     @db.JsonB
+  evaluatedAt                    DateTime @map("evaluated_at") @db.Timestamptz(6)
+  expiresAt                      DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt                      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  executionRiskEvidence    ExecutionRiskEvidence          @relation(fields: [executionRiskEvidenceId], references: [id], onDelete: Restrict)
+  planOrder                RebalancePlanOrder             @relation(fields: [planOrderId], references: [id], onDelete: Restrict)
+  account                  BrokerAccount                  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  plannedPriceSnapshot     PriceSnapshot                  @relation(fields: [plannedPriceSnapshotId], references: [id], onDelete: Restrict)
+  quoteValidation          BrokerResponseValidation       @relation("PreSubmitQuoteValidation", fields: [quoteResponseValidationId], references: [id], onDelete: Restrict)
+  priceLimitValidation     BrokerResponseValidation       @relation("PreSubmitPriceLimitValidation", fields: [priceLimitResponseValidationId], references: [id], onDelete: Restrict)
+  calendarValidation       BrokerResponseValidation       @relation("PreSubmitCalendarValidation", fields: [calendarResponseValidationId], references: [id], onDelete: Restrict)
+  capacityValidation       BrokerResponseValidation       @relation("PreSubmitCapacityValidation", fields: [capacityResponseValidationId], references: [id], onDelete: Restrict)
+  instrumentValidation     BrokerResponseValidation       @relation("PreSubmitInstrumentValidation", fields: [instrumentResponseValidationId], references: [id], onDelete: Restrict)
+  warningsValidation       BrokerResponseValidation       @relation("PreSubmitWarningsValidation", fields: [warningsResponseValidationId], references: [id], onDelete: Restrict)
+  openOrdersValidation     BrokerResponseValidation       @relation("PreSubmitOpenOrdersValidation", fields: [openOrdersResponseValidationId], references: [id], onDelete: Restrict)
+  reservationOrders        OrderLedger[]
+  submissionAuthorizations OrderSubmissionAuthorization[]
+
+  @@index([planOrderId, evaluatedAt(sort: Desc)])
+  @@index([accountId, expiresAt])
+  @@map("pre_submit_evidence")
+}
+
+model DailyTradeLimit {
+  id              String        @id @default(uuid()) @db.Uuid
+  accountId       String        @map("account_id") @db.Uuid
+  tradeDay        DateTime      @map("trade_day") @db.Date
+  marketCountry   String        @map("market_country")
+  currency        String
+  mode            RebalanceMode
+  grossLimitMinor BigInt        @map("gross_limit_minor")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  account      BrokerAccount           @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  orders       OrderLedger[]
+  reservations DailyTradeReservation[]
+
+  @@unique([accountId, tradeDay, marketCountry, mode], map: "daily_trade_limit_account_day_market_mode_key")
+  @@index([accountId, tradeDay(sort: Desc)])
+  @@map("daily_trade_limit")
+}
+
+model OrderLedger {
+  id                         String        @id @default(uuid()) @db.Uuid
+  planId                     String        @map("plan_id") @db.Uuid
+  planOrderId                String        @unique(map: "order_ledger_plan_order_id_key") @map("plan_order_id") @db.Uuid
+  accountId                  String        @map("account_id") @db.Uuid
+  dailyTradeLimitId          String        @map("daily_trade_limit_id") @db.Uuid
+  mode                       RebalanceMode
+  logicalOrderId             String        @unique(map: "order_ledger_logical_order_id_key") @map("logical_order_id") @db.Uuid
+  clientOrderId              String        @unique(map: "order_ledger_client_order_id_key") @map("client_order_id") @db.Char(36)
+  clientOrderIdVersion       String        @map("client_order_id_version")
+  canonicalIntent            String        @map("canonical_intent") @db.Text
+  intentSha256               String        @map("intent_sha256") @db.Char(64)
+  planVersion                Int           @map("plan_version")
+  phase                      String
+  marketCountry              String        @map("market_country")
+  currency                   String
+  symbol                     String
+  side                       String
+  orderType                  String        @map("order_type")
+  timeInForce                String        @map("time_in_force")
+  quantity                   BigInt
+  limitPriceMinor            BigInt        @map("limit_price_minor")
+  plannedGrossNotionalMinor  BigInt        @map("planned_gross_notional_minor")
+  reservedGrossMinor         BigInt        @map("reserved_gross_minor")
+  reservationBasisPriceMinor BigInt        @map("reservation_basis_price_minor")
+  reservationPolicyVersion   String        @map("reservation_policy_version")
+  reservationEvidenceId      String?       @unique(map: "order_ledger_reservation_evidence_id_key") @map("reservation_evidence_id") @db.Uuid
+  createdAt                  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  plan                    RebalancePlan                 @relation(fields: [planId], references: [id], onDelete: Restrict)
+  planVersionRecord       RebalancePlanVersion          @relation(fields: [planId, planVersion], references: [planId, version], onDelete: Restrict)
+  planOrder               RebalancePlanOrder            @relation(fields: [planOrderId], references: [id], onDelete: Restrict)
+  account                 BrokerAccount                 @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  dailyTradeLimit         DailyTradeLimit               @relation(fields: [dailyTradeLimitId], references: [id], onDelete: Restrict)
+  stateHistory            OrderStateHistory[]
+  reservation             DailyTradeReservation?
+  consumedApprovals       ManualOrderApproval[]         @relation("ConsumedApprovalOrder")
+  brokerActions           BrokerOrderAction[]
+  brokerEvidence          BrokerOrderResponseEvidence[]
+  reservationEvidence     PreSubmitEvidence?            @relation(fields: [reservationEvidenceId], references: [id], onDelete: Restrict)
+  submissionAuthorization OrderSubmissionAuthorization?
+  dispatchClaim           OrderDispatchClaim?
+
+  @@index([accountId, createdAt(sort: Desc)])
+  @@index([dailyTradeLimitId])
+  @@map("order_ledger")
+}
+
+model OrderStateHistory {
+  id                        String           @id @default(uuid()) @db.Uuid
+  orderId                   String           @map("order_id") @db.Uuid
+  sequence                  Int
+  normalizedState           OrderLedgerState @map("normalized_state")
+  actor                     String
+  brokerStatusRaw           String?          @map("broker_status_raw")
+  brokerOrderId             String?          @map("broker_order_id")
+  brokerActionId            String?          @unique(map: "order_state_history_broker_action_id_key") @map("broker_action_id") @db.Uuid
+  brokerResponseEvidenceId  String?          @unique(map: "order_state_history_broker_response_evidence_id_key") @map("broker_response_evidence_id") @db.Uuid
+  manualApprovalId          String?          @unique(map: "order_state_history_manual_approval_id_key") @map("manual_approval_id") @db.Uuid
+  submissionAuthorizationId String?          @unique(map: "order_state_history_submission_authorization_id_key") @map("submission_authorization_id") @db.Uuid
+  filledQuantity            BigInt           @default(0) @map("filled_quantity")
+  filledGrossNotionalMinor  BigInt           @default(0) @map("filled_gross_notional_minor")
+  feeMinor                  BigInt           @default(0) @map("fee_minor")
+  requestId                 String?          @map("request_id")
+  detail                    Json             @db.JsonB
+  occurredAt                DateTime         @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  createdAt                 DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order                   OrderLedger                   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  brokerAction            BrokerOrderAction?            @relation(fields: [brokerActionId], references: [id], onDelete: Restrict)
+  brokerResponseEvidence  BrokerOrderResponseEvidence?  @relation(fields: [brokerResponseEvidenceId], references: [id], onDelete: Restrict)
+  manualApproval          ManualOrderApproval?          @relation(fields: [manualApprovalId], references: [id], onDelete: Restrict)
+  submissionAuthorization OrderSubmissionAuthorization? @relation(fields: [submissionAuthorizationId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, sequence], map: "order_state_history_order_sequence_key")
+  @@index([orderId, occurredAt(sort: Desc)])
+  @@index([brokerOrderId])
+  @@map("order_state_history")
+}
+
+model BrokerOrderAction {
+  id                     String                @id @default(uuid()) @db.Uuid
+  orderId                String                @map("order_id") @db.Uuid
+  actionKind             BrokerOrderActionKind @map("action_kind")
+  originalBrokerOrderId  String                @map("original_broker_order_id")
+  brokerActionOrderId    String                @map("broker_action_order_id")
+  brokerStatusRaw        String                @map("broker_status_raw")
+  authorizationId        String                @unique(map: "broker_order_action_authorization_id_key") @map("authorization_id")
+  canonicalRequestDigest String                @map("canonical_request_digest") @db.Char(64)
+  requestId              String?               @map("request_id")
+  httpStatus             Int                   @map("http_status")
+  writeOutcome           String                @map("write_outcome")
+  redactedBody           Json                  @map("redacted_body") @db.JsonB
+  bodySha256             String                @default(dbgenerated()) @map("body_sha256") @db.Char(64)
+  redactionVersion       String                @map("redaction_version")
+  observedAt             DateTime              @map("observed_at") @db.Timestamptz(6)
+  createdAt              DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order        OrderLedger        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  stateHistory OrderStateHistory?
+
+  @@unique([orderId, brokerActionOrderId], map: "broker_order_action_order_action_id_key")
+  @@index([orderId, observedAt(sort: Desc)])
+  @@map("broker_order_action")
+}
+
+model BrokerOrderResponseEvidence {
+  id                       String                  @id @default(uuid()) @db.Uuid
+  orderId                  String                  @map("order_id") @db.Uuid
+  evidenceKind             BrokerOrderEvidenceKind @map("evidence_kind")
+  dispatchClaimId          String?                 @map("dispatch_claim_id") @db.Uuid
+  brokerOrderId            String?                 @map("broker_order_id")
+  brokerStatusRaw          String?                 @map("broker_status_raw")
+  normalizationVersion     String                  @map("normalization_version")
+  validatedNormalizedState OrderLedgerState?       @map("validated_normalized_state")
+  requestId                String?                 @map("request_id")
+  httpStatus               Int?                    @map("http_status")
+  writeOutcome             String                  @map("write_outcome")
+  safeErrorCode            String?                 @map("safe_error_code")
+  redactedBody             Json                    @map("redacted_body") @db.JsonB
+  bodySha256               String                  @default(dbgenerated()) @map("body_sha256") @db.Char(64)
+  redactionVersion         String                  @map("redaction_version")
+  observedAt               DateTime                @map("observed_at") @db.Timestamptz(6)
+  createdAt                DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order         OrderLedger         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  stateHistory  OrderStateHistory?
+  dispatchClaim OrderDispatchClaim? @relation(fields: [dispatchClaimId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, evidenceKind, bodySha256], map: "broker_order_response_evidence_identity_key")
+  @@index([orderId, observedAt(sort: Desc)])
+  @@index([requestId])
+  @@map("broker_order_response_evidence")
+}
+
+model DailyTradeReservation {
+  id                 String   @id @default(uuid()) @db.Uuid
+  dailyTradeLimitId  String   @map("daily_trade_limit_id") @db.Uuid
+  orderId            String   @unique(map: "daily_trade_reservation_order_id_key") @map("order_id") @db.Uuid
+  reservedGrossMinor BigInt   @map("reserved_gross_minor")
+  filledGrossMinor   BigInt   @default(0) @map("filled_gross_minor")
+  releasedGrossMinor BigInt   @default(0) @map("released_gross_minor")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  dailyTradeLimit         DailyTradeLimit               @relation(fields: [dailyTradeLimitId], references: [id], onDelete: Restrict)
+  order                   OrderLedger                   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  submissionAuthorization OrderSubmissionAuthorization?
+
+  @@unique([dailyTradeLimitId, orderId], map: "daily_trade_reservation_limit_order_key")
+  @@index([dailyTradeLimitId])
+  @@map("daily_trade_reservation")
+}
+
+model OrderSubmissionAuthorization {
+  id                         String   @id @default(uuid()) @db.Uuid
+  orderId                    String   @unique(map: "order_submission_authorization_order_id_key") @map("order_id") @db.Uuid
+  logicalOrderId             String   @unique(map: "order_submission_authorization_logical_order_id_key") @map("logical_order_id") @db.Uuid
+  planId                     String   @map("plan_id") @db.Uuid
+  planVersion                Int      @map("plan_version")
+  planOrderId                String   @map("plan_order_id") @db.Uuid
+  canonicalPreparation       String   @map("canonical_preparation") @db.Text
+  canonicalPreparationDigest String   @map("canonical_preparation_digest") @db.Char(64)
+  authorizedRequestDigest    String   @map("authorized_request_digest") @db.Char(64)
+  clientOrderId              String   @unique(map: "order_submission_authorization_client_order_id_key") @map("client_order_id") @db.Char(36)
+  brokerAccountReferenceHmac String   @map("broker_account_reference_hmac") @db.Char(64)
+  executionRiskEvidenceId    String   @map("execution_risk_evidence_id") @db.Uuid
+  preSubmitEvidenceId        String   @map("pre_submit_evidence_id") @db.Uuid
+  reservationId              String   @unique(map: "order_submission_authorization_reservation_id_key") @map("reservation_id") @db.Uuid
+  approvalId                 String   @unique(map: "order_submission_authorization_approval_id_key") @map("approval_id") @db.Uuid
+  preparedAt                 DateTime @default(now()) @map("prepared_at") @db.Timestamptz(6)
+  expiresAt                  DateTime @map("expires_at") @db.Timestamptz(6)
+
+  order                 OrderLedger           @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  executionRiskEvidence ExecutionRiskEvidence @relation(fields: [executionRiskEvidenceId], references: [id], onDelete: Restrict)
+  preSubmitEvidence     PreSubmitEvidence     @relation(fields: [preSubmitEvidenceId], references: [id], onDelete: Restrict)
+  reservation           DailyTradeReservation @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+  approval              ManualOrderApproval   @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+  stateHistory          OrderStateHistory?
+  dispatchClaim         OrderDispatchClaim?
+
+  @@index([planId, planVersion, planOrderId])
+  @@index([expiresAt])
+  @@map("order_submission_authorization")
+}
+
+model OrderDispatchClaim {
+  id                         String   @id @default(uuid()) @db.Uuid
+  submissionAuthorizationId  String   @unique(map: "order_dispatch_claim_submission_authorization_id_key") @map("submission_authorization_id") @db.Uuid
+  orderId                    String   @unique(map: "order_dispatch_claim_order_id_key") @map("order_id") @db.Uuid
+  logicalOrderId             String   @unique(map: "order_dispatch_claim_logical_order_id_key") @map("logical_order_id") @db.Uuid
+  authorizationId            String   @unique(map: "order_dispatch_claim_authorization_id_key") @map("authorization_id")
+  planId                     String   @map("plan_id") @db.Uuid
+  planVersion                Int      @map("plan_version")
+  planOrderId                String   @map("plan_order_id") @db.Uuid
+  canonicalRequest           String   @map("canonical_request") @db.Text
+  claimEnvelopeDigest        String   @map("claim_envelope_digest") @db.Char(64)
+  authorizedRequestDigest    String   @map("authorized_request_digest") @db.Char(64)
+  clientOrderId              String   @unique(map: "order_dispatch_claim_client_order_id_key") @map("client_order_id") @db.Char(36)
+  brokerAccountReferenceHmac String   @map("broker_account_reference_hmac") @db.Char(64)
+  authorizationIssuedAt      DateTime @map("authorization_issued_at") @db.Timestamptz(6)
+  authorizationExpiresAt     DateTime @map("authorization_expires_at") @db.Timestamptz(6)
+  claimedAt                  DateTime @default(now()) @map("claimed_at") @db.Timestamptz(6)
+  intentAuditedAt            DateTime @map("intent_audited_at") @db.Timestamptz(6)
+  dispatchStartedAt          DateTime @map("dispatch_started_at") @db.Timestamptz(6)
+
+  submissionAuthorization OrderSubmissionAuthorization  @relation(fields: [submissionAuthorizationId], references: [id], onDelete: Restrict)
+  order                   OrderLedger                   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  brokerEvidence          BrokerOrderResponseEvidence[]
+
+  @@index([planId, planVersion, planOrderId])
+  @@index([authorizationExpiresAt])
+  @@map("order_dispatch_claim")
+}
+
+model ManualOrderApproval {
+  id                  String    @id @default(uuid()) @db.Uuid
+  planOrderId         String    @map("plan_order_id") @db.Uuid
+  accountId           String    @map("account_id") @db.Uuid
+  approvalHash        String    @unique(map: "manual_order_approval_hash_key") @map("approval_hash") @db.Char(64)
+  planHash            String    @map("plan_hash") @db.Char(64)
+  actor               String
+  confirmationVersion String    @map("confirmation_version")
+  canonicalContent    String    @map("canonical_content") @db.Text
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  consumedAt          DateTime? @map("consumed_at") @db.Timestamptz(6)
+  consumedByOrderId   String?   @unique(map: "manual_order_approval_consumed_by_order_id_key") @map("consumed_by_order_id") @db.Uuid
+
+  planOrder               RebalancePlanOrder            @relation(fields: [planOrderId], references: [id], onDelete: Restrict)
+  account                 BrokerAccount                 @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  consumedByOrder         OrderLedger?                  @relation("ConsumedApprovalOrder", fields: [consumedByOrderId], references: [id], onDelete: Restrict)
+  stateHistory            OrderStateHistory[]
+  submissionAuthorization OrderSubmissionAuthorization?
+
+  @@index([planOrderId, expiresAt])
+  @@index([accountId, expiresAt])
+  @@map("manual_order_approval")
+}
+
+model KillSwitchEvent {
+  id         String          @id @default(uuid()) @db.Uuid
+  accountId  String          @map("account_id") @db.Uuid
+  version    Int
+  state      KillSwitchState
+  reason     String
+  actor      String
+  occurredAt DateTime        @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  account BrokerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([accountId, version], map: "kill_switch_event_account_version_key")
+  @@index([accountId, occurredAt(sort: Desc)])
+  @@map("kill_switch_event")
 }
