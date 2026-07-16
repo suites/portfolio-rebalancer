@@ -7,7 +7,7 @@
 - [x] 포맷터, 린터, 단위 테스트 구성
 - [x] V8 테스트 coverage 실행 의존성과 workspace 명령 구성
 - [ ] 설정 스키마와 예제 설정 작성
-- [ ] 첫 운영 시장을 한국으로 고정하는 ADR 작성
+- [x] 첫 운영 시장을 한국 정규 연속매매·지정가로 고정하는 ADR 작성
 - [x] Web, engine, Prisma migration별 `.env.local` 로딩 규칙과 `.gitignore` 구성
 - [x] Vercel Supabase Integration의 pooled runtime URL과 direct migration URL 자동 인식
 - [ ] 오류 코드와 구조화 로그 형식 정의
@@ -18,7 +18,7 @@
 
 ## Phase 1 — 순수 도메인 계산
 
-- [ ] 통화, 금액, 수량, 비중 값 객체 구현
+- [x] 통화, 금액, 수량, 비중 값 객체 구현
 - [x] 목표 비중 합 검증
 - [x] 자산군 내부 종목 비중 검증
 - [x] `PRESERVE_CURRENT_V1` largest-remainder 내부 비중 확정과 0원 fail-closed
@@ -28,13 +28,13 @@
 - [x] `bigint` 교차곱으로 1bp 미만 밴드 이탈 판정
 - [x] 대시보드 허용 범위와 관리 현금·`CASH` 자산 일치 검증
 - [x] `MIXED_V1` 절대·상대 혼합 허용 범위와 고급 CUSTOM 계약 구현
-- [ ] `band_edge`와 `target` 복귀 정책 구현
-- [ ] 신규 현금 우선 배분 규칙 구현
-- [ ] 최소 주문금액과 수량 반올림 구현
-- [ ] 반올림 후 예상 비중 재검증
+- [x] `band_edge`와 `target` 복귀 정책 구현
+- [x] 신규 현금 우선 배분 규칙 구현
+- [x] 최소 주문금액과 수량 반올림 구현
+- [x] 반올림 후 예상 비중 재검증
 - [x] 현재 비중 계산과 목표 합계 차단의 결정론 테스트
 - [x] 밴드 상·하한과 1bp 미만 이탈 경계 테스트
-- [ ] property-based 테스트
+- [x] 자동 밴드·내부 배분·목표 금액 합계의 전수·불변식 property 테스트
 
 ## Phase 2 — 상태 저장소
 
@@ -70,7 +70,10 @@
 - [x] 고정 명세와 명시적 호출 메서드의 parity 테스트
 - [x] 생성 산출물을 임시 디렉터리에서 완성한 뒤 각 대상 파일로 원자적으로 교체
 - [x] Toss transport descriptor를 18개 read-only capability로 정의하고 write capability 제외
-- [x] 계좌·보유·시세·호가·종목·캘린더·일반/조건주문·pretrade 중립 조회 포트 정의
+- [x] 계좌·보유·시세·호가·종목·일반/조건주문의 `marketCountry + symbol` 중립 조회 계약 정의
+- [x] nullable 시세·호가 관측시각과 별도 가격 제한 조회 계약 정의
+- [x] 날짜·세션 구간·단일가 경계를 보존하는 KR/US 시장 캘린더 계약 정의
+- [x] 매수 가능 금액·매도 가능 수량·계좌별 시장 수수료 일정을 역할별 중립 포트로 분리
 - [ ] 토스 원본 응답을 증권사 중립 모델로 변환하는 어댑터 구현
 - [ ] 공식 명세 변경 감지와 검토를 CI에 연결
 

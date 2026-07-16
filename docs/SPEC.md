@@ -80,7 +80,7 @@ apps/web -> apps/engine -> application -> broker ports -> domain
 ```
 
 - `packages/domain`: 증권사와 네트워크를 모르는 값 객체와 순수 계산
-- `packages/broker`: 계좌, 보유, 시세, 호가, 종목, 캘린더, 일반·조건주문 조회와 pretrade 기능을 드러내는 capability와 좁은 포트
+- `packages/broker`: 계좌, 보유, 시세, 호가, 가격 제한, 종목, 캘린더, 일반·조건주문과 매수 가능 금액·매도 가능 수량·수수료 일정을 역할별로 드러내는 capability와 좁은 포트
 - `packages/broker-toss`: 공식 OpenAPI 생성 타입, 인증과 토스 전송 계층. 중립 어댑터는 후속 범위
 - `packages/application`: 필요한 capability를 조합하는 유스케이스
 - `apps/engine`: Toss 자격증명, 수집, Prisma와 PostgreSQL을 소유하는 NestJS 11 애플리케이션. Fastify adapter를 사용하며 `system`과 `portfolio` feature module, Controller, Guard와 singleton Provider로 구성한다. DB client 수명주기는 `PrismaModule`의 `PrismaService`가 관리한다. `src/main.ts`는 일반 Nest bootstrap 하나만 소유하고 `NestFactory.create()`와 `app.listen()`을 직접 호출한다. Vercel 프로젝트 Root Directory는 `apps/engine`이며 framework, handler, rewrite 또는 `functions` glob을 별도로 선언하지 않는다. platform `PORT`를 `ENGINE_PORT`보다 우선하고 host 기본값은 로컬 `127.0.0.1`, Vercel `0.0.0.0`으로 해석한다. 배포는 별도 webpack 번들 없이 Vercel NestJS zero-config를 사용하며, 함수 추적에 필요한 runtime workspace 패키지만 빌드 전에 CommonJS `dist`로 컴파일한다.
@@ -96,6 +96,27 @@ apps/web -> apps/engine -> application -> broker ports -> domain
 저장 모델은 전자를 `marketCountry`, 후자를 선택적 `listingMarket`으로 분리합니다.
 목표 키, 보유 대사와 중복 검사는 정규 식별자만 사용하고 상장 시장은 검색·표시·거래
 가능성 검증 metadata로만 사용합니다.
+
+증권사 중립 조회 계약도 종목을 `marketCountry + symbol`로 식별합니다. 시세와 호가는
+시장·통화를 명시하고, 토스 응답에서 체결 미발생 또는 데이터 미제공으로 `timestamp`가
+없을 수 있으므로 `observedAt`을 nullable ISO date-time으로 보존합니다. 가격 제한은
+시세와 다른 `PriceLimitReader`로 조회하며 상·하한이 없는 시장의 `null`을 그대로
+유지합니다. 시장 캘린더는 현재 시점의 `OPEN/CLOSED` 하나로 축약하지 않고 기준일,
+이전 영업일과 다음 영업일 각각의 날짜 및 `DAY/PRE/REGULAR/AFTER` 세션 구간을
+보존합니다. 각 세션은 시작·종료 ISO date-time과 브로커가 제공한 단일가 경계의
+시작·종료를 nullable 값으로 별도 저장하며 누락된 경계를 추론하지 않습니다.
+
+사전 주문 조회는 통합 `preTrade` 포트를 사용하지 않습니다. 통화별 현금 기반 매수
+가능 금액, `marketCountry + symbol`별 매도 가능 수량, 계좌별 수수료 일정은 각각
+`BuyingPowerReader`, `SellableQuantityReader`, `CommissionReader`로 분리합니다.
+수수료는 종목별 예상 금액이 아니라 시장 국가별 수수료율과 nullable 적용 시작일·종료일
+목록입니다. 금액·수량·가격·수수료율은 모두 `DecimalString`, 날짜는 ISO date,
+관측 시각과 세션 경계는 ISO date-time으로 어댑터 경계에서 검증해야 합니다.
+각 포트 결과는 값과 `BrokerObservationMetadata`를 함께 반환합니다. 이 metadata에는
+증권사, operation ID, HTTP 상태, 공식 request ID, 정적 rate-limit group과 실제 HTTP
+수신 시각을 보존합니다. provider timestamp가 없는 매수 가능 금액·매도 가능 수량·
+수수료 일정에 가짜 관측 시각을 만들지 않고 이 `receivedAt`을 freshness 근거로
+사용합니다.
 
 종목 검색과 검증은 다음처럼 분리합니다.
 
@@ -212,6 +233,17 @@ total_value_minor =
 - 신규 입금, 배당 및 남은 현금으로 부족 자산을 우선 매수한다.
 - 최소 주문금액보다 작은 거래는 누적 편차로 남긴다.
 
+순수 계산기의 `BAND_EDGE` 정책은 하한 미달 자산을 하한 금액 이상이 되는 최소
+minor unit으로 올림하고, 상한 초과 자산을 상한 금액 이하가 되도록 내립니다.
+`TARGET` 정책은 largest-remainder 방식으로 각 자산의 목표 금액을 배분하여 합계가
+원래 포트폴리오 총액과 정확히 같게 유지합니다. 어떤 이탈을 심각한 이탈로 승격할지는
+Risk Gate의 버전형 정책으로 별도 결정하며 계산기가 암묵적으로 선택하지 않습니다.
+
+신규 현금은 현금 목표, 기존 예약과 fee buffer를 먼저 제외한 `spendable_cash`만
+입력받습니다. 매수 부족 금액이 큰 자산부터 배분하고 동률은 안정적인 자산 ID
+오름차순으로 처리합니다. 예상 매도대금은 Phase A 체결·대사 전에는 이 입력에
+포함하지 않습니다.
+
 매수에 사용할 수 있는 현금은 안전자산 목표와 예약 금액을 침해하지 않게 계산합니다.
 
 ```text
@@ -250,6 +282,12 @@ upper_bp = min(10000, target_bp + allowed_drift_bp)
 나머지는 정렬 순서대로 한 점씩 배분합니다. 현재 미보유 종목은 평가액이 없으므로
 `PRESERVE_CURRENT_V1`로 암묵적인 0점을 부여하지 않습니다. 미보유 종목이 하나라도
 포함된 자산군은 사용자가 `EQUAL_V1`을 명시적으로 선택해야 초안을 저장할 수 있습니다.
+
+첫 운영 시장의 한국 주식 주문 수량은 양의 정수입니다. 계산된 목표 거래금액을
+기준가격으로 나눈 수량은 매수·매도 모두 내림하여 계산 금액이나 계산 수량을 초과하지
+않습니다. 0주 또는 최소 주문금액 미만 결과는 주문으로 만들지 않고 잔여 편차로
+보존합니다. 매도 후보는 별도 조회한 매도 가능 수량을 초과하면 차단하며, 수량 반올림
+후 예상 비중과 한도를 `bigint` 교차 비교로 다시 검사합니다.
 
 ### 5.6 Risk Gate
 
