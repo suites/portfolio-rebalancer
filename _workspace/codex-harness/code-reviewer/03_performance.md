@@ -1,13 +1,17 @@
 # Performance and Operations Review
 
-## P1 — Lease TTL과 Function 제한이 모두 120초
+## 해결 — 중복 Nest bootstrap
 
-수집 lease가 2분이고 Function `maxDuration`도 120초다. Heartbeat와 최종 fencing 검사가 없어 timeout 경계에서 lease 만료 후 후속 invocation과 겹칠 수 있다.
+실제 main과 테스트용 bootstrap이 각각 `NestFactory.create()`를 수행해 옵션과 adapter가 어긋날 수 있었다. helper와 중복 테스트를 제거하고 실제 `AppModule` 통합 테스트로 교체했다.
 
-## P1 — Fluid compute에서 memory 설정 위치 불일치
+## 해결 — production artifact 부재
 
-현재 `vercel.json`은 `memory: 1024`를 설정한다. 최신 Vercel 문서는 Fluid compute가 활성화된 경우 memory를 `vercel.json`에서 설정하지 말고 Dashboard Functions 설정을 사용하라고 안내한다.
+webpack bundle은 내부 workspace 소스만 포함하고 Nest, Fastify, Prisma와 pg 같은 외부 npm dependency는 external로 유지한다. 현재 산출물은 약 203KB이며 dependency 중복 번들을 피한다.
 
-## P2 — DB pool 확장성
+## 유지 — DB 수명주기
 
-Prisma singleton과 instance당 최대 연결 2개는 현재 저빈도 호출에 합리적이다. 다만 Function instance가 늘면 연결 수도 증가하므로 pooled `DATABASE_URL`을 유지하고 연결 수를 관찰한다. Vercel의 `attachDatabasePool` 적용 가능성도 후속 검토한다.
+Prisma client와 Toss runtime은 Nest singleton provider로 유지해 warm runtime에서 재사용한다. 다중 runtime 동시 수집은 PostgreSQL lease가 담당한다.
+
+## 후속 개선
+
+수집 lease heartbeat와 최종 fencing 검사는 별도 phase에서 구현해야 한다. pooled `DATABASE_URL`의 connection 수 역시 운영 관찰 대상이다.

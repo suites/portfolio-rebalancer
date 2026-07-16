@@ -107,7 +107,7 @@ rankings.read                 indicators.read
 - client별 유효 access token은 1개: 새로 발급하면 이전 토큰이 무효화됨
 - 허용 IP에 없는 출구 IP는 차단됨
 
-현재 `TossTokenProvider`는 Vercel Function 인스턴스 메모리에만 토큰을 저장하고 만료 30초 전부터 새 토큰을 요구합니다. 동시에 여러 요청이 갱신을 요구해도 single-flight로 발급을 한 번만 수행하며, PostgreSQL collection lease가 여러 Function 인스턴스의 동시 수집도 차단합니다. 토큰 요청은 10초 후 중단하고 업무 API에서 `401`을 받으면 캐시 토큰을 즉시 무효화합니다. 영구 캐시나 refresh token은 사용하지 않습니다.
+현재 `TossTokenProvider`는 실행 중인 Nest 애플리케이션 프로세스 메모리에만 토큰을 저장하고 만료 30초 전부터 새 토큰을 요구합니다. 동시에 여러 요청이 갱신을 요구해도 single-flight로 발급을 한 번만 수행하며, PostgreSQL collection lease가 여러 Vercel runtime 인스턴스의 동시 수집도 차단합니다. 토큰 요청은 10초 후 중단하고 업무 API에서 `401`을 받으면 캐시 토큰을 즉시 무효화합니다. 영구 캐시나 refresh token은 사용하지 않습니다.
 
 `clientId`, `clientSecret`과 access token은 서버에만 둡니다. HTML, 브라우저 계약, 로그와 fixture에 포함하지 않습니다. 인증 오류 메시지에 자격증명이 포함돼도 알려진 자격증명 값을 `[REDACTED]`로 바꾸는 회귀 테스트가 있습니다. 전체 로그·응답 마스킹은 향후 공통 오류 계층에서 추가 검증해야 합니다.
 

@@ -1,17 +1,20 @@
 # Review Summary
 
-판정: Engine 코드는 Vercel NestJS zero-config에 맞지만 현재 설정 그대로 운영 배포가 확정됐다고 보기는 어렵다.
+판정: engine은 Module, Controller, Guard, Provider와 lifecycle service를 사용하는 실제 NestJS 애플리케이션이다. 수동 serverless handler/API shim은 제거됐다.
 
-최초 배포 전 우선 보강:
+이번 개선:
 
-1. Dashboard Root Directory를 `apps/engine`으로 선택한다.
-2. `apps/engine/vercel.json`에 `framework: nestjs`를 명시한다.
-3. Fluid compute와 충돌할 수 있는 `memory` 설정을 제거하고 Dashboard에서 설정한다.
-4. `PORT` 호환성과 workspace Prisma 생성은 실제 Vercel Preview build로 검증한다.
+1. `functions["src/main.ts"]`와 Function resource override 제거
+2. `src/main.ts`의 직접 Nest import와 단일 conventional bootstrap
+3. Vercel별 listen 분기를 config 해석으로 이동
+4. Nest CLI 기반 production bundle과 `start:prod` 추가
+5. AppModule 통합 테스트로 중복 bootstrap 제거
+6. Vercel builder의 DOM Fetch 타입과 union narrowing 호환성 보강
 
-운영 안정성 후속 보강:
+검증 기준:
 
-1. 수집 lease heartbeat와 fencing 검사를 구현한다.
-2. Production 필수 환경변수 readiness를 추가한다.
-3. 별도 `ACCOUNT_REFERENCE_KEY`를 필수화한다.
-4. Preview 배포 후 `/internal/v1/health`, 인증 endpoint, Cron endpoint를 smoke test한다.
+- 전체 format, lint, typecheck, test와 build
+- `node dist/main.cjs` 기동 후 `/internal/v1/health` 200
+- Vercel Git Production build와 배포 health 확인
+
+남은 운영 과제는 인증된 readiness, constant-time token 비교, lease heartbeat/fencing이며 이번 Nest 전환 범위 밖이다.

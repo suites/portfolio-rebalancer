@@ -1,4 +1,4 @@
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
@@ -22,10 +22,8 @@ export type EngineConfig = z.infer<typeof EnvironmentSchema>;
 export function loadEngineConfig(environment: NodeJS.ProcessEnv): EngineConfig {
   const result = EnvironmentSchema.safeParse({
     ...environment,
-    ENGINE_PORT:
-      environment.VERCEL === "1"
-        ? (environment.PORT ?? environment.ENGINE_PORT)
-        : environment.ENGINE_PORT,
+    ENGINE_HOST: environment.ENGINE_HOST ?? (environment.VERCEL === "1" ? "0.0.0.0" : undefined),
+    ENGINE_PORT: environment.PORT ?? environment.ENGINE_PORT,
     DATABASE_URL:
       environment.DATABASE_URL ??
       (environment.VERCEL === "1"
@@ -41,7 +39,7 @@ export function loadEngineConfig(environment: NodeJS.ProcessEnv): EngineConfig {
 
 export function loadEngineConfigFromProcess(): EngineConfig {
   if (process.env.VERCEL !== "1") {
-    loadDotenv({ path: fileURLToPath(new URL("../../.env.local", import.meta.url)) });
+    loadDotenv({ path: resolve(process.cwd(), ".env.local") });
   }
   return loadEngineConfig(process.env);
 }

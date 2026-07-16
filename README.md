@@ -88,7 +88,7 @@ engine은 NestJS의 feature module 구조를 따릅니다.
 
 ```text
 apps/engine/src/
-├── main.ts, bootstrap.ts, app.module.ts
+├── main.ts, app.module.ts
 ├── common/auth/guards/              service/Cron 인증
 ├── config/                          Zod 환경설정과 Config Module
 ├── infrastructure/prisma/           Prisma Module과 singleton PrismaService
@@ -105,7 +105,14 @@ apps/engine/src/
 
 같은 Git 저장소에서 `apps/web`과 `apps/engine`을 각각 Vercel Project로 가져옵니다. PostgreSQL은 Vercel Marketplace의 Neon을 기본 운영 경로로 사용하며 pooled `DATABASE_URL`은 runtime, direct `DATABASE_DIRECT_URL`은 Prisma migration에 사용합니다.
 
-engine 프로젝트의 Root Directory는 `apps/engine`으로 지정하고 외부 workspace source 포함을 활성화합니다. Framework는 `apps/engine/vercel.json`의 `nestjs`로 고정하며 Build Command와 Output Directory는 override하지 않습니다. Nest zero-config가 감지할 수 있도록 `src/main.ts`가 `@nestjs/core`를 직접 import하고 `NestFactory.create()`로 앱을 시작합니다. 이 진입점은 자동으로 단일 Function이 되므로 `vercel.json`의 `functions` glob으로 다시 지정하지 않습니다. Vercel이 제공하는 `PORT`를 로컬 `ENGINE_PORT`보다 우선하고, Function 실행 시간과 메모리는 Fluid Compute와 충돌하지 않도록 Dashboard의 Functions 설정에서 관리합니다.
+engine 프로젝트의 Root Directory는 `apps/engine`으로 지정하고 외부 workspace source 포함을 활성화합니다. Framework는 `apps/engine/vercel.json`의 `nestjs`로 고정하며 Build Command와 Output Directory는 override하지 않습니다. `src/main.ts`는 일반 Nest 애플리케이션과 동일하게 `NestFactory.create()`와 하나의 `app.listen()` 경로만 사용합니다. Vercel zero-config가 이 진입점을 자동 배포하므로 `vercel.json`에서 handler, rewrite 또는 `functions` glob을 선언하지 않습니다. Vercel이 제공하는 `PORT`를 `ENGINE_PORT`보다 우선하고, 실행 시간과 메모리는 Fluid Compute와 충돌하지 않도록 Dashboard의 Functions 설정에서 관리합니다.
+
+engine의 독립 production 산출물도 같은 진입점에서 만듭니다. Nest CLI와 workspace alias를 지정한 webpack build는 내부 TypeScript 패키지를 포함한 `dist/main.cjs`를 생성하고 외부 npm 의존성은 번들에 중복하지 않습니다.
+
+```bash
+pnpm --filter @portfolio-rebalancer/engine build
+pnpm --filter @portfolio-rebalancer/engine start:prod
+```
 
 토스증권은 허용 IP를 요구하므로 engine 프로젝트에서 Vercel Pro Static IPs 또는 Enterprise Secure Compute를 활성화해야 합니다. 해당 IP를 토스증권에 등록한 뒤에만 `TOSS_EGRESS_ALLOWLIST_CONFIRMED=true`를 설정하세요. 일반 Vercel 동적 출구 IP에서는 실제 수집이 코드에서 차단됩니다.
 

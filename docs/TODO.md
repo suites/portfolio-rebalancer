@@ -73,6 +73,7 @@
 - [x] engine HTTP 계층을 NestJS 11 모듈·DI·Controller·Guard 구조로 전환
 - [x] engine을 feature-first Nest 표준 폴더와 PrismaModule 구조로 재구성
 - [x] Vercel zero-config `src/main.ts`, `nestjs` framework 고정, platform `PORT`와 Prisma 생성 단계 구성
+- [x] 수동 serverless handler 없이 단일 Nest bootstrap과 실행 가능한 production bundle 구성
 - [x] Vercel 민감 환경변수에서 OAuth 자격증명을 로딩하는 운영 구성
 - [x] 계좌 및 보유 주식 조회
 - [ ] 가격, 종목, 시장 캘린더 조회

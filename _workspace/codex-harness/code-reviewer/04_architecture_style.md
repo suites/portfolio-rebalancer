@@ -1,21 +1,21 @@
 # Architecture and Deployment Settings
 
-현재 구조는 NestJS zero-config의 기본 조건을 충족한다.
+현재 engine은 일반 Nest 애플리케이션 경계를 갖는다.
 
-- 진입점: `apps/engine/src/main.ts`
-- 서버 시작: `app.listen(...)`
-- adapter: NestJS Fastify
-- 배포 단위: 전체 Nest 앱을 하나의 Vercel Function으로 변환
-- workspace: pnpm workspace와 명시적인 내부 package dependency
-- Prisma Client: database workspace postinstall에서 생성
-- Cron: `/internal/v1/cron/portfolio`, 평일 00:00 UTC
+- 진입점: `src/main.ts`의 단일 `bootstrap()`
+- root module: `AppModule`
+- 기능 경계: `SystemModule`, `PortfolioModule`
+- HTTP: Nest Controller와 Guard, Fastify platform adapter
+- 인프라: `PrismaModule`의 singleton lifecycle provider
+- 배포 설정: `vercel.json`의 framework, region과 Cron만 유지
+- production build: Nest CLI + custom webpack workspace alias
+- production 실행: `dist/main.cjs`를 Node로 직접 실행
 
-권장 Dashboard 설정:
+Vercel Dashboard 확인값:
 
-1. Root Directory: `apps/engine`
-2. Include source files outside Root Directory: Enabled
-3. Framework: NestJS 또는 repo config의 `framework: nestjs`
-4. Build Command: 자동 감지, override 없음
-5. Output Directory: 비움, `dist` 지정 금지
-6. Install Command: 자동 감지
-7. Node.js: 22.x
+1. Root Directory `apps/engine`
+2. 외부 workspace source 포함 활성화
+3. Framework Preset `NestJS`
+4. Build Command와 Output Directory override 없음
+
+Vercel 공식 Nest 지원은 전체 애플리케이션을 플랫폼 Function으로 변환하지만, 애플리케이션 소스에는 handler나 Lambda adapter를 두지 않는다.

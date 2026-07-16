@@ -1,7 +1,8 @@
 # Review Scope
 
-- 대상: `apps/engine`의 Vercel NestJS 배포 가능성
-- 검토 파일: engine 진입점, Nest/Fastify bootstrap, package scripts, `vercel.json`, pnpm workspace, Prisma lifecycle, Cron/lease
-- 목적: Vercel Dashboard Root Directory와 Framework Preset 선택, zero-config 감지, 운영상 배포 차단 요인 확인
-- 제외: Vercel Project 생성·연결·배포, 제품 코드 수정, 실제 환경변수 값 열람
-- 기준: Vercel NestJS·Monorepo·Functions 최신 공식 문서와 로컬 typecheck/test/build
+- 대상: `apps/engine`의 수동 serverless 잔재와 NestJS 프로젝트 완결성
+- 검토 파일: engine 진입점, Module/Controller/Guard/Provider, package scripts, TypeScript build, `vercel.json`, Prisma lifecycle와 테스트
+- 목적: 일반 Nest 애플리케이션 코드와 Vercel zero-config 배포 경계를 분리하고 실제 production 실행 경로까지 검증
+- 제외: live 주문, Toss write operation, 데이터 모델 변경과 환경변수 실제 값 열람
+- 검토 방식: correctness/security, architecture, tests/maintainability 세 lane의 읽기 전용 병렬 리뷰 후 주 에이전트가 수정 통합
+- 기준: Vercel NestJS 공식 문서, Nest bootstrap 관례, 로컬 전체 검증과 실제 Vercel build 로그

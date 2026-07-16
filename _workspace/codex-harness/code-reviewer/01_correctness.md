@@ -1,13 +1,17 @@
 # Correctness Findings
 
-## P1 — Root Directory는 `apps/engine`이어야 함
+## 해결 — 수동 Function glob이 Nest zero-config와 충돌
 
-첨부 화면은 상위 `apps` 라디오가 선택된 것으로 보인다. Engine 프로젝트의 Root Directory는 펼친 목록의 `apps/engine` 자체여야 `src/main.ts`, `package.json`, `vercel.json`이 프로젝트 루트에 놓인다.
+실제 Vercel 로그에서 `functions["src/main.ts"]`가 `api` Function 패턴과 일치하지 않아 빌드가 즉시 실패했다. `vercel.json`의 `functions`, memory와 duration override를 제거했다.
 
-## P1 — Framework 감지를 명시적으로 고정하지 않음
+## 해결 — 실제 진입점이 Nest를 간접 import
 
-Vercel은 `src/main.ts`와 `app.listen()`을 공식 NestJS zero-config 진입점으로 지원하므로 현재 코드 형태는 맞다. 다만 Dashboard에서 NestJS가 보이지 않는 상태를 제거하려면 `apps/engine/vercel.json`에 `"framework": "nestjs"`를 명시해야 한다. `Other` 정적 프로젝트로 처리되면 현재 `tsc --noEmit` build는 배포 산출물을 만들지 않는다.
+`src/main.ts`가 로컬 bootstrap helper만 import하면 Vercel detector가 Nest 엔트리포인트로 인정하지 않았다. 실제 로그는 `No entrypoint found which imports nestjs`였다. `main.ts`가 `@nestjs/core`를 직접 import하고 하나의 `bootstrap()`에서 `NestFactory.create()`와 `app.listen()`을 호출하도록 통합했다.
 
-## P2 — PORT 호환성 실배포 검증 필요
+## 해결 — build가 산출물을 만들지 않음
 
-공식 예시는 `process.env.PORT`로 listen하지만 현재 코드는 `ENGINE_PORT` 기본값 4100을 사용한다. Vercel의 Nest 변환기가 listen을 처리할 가능성이 높지만, 최초 Preview에서 health route로 확인하기 전에는 확정하지 않는다.
+기존 `build`와 `typecheck`가 모두 `tsc --noEmit`이었다. Nest CLI와 webpack으로 workspace 내부 TypeScript 패키지를 포함하는 `dist/main.cjs` build와 `start:prod`를 추가하고 Node 직접 실행 및 health 200을 확인했다.
+
+## 해결 — Vercel builder 타입 이식성
+
+engine tsconfig에 DOM Fetch API lib를 명시하고 `CollectionResult`를 property 존재 검사로 좁혀 Vercel builder의 별도 TypeScript 단계에서도 안정적으로 해석되게 했다.

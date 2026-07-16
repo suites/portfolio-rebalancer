@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit",
-    "dev": "tsx watch src/main.ts",
+    "build": "pnpm typecheck && nest build --builder webpack --webpackPath webpack.config.cjs",
+    "dev": "pnpm start:dev",
     "start": "tsx src/main.ts",
+    "start:dev": "tsx watch src/main.ts",
+    "start:prod": "node dist/main.cjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit"
@@ -26,7 +28,10 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@nestjs/cli": "^11.0.24",
+    "@nestjs/schematics": "^11.1.0",
     "@nestjs/testing": "^11.1.28",
+    "ts-loader": "^9.6.2",
     "tsx": "4.23.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"

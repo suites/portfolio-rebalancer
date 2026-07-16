@@ -46,7 +46,7 @@ export class PortfolioService {
 
   async refresh(): Promise<DashboardResult> {
     const collection = await this.collect("portfolio_refresh_blocked");
-    if (!collection.ok) {
+    if ("code" in collection) {
       return { ok: false, dashboard: blockedDashboard(collection.code) };
     }
     const dashboard = await this.dashboard();
