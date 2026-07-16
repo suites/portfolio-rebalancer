@@ -257,7 +257,9 @@ model BrokerRequestAttempt {
   redactedRequestSummary Json                 @map("redacted_request_summary") @db.JsonB
   createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  collectionRun CollectionRun? @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
+  collectionRun           CollectionRun?           @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
+  priceSnapshots          PriceSnapshot[]
+  marketCalendarSnapshots MarketCalendarSnapshot[]
 
   @@unique([workflowType, correlationId, operationId, ordinal, attempt], map: "broker_request_attempt_identity_key")
   @@index([correlationId, startedAt(sort: Desc)])
@@ -281,11 +283,13 @@ model PortfolioSnapshot {
   usdKrwRate            String?                  @map("usd_krw_rate")
   digest                String                   @db.Char(64)
 
-  collectionRun       CollectionRun         @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
-  account             BrokerAccount         @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  targetConfigVersion TargetConfigVersion?  @relation(fields: [targetConfigVersionId], references: [id], onDelete: Restrict)
+  collectionRun       CollectionRun            @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
+  account             BrokerAccount            @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  targetConfigVersion TargetConfigVersion?     @relation(fields: [targetConfigVersionId], references: [id], onDelete: Restrict)
   holdings            HoldingSnapshot[]
   buyingPower         BuyingPowerSnapshot[]
+  prices              PriceSnapshot[]
+  marketCalendars     MarketCalendarSnapshot[]
   checks              SnapshotCheck[]
 
   @@index([accountId, observedAt(sort: Desc)])
@@ -325,6 +329,43 @@ model BuyingPowerSnapshot {
 
   @@unique([snapshotId, currency])
   @@map("buying_power_snapshot")
+}
+
+model PriceSnapshot {
+  id                 String    @id @default(uuid()) @db.Uuid
+  snapshotId         String    @map("snapshot_id") @db.Uuid
+  requestAttemptId   String?   @map("request_attempt_id") @db.Uuid
+  marketCountry      String    @map("market_country")
+  symbol             String
+  currency           String
+  lastPrice          String    @map("last_price")
+  providerObservedAt DateTime? @map("provider_observed_at") @db.Timestamptz(6)
+  receivedAt         DateTime  @map("received_at") @db.Timestamptz(6)
+
+  snapshot       PortfolioSnapshot     @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  requestAttempt BrokerRequestAttempt? @relation(fields: [requestAttemptId], references: [id], onDelete: Restrict)
+
+  @@unique([snapshotId, marketCountry, symbol], map: "price_snapshot_snapshot_market_symbol_key")
+  @@index([requestAttemptId])
+  @@map("price_snapshot")
+}
+
+model MarketCalendarSnapshot {
+  id               String   @id @default(uuid()) @db.Uuid
+  snapshotId       String   @map("snapshot_id") @db.Uuid
+  requestAttemptId String?  @map("request_attempt_id") @db.Uuid
+  marketCountry    String   @map("market_country")
+  requestedDate    DateTime @map("requested_date") @db.Date
+  calendar         Json     @db.JsonB
+  calendarSha256   String   @map("calendar_sha256") @db.Char(64)
+  receivedAt       DateTime @map("received_at") @db.Timestamptz(6)
+
+  snapshot       PortfolioSnapshot     @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  requestAttempt BrokerRequestAttempt? @relation(fields: [requestAttemptId], references: [id], onDelete: Restrict)
+
+  @@unique([snapshotId, marketCountry], map: "market_calendar_snapshot_snapshot_market_key")
+  @@index([requestAttemptId])
+  @@map("market_calendar_snapshot")
 }
 
 model SnapshotCheck {

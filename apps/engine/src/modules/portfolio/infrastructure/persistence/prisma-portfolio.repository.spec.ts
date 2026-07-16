@@ -508,6 +508,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
     await repository.completeCollection({
       runId: "run-1",
       accountId: "account-1",
+      expectedTargetConfigVersionId: null,
       observedAt,
       securitiesValueMinor: 3_142_919n,
       usdKrwRate: "1380",
@@ -516,6 +517,8 @@ describe("PrismaPortfolioRepository collection evidence", () => {
         { currency: "KRW", amount: "5000000", valueKrwMinor: 5_000_000n },
         { currency: "USD", amount: "10.5", valueKrwMinor: 14_490n },
       ],
+      prices: [],
+      marketCalendars: [],
       rawResponses: [],
       lease: {
         owner: "11111111-1111-4111-8111-111111111111",
@@ -566,10 +569,246 @@ describe("PrismaPortfolioRepository collection evidence", () => {
     });
   });
 
+  it("가격과 시장 캘린더를 같은 fenced snapshot의 불변 자식으로 생성한다", async () => {
+    const createSnapshot = vi.fn().mockResolvedValue({ id: "snapshot-1" });
+    const transaction = collectionTransaction(createSnapshot, marketEvidenceTarget(["KR"]));
+    const repository = repositoryWithTransaction(transaction);
+    const providerObservedAt = new Date("2026-07-16T00:00:00.000Z");
+    const receivedAt = new Date("2026-07-16T00:00:00.100Z");
+    const calendar = {
+      marketCountry: "KR",
+      today: { date: "2026-07-16", sessions: [] },
+      previousBusinessDay: { date: "2026-07-15", sessions: [] },
+      nextBusinessDay: { date: "2026-07-17", sessions: [] },
+    };
+
+    await repository.completeCollection({
+      ...emptyCollectionInput(),
+      expectedTargetConfigVersionId: "target-1",
+      prices: [
+        {
+          marketCountry: "KR",
+          symbol: "005930",
+          currency: "KRW",
+          lastPrice: "72000",
+          providerObservedAt,
+          receivedAt,
+          requestAttemptId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
+      marketCalendars: [
+        {
+          marketCountry: "KR",
+          requestedDate: "2026-07-16",
+          calendar,
+          receivedAt,
+          requestAttemptId: "22222222-2222-4222-8222-222222222222",
+        },
+      ],
+    });
+
+    const createInput = createSnapshot.mock.calls[0]?.[0] as
+      | {
+          data: {
+            prices: { create: readonly Record<string, unknown>[] };
+            marketCalendars: { create: readonly Record<string, unknown>[] };
+          };
+        }
+      | undefined;
+    expect(createInput?.data.prices.create).toEqual([
+      {
+        marketCountry: "KR",
+        symbol: "005930",
+        currency: "KRW",
+        lastPrice: "72000",
+        providerObservedAt,
+        receivedAt,
+        requestAttempt: {
+          connect: { id: "11111111-1111-4111-8111-111111111111" },
+        },
+      },
+    ]);
+    expect(createInput?.data.marketCalendars.create).toEqual([
+      {
+        marketCountry: "KR",
+        requestedDate: new Date("2026-07-16T00:00:00.000Z"),
+        calendar: {
+          marketCountry: "KR",
+          nextBusinessDay: { date: "2026-07-17", sessions: [] },
+          previousBusinessDay: { date: "2026-07-15", sessions: [] },
+          today: { date: "2026-07-16", sessions: [] },
+        },
+        calendarSha256: createHash("sha256")
+          .update(
+            JSON.stringify({
+              marketCountry: "KR",
+              nextBusinessDay: { date: "2026-07-17", sessions: [] },
+              previousBusinessDay: { date: "2026-07-15", sessions: [] },
+              today: { date: "2026-07-16", sessions: [] },
+            }),
+          )
+          .digest("hex"),
+        receivedAt,
+        requestAttempt: {
+          connect: { id: "22222222-2222-4222-8222-222222222222" },
+        },
+      },
+    ]);
+  });
+
+  it("가격 순서·필드 순서와 calendar key 순서가 달라도 같은 canonical digest를 만든다", async () => {
+    const createSnapshot = vi
+      .fn<(input: unknown) => Promise<unknown>>()
+      .mockResolvedValue({ id: "snapshot-1" });
+    const repository = repositoryWithTransaction(
+      collectionTransaction(createSnapshot, marketEvidenceTarget(["KR", "US"])),
+    );
+    const observedAt = new Date("2026-07-16T03:00:00.000Z");
+    const receivedAt = new Date("2026-07-16T03:00:00.100Z");
+    const krPrice = {
+      marketCountry: "KR" as const,
+      symbol: "005930",
+      currency: "KRW" as const,
+      lastPrice: "72000",
+      providerObservedAt: observedAt,
+      receivedAt,
+      requestAttemptId: null,
+    };
+    const usPrice = {
+      marketCountry: "US" as const,
+      symbol: "AAPL",
+      currency: "USD" as const,
+      lastPrice: "210.5",
+      providerObservedAt: observedAt,
+      receivedAt,
+      requestAttemptId: null,
+    };
+    const krHolding = storedKrHolding();
+    const usHolding = storedUsHolding();
+    const krwBuyingPower = {
+      currency: "KRW" as const,
+      amount: "1000",
+      valueKrwMinor: 1_000n,
+    };
+    const usdBuyingPower = {
+      currency: "USD" as const,
+      amount: "10",
+      valueKrwMinor: 13_800n,
+    };
+
+    await repository.completeCollection({
+      ...emptyCollectionInput(),
+      expectedTargetConfigVersionId: "target-1",
+      observedAt,
+      usdKrwRate: "1380",
+      holdings: [usHolding, krHolding],
+      buyingPower: [usdBuyingPower, krwBuyingPower],
+      prices: [usPrice, krPrice],
+      marketCalendars: [
+        {
+          marketCountry: "US",
+          requestedDate: "2026-07-16",
+          calendar: {
+            marketCountry: "US",
+            today: { date: "2026-07-16", sessions: [] },
+            previousBusinessDay: { date: "2026-07-15", sessions: [] },
+            nextBusinessDay: { date: "2026-07-17", sessions: [] },
+          },
+          receivedAt,
+          requestAttemptId: null,
+        },
+        {
+          marketCountry: "KR",
+          requestedDate: "2026-07-16",
+          calendar: {
+            nextBusinessDay: { sessions: [], date: "2026-07-17" },
+            previousBusinessDay: { sessions: [], date: "2026-07-15" },
+            today: { sessions: [], date: "2026-07-16" },
+            marketCountry: "KR",
+          },
+          receivedAt,
+          requestAttemptId: null,
+        },
+      ],
+    });
+    await repository.completeCollection({
+      ...emptyCollectionInput(),
+      expectedTargetConfigVersionId: "target-1",
+      observedAt,
+      usdKrwRate: "1380",
+      holdings: [krHolding, usHolding],
+      buyingPower: [krwBuyingPower, usdBuyingPower],
+      prices: [
+        {
+          requestAttemptId: null,
+          receivedAt,
+          providerObservedAt: observedAt,
+          lastPrice: "72000",
+          currency: "KRW",
+          symbol: "005930",
+          marketCountry: "KR",
+        },
+        {
+          requestAttemptId: null,
+          receivedAt,
+          providerObservedAt: observedAt,
+          lastPrice: "210.5",
+          currency: "USD",
+          symbol: "AAPL",
+          marketCountry: "US",
+        },
+      ],
+      marketCalendars: [
+        {
+          marketCountry: "KR",
+          requestedDate: "2026-07-16",
+          calendar: {
+            previousBusinessDay: { sessions: [], date: "2026-07-15" },
+            marketCountry: "KR",
+            nextBusinessDay: { sessions: [], date: "2026-07-17" },
+            today: { sessions: [], date: "2026-07-16" },
+          },
+          receivedAt,
+          requestAttemptId: null,
+        },
+        {
+          marketCountry: "US",
+          requestedDate: "2026-07-16",
+          calendar: {
+            today: { date: "2026-07-16", sessions: [] },
+            marketCountry: "US",
+            nextBusinessDay: { date: "2026-07-17", sessions: [] },
+            previousBusinessDay: { date: "2026-07-15", sessions: [] },
+          },
+          receivedAt,
+          requestAttemptId: null,
+        },
+      ],
+    });
+    await repository.completeCollection({
+      ...emptyCollectionInput(),
+      expectedTargetConfigVersionId: "target-1",
+      observedAt,
+      usdKrwRate: "1381",
+      holdings: [krHolding, usHolding],
+      buyingPower: [krwBuyingPower, usdBuyingPower],
+      prices: [krPrice, usPrice],
+      marketCalendars: [storedCalendar("KR"), storedCalendar("US")],
+    });
+
+    const digests = createSnapshot.mock.calls.map(
+      ([input]) => (input as { data: { digest: string } }).data.digest,
+    );
+    expect(digests).toHaveLength(3);
+    expect(digests[0]).toBe(digests[1]);
+    expect(digests[1]).not.toBe(digests[2]);
+  });
+
   it("최종 fenced 트랜잭션에서 고정한 ACTIVE 정책으로 관리 현금과 총액을 함께 저장한다", async () => {
     const createSnapshot = vi.fn().mockResolvedValue({ id: "snapshot-1" });
     const findActive = vi.fn().mockResolvedValue({
       id: "target-1",
+      allocations: [],
       cashPolicy: {
         mode: "FIXED_KRW",
         version: "CASH_V1",
@@ -592,11 +831,14 @@ describe("PrismaPortfolioRepository collection evidence", () => {
     await repository.completeCollection({
       runId: "run-1",
       accountId: "account-1",
+      expectedTargetConfigVersionId: "target-1",
       observedAt: new Date("2026-07-16T03:00:00.000Z"),
       securitiesValueMinor: 900_000n,
       usdKrwRate: null,
       holdings: [],
       buyingPower: [],
+      prices: [],
+      marketCalendars: [],
       rawResponses: [],
       lease: {
         owner: "11111111-1111-4111-8111-111111111111",
@@ -606,7 +848,21 @@ describe("PrismaPortfolioRepository collection evidence", () => {
 
     expect(findActive).toHaveBeenCalledWith({
       where: { config: { accountId: "account-1" }, status: "ACTIVE" },
-      select: { id: true, cashPolicy: true },
+      select: {
+        id: true,
+        cashPolicy: true,
+        allocations: {
+          select: {
+            instruments: {
+              select: {
+                marketCountry: true,
+                symbol: true,
+                currency: true,
+              },
+            },
+          },
+        },
+      },
     });
     const snapshotInput = createSnapshot.mock.calls[0]?.[0] as
       | {
@@ -624,6 +880,90 @@ describe("PrismaPortfolioRepository collection evidence", () => {
       managedCashMinor: 100_000n,
       totalValueMinor: 1_000_000n,
     });
+  });
+
+  it("수집 시작 때 고정한 ACTIVE 버전이 최종 트랜잭션에서 바뀌면 저장하지 않는다", async () => {
+    const createSnapshot = vi.fn();
+    const transaction = collectionTransaction(createSnapshot, marketEvidenceTarget(["KR"]));
+    const repository = repositoryWithTransaction(transaction);
+
+    await expect(
+      repository.completeCollection({
+        ...emptyCollectionInput(),
+        expectedTargetConfigVersionId: "different-target",
+        prices: [
+          {
+            marketCountry: "KR",
+            symbol: "005930",
+            currency: "KRW",
+            lastPrice: "72000",
+            providerObservedAt: new Date("2026-07-16T00:00:00.000Z"),
+            receivedAt: new Date("2026-07-16T00:00:00.100Z"),
+            requestAttemptId: null,
+          },
+        ],
+        marketCalendars: [storedCalendar("KR")],
+      }),
+    ).rejects.toMatchObject({ code: "TARGET_CONFIG_STALE" });
+    expect(createSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("보유·목표 종목 또는 시장 증거가 하나라도 빠지면 VERIFIED snapshot을 만들지 않는다", async () => {
+    const createSnapshot = vi.fn();
+    const repository = repositoryWithTransaction(
+      collectionTransaction(createSnapshot, marketEvidenceTarget(["KR"])),
+    );
+
+    await expect(
+      repository.completeCollection({
+        ...emptyCollectionInput(),
+        expectedTargetConfigVersionId: "target-1",
+        holdings: [storedKrHolding()],
+        prices: [],
+        marketCalendars: [],
+      }),
+    ).rejects.toMatchObject({ code: "DATA_INVALID" });
+    expect(createSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("현재가 관측시각이 없으면 증거를 보존하되 snapshot과 check를 BLOCKED로 저장한다", async () => {
+    const createSnapshot = vi.fn().mockResolvedValue({ id: "snapshot-1" });
+    const repository = repositoryWithTransaction(
+      collectionTransaction(createSnapshot, marketEvidenceTarget(["KR"])),
+    );
+
+    await repository.completeCollection({
+      ...emptyCollectionInput(),
+      expectedTargetConfigVersionId: "target-1",
+      prices: [
+        {
+          marketCountry: "KR",
+          symbol: "005930",
+          currency: "KRW",
+          lastPrice: "72000",
+          providerObservedAt: null,
+          receivedAt: new Date("2026-07-16T00:00:00.100Z"),
+          requestAttemptId: null,
+        },
+      ],
+      marketCalendars: [storedCalendar("KR")],
+    });
+
+    const data = (
+      createSnapshot.mock.calls[0]?.[0] as {
+        data: {
+          validationStatus: string;
+          checks: { create: readonly { ruleCode: string; outcome: string }[] };
+        };
+      }
+    ).data;
+    expect(data.validationStatus).toBe("BLOCKED");
+    expect(data.checks.create).toContainEqual(
+      expect.objectContaining({
+        ruleCode: "PRICE_OBSERVATION_TIME",
+        outcome: "BLOCKED",
+      }),
+    );
   });
 
   it("최종 트랜잭션에서 fencing token이 일치하지 않으면 어떤 증거도 쓰지 않는다", async () => {
@@ -650,11 +990,14 @@ describe("PrismaPortfolioRepository collection evidence", () => {
       repository.completeCollection({
         runId: "run-1",
         accountId: "account-1",
+        expectedTargetConfigVersionId: null,
         observedAt: new Date("2026-07-16T03:00:00.000Z"),
         securitiesValueMinor: 0n,
         usdKrwRate: null,
         holdings: [],
         buyingPower: [],
+        prices: [],
+        marketCalendars: [],
         rawResponses: [],
         lease: {
           owner: "11111111-1111-4111-8111-111111111111",
@@ -694,6 +1037,55 @@ describe("PrismaPortfolioRepository collection evidence", () => {
 });
 
 describe("PrismaPortfolioRepository account scope", () => {
+  it("ACTIVE 목표 종목을 시장·심볼 순서로 고정해 수집 scope로 반환한다", async () => {
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "target-1",
+      allocations: [
+        {
+          instruments: [
+            { marketCountry: "US", symbol: "AAPL", currency: "USD" },
+            { marketCountry: "KR", symbol: "005930", currency: "KRW" },
+          ],
+        },
+      ],
+    });
+    const repository = new PrismaPortfolioRepository({
+      targetConfigVersion: { findFirst },
+    } as unknown as DatabaseClient);
+
+    await expect(repository.collectionTargetScope("account-1")).resolves.toEqual({
+      targetConfigVersionId: "target-1",
+      instruments: [
+        { marketCountry: "KR", symbol: "005930", currency: "KRW" },
+        { marketCountry: "US", symbol: "AAPL", currency: "USD" },
+      ],
+    });
+  });
+
+  it("latest snapshot에 가격과 시장 캘린더를 정렬해 포함한다", async () => {
+    const findFirst = vi.fn().mockResolvedValue(null);
+    const repository = new PrismaPortfolioRepository({
+      portfolioSnapshot: { findFirst },
+    } as unknown as DatabaseClient);
+
+    await repository.latestSnapshot("account-1");
+
+    const findInput = findFirst.mock.calls[0]?.[0] as
+      | {
+          include: {
+            prices: { orderBy: readonly Record<string, string>[] };
+            marketCalendars: { orderBy: Record<string, string> };
+          };
+        }
+      | undefined;
+    expect(findInput?.include.prices).toEqual({
+      orderBy: [{ marketCountry: "asc" }, { symbol: "asc" }],
+    });
+    expect(findInput?.include.marketCalendars).toEqual({
+      orderBy: { marketCountry: "asc" },
+    });
+  });
+
   it("dashboard는 최신 수집 계좌의 snapshot만 조회한다", async () => {
     const findSnapshot = vi.fn().mockResolvedValue(null);
     const database = {
@@ -723,4 +1115,106 @@ function repositoryWithTransaction(transaction: object) {
     ),
   } as unknown as DatabaseClient;
   return new PrismaPortfolioRepository(database);
+}
+
+function collectionTransaction(
+  createSnapshot: ReturnType<typeof vi.fn>,
+  activeTarget: ReturnType<typeof marketEvidenceTarget> | null = null,
+) {
+  return {
+    $queryRaw: vi.fn().mockResolvedValue([{ fencingToken: 1n }]),
+    targetConfigVersion: {
+      findFirst: vi.fn().mockResolvedValue(activeTarget),
+    },
+    rawBrokerResponse: {
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    portfolioSnapshot: {
+      create: createSnapshot,
+    },
+    collectionRun: {
+      update: vi.fn().mockResolvedValue({ id: "run-1" }),
+    },
+  };
+}
+
+function marketEvidenceTarget(markets: readonly ("KR" | "US")[]) {
+  return {
+    id: "target-1",
+    cashPolicy: { mode: "EXCLUDED", version: "CASH_V1" },
+    allocations: [
+      {
+        instruments: markets.map((marketCountry) => ({
+          marketCountry,
+          symbol: marketCountry === "KR" ? "005930" : "AAPL",
+          currency: marketCountry === "KR" ? "KRW" : "USD",
+        })),
+      },
+    ],
+  };
+}
+
+function storedCalendar(marketCountry: "KR" | "US") {
+  return {
+    marketCountry,
+    requestedDate: "2026-07-16",
+    calendar: {
+      marketCountry,
+      previousBusinessDay: { date: "2026-07-15", sessions: [] },
+      today: { date: "2026-07-16", sessions: [] },
+      nextBusinessDay: { date: "2026-07-17", sessions: [] },
+    },
+    receivedAt: new Date("2026-07-16T00:00:00.100Z"),
+    requestAttemptId: null,
+  } as const;
+}
+
+function storedKrHolding() {
+  return {
+    marketCountry: "KR",
+    symbol: "005930",
+    name: "삼성전자",
+    currency: "KRW",
+    quantity: "1",
+    lastPrice: "72000",
+    averagePurchasePrice: "70000",
+    marketValue: "72000",
+    marketValueKrwMinor: 72_000n,
+    rawPayload: {},
+  } as const;
+}
+
+function storedUsHolding() {
+  return {
+    marketCountry: "US",
+    symbol: "AAPL",
+    name: "Apple",
+    currency: "USD",
+    quantity: "1",
+    lastPrice: "210.5",
+    averagePurchasePrice: "200",
+    marketValue: "210.5",
+    marketValueKrwMinor: 290_490n,
+    rawPayload: {},
+  } as const;
+}
+
+function emptyCollectionInput() {
+  return {
+    runId: "run-1",
+    accountId: "account-1",
+    expectedTargetConfigVersionId: null,
+    observedAt: new Date("2026-07-16T03:00:00.000Z"),
+    securitiesValueMinor: 0n,
+    usdKrwRate: null,
+    holdings: [],
+    buyingPower: [],
+    prices: [],
+    marketCalendars: [],
+    rawResponses: [],
+    lease: {
+      owner: "11111111-1111-4111-8111-111111111111",
+      fencingToken: 1n,
+    },
+  } as const;
 }
