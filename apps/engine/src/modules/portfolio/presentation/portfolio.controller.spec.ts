@@ -8,6 +8,7 @@ import {
   DashboardSnapshotSchema,
   InstrumentCatalogSearchResultSchema,
   InstrumentValidationResultSchema,
+  RebalancePlanSnapshotSchema,
   TargetSettingsSnapshotSchema,
 } from "@portfolio-rebalancer/contracts";
 
@@ -234,6 +235,54 @@ describe("NestJS engine HTTP contract", () => {
     expect(response.statusCode).toBe(400);
     expect(harness.portfolio.validateInstrument).not.toHaveBeenCalled();
   });
+
+  it("Shadow 계획 조회·생성은 service token, no-store와 공유 계약을 사용한다", async () => {
+    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+    app = harness.app;
+    harness.portfolio.createRebalancePlan.mockResolvedValue(rebalancePlanSnapshot());
+
+    const latest = await harness.fastify.inject({
+      method: "GET",
+      url: "/internal/v1/rebalance-plans/latest",
+      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
+    });
+    const created = await harness.fastify.inject({
+      method: "POST",
+      url: "/internal/v1/rebalance-plans",
+      headers: {
+        authorization: `Bearer ${SERVICE_TOKEN}`,
+        "content-type": "application/json",
+      },
+      payload: { mode: "SHADOW" },
+    });
+
+    expect(latest.statusCode).toBe(200);
+    expect(latest.headers["cache-control"]).toBe("no-store");
+    expect(RebalancePlanSnapshotSchema.safeParse(latest.json()).success).toBe(true);
+    expect(created.statusCode).toBe(200);
+    expect(created.headers["cache-control"]).toBe("no-store");
+    expect(RebalancePlanSnapshotSchema.safeParse(created.json()).success).toBe(true);
+    expect(harness.portfolio.createRebalancePlan).toHaveBeenCalledWith({ mode: "SHADOW" });
+  });
+
+  it("LIVE를 계획 생성 입력으로 보내도 service 호출 전에 400으로 거부한다", async () => {
+    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+    app = harness.app;
+
+    const response = await harness.fastify.inject({
+      method: "POST",
+      url: "/internal/v1/rebalance-plans",
+      headers: {
+        authorization: `Bearer ${SERVICE_TOKEN}`,
+        "content-type": "application/json",
+      },
+      payload: { mode: "LIVE" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: "REBALANCE_PLAN_INPUT_INVALID" });
+    expect(harness.portfolio.createRebalancePlan).not.toHaveBeenCalled();
+  });
 });
 
 async function createHarness(environment: NodeJS.ProcessEnv) {
@@ -273,6 +322,14 @@ async function createHarness(environment: NodeJS.ProcessEnv) {
         liveOrdersEnabled: false,
       }),
     ),
+    rebalancePlan: vi.fn().mockResolvedValue(
+      RebalancePlanSnapshotSchema.parse({
+        state: "NO_PLAN",
+        latest: null,
+        liveOrdersEnabled: false,
+      }),
+    ),
+    createRebalancePlan: vi.fn(),
     searchInstrumentCatalog: vi.fn(),
     validateInstrument: vi.fn(),
     createTargetDraft: vi.fn(),
@@ -294,6 +351,32 @@ async function createHarness(environment: NodeJS.ProcessEnv) {
     fastify: nestApp.getHttpAdapter().getInstance(),
     portfolio,
   };
+}
+
+function rebalancePlanSnapshot() {
+  return RebalancePlanSnapshotSchema.parse({
+    state: "READY",
+    latest: {
+      runId: "20000000-0000-4000-8000-000000000001",
+      planId: "20000000-0000-4000-8000-000000000002",
+      mode: "SHADOW",
+      status: "NO_ACTION",
+      startedAt: "2026-07-16T01:00:00.000Z",
+      completedAt: "2026-07-16T01:00:01.000Z",
+      snapshotId: "20000000-0000-4000-8000-000000000003",
+      snapshotDigest: "a".repeat(64),
+      configVersionId: "20000000-0000-4000-8000-000000000004",
+      canonicalVersion: "SHADOW_PLAN_V1",
+      planHash: "b".repeat(64),
+      returnPolicy: "BAND_EDGE",
+      reasonCodes: ["NO_REBALANCE_NEEDED"],
+      totalValueMinor: "100000",
+      executableOrders: [],
+      deferredBuyNeeds: [],
+      projectedAllocations: [],
+    },
+    liveOrdersEnabled: false,
+  });
 }
 
 function instrumentCandidate() {

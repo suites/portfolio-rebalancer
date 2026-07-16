@@ -218,6 +218,55 @@ export interface ActivateTargetDraftInput {
   readonly version: number;
 }
 
+export interface StartShadowRebalanceRunInput {
+  readonly accountId: string;
+  readonly snapshotId: string;
+  readonly snapshotDigest: string;
+  readonly targetConfigVersionId: string;
+  readonly targetConfigContentHash: string;
+  readonly dedupeKey: string;
+  readonly startedAt: Date;
+  readonly policyVersion: string;
+}
+
+export interface StoredShadowPlanOrderInput {
+  readonly candidateId: string;
+  readonly phase: "SELL" | "BUY";
+  readonly ordinal: number;
+  readonly assetClassId: string;
+  readonly instrumentKey: string;
+  readonly marketCountry: "KR";
+  readonly currency: "KRW";
+  readonly symbol: string;
+  readonly side: "SELL" | "BUY";
+  readonly orderType: "LIMIT";
+  readonly timeInForce: "DAY";
+  readonly quantity: bigint;
+  readonly limitPriceMinor: bigint;
+  readonly notionalMinor: bigint;
+  readonly unallocatedMinor: bigint;
+}
+
+export interface SealShadowRebalancePlanInput {
+  readonly runId: string;
+  readonly accountId: string;
+  readonly snapshotId: string;
+  readonly targetConfigVersionId: string;
+  readonly status: "NO_ACTION" | "PLANNED" | "BLOCKED";
+  readonly canonicalVersion: string;
+  readonly planHash: string;
+  readonly returnPolicy: "BAND_EDGE" | "TARGET";
+  readonly totalValueMinor: bigint | null;
+  readonly reasonCodes: readonly string[];
+  readonly canonicalContent: string;
+  readonly assetDecisions: Prisma.InputJsonValue;
+  readonly deferredBuyNeeds: Prisma.InputJsonValue;
+  readonly projectedAllocations: Prisma.InputJsonValue;
+  readonly orders: readonly StoredShadowPlanOrderInput[];
+  readonly completedAt: Date;
+  readonly requireCurrentIdentity: boolean;
+}
+
 export class PrismaPortfolioRepository {
   constructor(private readonly database: DatabaseClient) {}
 
@@ -753,6 +802,205 @@ export class PrismaPortfolioRepository {
     return { snapshot, activeVersion, draftVersion };
   }
 
+  async startShadowRebalanceRun(input: StartShadowRebalanceRunInput) {
+    return this.database.$transaction(
+      async (transaction) => {
+        const existing = await transaction.rebalanceRun.findUnique({
+          where: { dedupeKey: input.dedupeKey },
+          select: { id: true, status: true },
+        });
+        if (existing) {
+          return { created: false as const, runId: existing.id, status: existing.status };
+        }
+
+        const [latestSnapshot, activeTarget] = await Promise.all([
+          transaction.portfolioSnapshot.findFirst({
+            where: { accountId: input.accountId },
+            orderBy: [{ observedAt: "desc" }, { persistedAt: "desc" }, { id: "desc" }],
+            select: {
+              id: true,
+              digest: true,
+              validationStatus: true,
+              targetConfigVersionId: true,
+            },
+          }),
+          transaction.targetConfigVersion.findFirst({
+            where: { config: { accountId: input.accountId }, status: "ACTIVE" },
+            select: { id: true, contentHash: true },
+          }),
+        ]);
+        if (
+          !latestSnapshot ||
+          !activeTarget ||
+          latestSnapshot.id !== input.snapshotId ||
+          latestSnapshot.digest !== input.snapshotDigest ||
+          latestSnapshot.validationStatus !== "VERIFIED" ||
+          latestSnapshot.targetConfigVersionId !== input.targetConfigVersionId ||
+          activeTarget.id !== input.targetConfigVersionId ||
+          activeTarget.contentHash !== input.targetConfigContentHash
+        ) {
+          return null;
+        }
+
+        const run = await transaction.rebalanceRun.create({
+          data: {
+            accountId: input.accountId,
+            snapshotId: input.snapshotId,
+            snapshotDigest: input.snapshotDigest,
+            targetConfigVersionId: input.targetConfigVersionId,
+            targetConfigContentHash: input.targetConfigContentHash,
+            mode: "SHADOW",
+            status: "RUNNING",
+            dedupeKey: input.dedupeKey,
+            startedAt: input.startedAt,
+            appVersion: "0.1.0",
+            policyVersion: input.policyVersion,
+          },
+          select: { id: true, status: true },
+        });
+        return { created: true as const, runId: run.id, status: run.status };
+      },
+      { isolationLevel: "Serializable" },
+    );
+  }
+
+  currentRebalanceIdentity(accountId: string) {
+    return this.database.$transaction(async (transaction) => {
+      const [snapshot, activeTarget] = await Promise.all([
+        transaction.portfolioSnapshot.findFirst({
+          where: { accountId },
+          orderBy: [{ observedAt: "desc" }, { persistedAt: "desc" }, { id: "desc" }],
+          select: { id: true, digest: true, targetConfigVersionId: true },
+        }),
+        transaction.targetConfigVersion.findFirst({
+          where: { config: { accountId }, status: "ACTIVE" },
+          select: { id: true },
+        }),
+      ]);
+      return {
+        snapshotId: snapshot?.id ?? null,
+        snapshotDigest: snapshot?.digest ?? null,
+        targetConfigVersionId: activeTarget?.id ?? null,
+        snapshotTargetConfigVersionId: snapshot?.targetConfigVersionId ?? null,
+      };
+    });
+  }
+
+  async sealShadowRebalancePlan(input: SealShadowRebalancePlanInput) {
+    return this.database.$transaction(
+      async (transaction) => {
+        const run = await transaction.rebalanceRun.findUnique({
+          where: { id: input.runId },
+          select: {
+            id: true,
+            status: true,
+            snapshotId: true,
+            targetConfigVersionId: true,
+            startedAt: true,
+          },
+        });
+        if (
+          !run ||
+          run.status !== "RUNNING" ||
+          run.snapshotId !== input.snapshotId ||
+          run.targetConfigVersionId !== input.targetConfigVersionId
+        ) {
+          return null;
+        }
+        if (input.completedAt.getTime() < run.startedAt.getTime()) {
+          return null;
+        }
+        if (input.requireCurrentIdentity) {
+          const [latestSnapshot, activeTarget] = await Promise.all([
+            transaction.portfolioSnapshot.findFirst({
+              where: { accountId: input.accountId },
+              orderBy: [{ observedAt: "desc" }, { persistedAt: "desc" }, { id: "desc" }],
+              select: { id: true, targetConfigVersionId: true },
+            }),
+            transaction.targetConfigVersion.findFirst({
+              where: { config: { accountId: input.accountId }, status: "ACTIVE" },
+              select: { id: true },
+            }),
+          ]);
+          if (
+            latestSnapshot?.id !== input.snapshotId ||
+            latestSnapshot.targetConfigVersionId !== input.targetConfigVersionId ||
+            activeTarget?.id !== input.targetConfigVersionId
+          ) {
+            return null;
+          }
+        }
+
+        await transaction.rebalancePlan.create({
+          data: {
+            runId: input.runId,
+            snapshotId: input.snapshotId,
+            targetConfigVersionId: input.targetConfigVersionId,
+            mode: "SHADOW",
+            status: input.status,
+            canonicalVersion: input.canonicalVersion,
+            planHash: input.planHash,
+            returnPolicy: input.returnPolicy,
+            totalValueMinor: input.totalValueMinor,
+            reasonCodes: normalizedJson(input.reasonCodes),
+            canonicalContent: input.canonicalContent,
+            assetDecisions: input.assetDecisions,
+            deferredBuyNeeds: input.deferredBuyNeeds,
+            projectedAllocations: input.projectedAllocations,
+            createdAt: input.completedAt,
+            ...(input.orders.length === 0
+              ? {}
+              : {
+                  orders: {
+                    create: input.orders.map((order) => ({ ...order })),
+                  },
+                }),
+          },
+        });
+        await transaction.rebalanceRun.update({
+          where: { id: input.runId },
+          data: {
+            status: input.status,
+            completedAt: input.completedAt,
+            errorCode: null,
+          },
+        });
+        return transaction.rebalanceRun.findUnique({
+          where: { id: input.runId },
+          include: rebalanceRunPlanInclude,
+        });
+      },
+      { isolationLevel: "Serializable" },
+    );
+  }
+
+  async failShadowRebalanceRun(
+    runId: string,
+    errorCode: string,
+    completedAt: Date,
+  ): Promise<boolean> {
+    const result = await this.database.rebalanceRun.updateMany({
+      where: { id: runId, status: "RUNNING" },
+      data: { status: "FAILED", errorCode, completedAt },
+    });
+    return result.count === 1;
+  }
+
+  rebalanceRunById(runId: string) {
+    return this.database.rebalanceRun.findUnique({
+      where: { id: runId },
+      include: rebalanceRunPlanInclude,
+    });
+  }
+
+  latestShadowRebalanceRun() {
+    return this.database.rebalanceRun.findFirst({
+      where: { mode: "SHADOW", plan: { isNot: null } },
+      orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+      include: rebalanceRunPlanInclude,
+    });
+  }
+
   async createTargetDraft(input: StoredTargetDraftInput) {
     const canonical = [...input.allocations]
       .sort((left, right) =>
@@ -963,6 +1211,16 @@ export class PrismaPortfolioRepository {
     });
   }
 }
+
+const rebalanceRunPlanInclude = {
+  plan: {
+    include: {
+      orders: {
+        orderBy: [{ phase: "asc" as const }, { ordinal: "asc" as const }],
+      },
+    },
+  },
+} satisfies Prisma.RebalanceRunInclude;
 
 function assertCollectionTimeline(observedAt: Date, completedAt: Date): void {
   assertFiniteDate(observedAt, "수집 시작시각");

@@ -502,7 +502,16 @@ function validateAndNormalizeInput(
       continue;
     }
     if (asset.instruments.length === 0) {
-      return { reasonCode: "WITHIN_ASSET_ALLOCATION_INVALID" };
+      if (
+        asset.currentValueMinor !== 0n ||
+        asset.targetBasisPoints !== 0n ||
+        asset.lowerBasisPoints !== 0n ||
+        asset.upperBasisPoints !== 0n
+      ) {
+        return { reasonCode: "WITHIN_ASSET_ALLOCATION_INVALID" };
+      }
+      normalizedAssets.push({ ...asset, instruments: [] });
+      continue;
     }
     const instruments = [...asset.instruments].sort((left, right) =>
       compareText(instrumentKey(left), instrumentKey(right)),

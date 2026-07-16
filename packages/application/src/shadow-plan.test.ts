@@ -171,6 +171,29 @@ describe("createShadowRebalancePlan", () => {
     expect(result.assetDecisions.find(({ id }) => id === "CASH")?.reason).toBe("ABOVE_UPPER");
   });
 
+  it("목표와 현재값이 모두 0인 빈 증권 자산군은 유효한 분류로 유지한다", () => {
+    const result = createShadowRebalancePlan(
+      planInput(
+        [
+          securitiesAsset("SATELLITE", 0n, 0n, 0n, 0n, []),
+          securitiesAsset("SAFE", 90_000n, 9_000n, 8_500n, 9_500n, [
+            instrument("114800", 90_000n, 10_000n),
+          ]),
+          cashAsset(10_000n, 1_000n, 500n, 1_500n),
+        ],
+        10_000n,
+        0n,
+      ),
+    );
+
+    expect(result.status).toBe("NO_ACTION");
+    expect(result.assetDecisions.find(({ id }) => id === "SATELLITE")).toMatchObject({
+      currentValueMinor: 0n,
+      desiredValueMinor: 0n,
+      instruments: [],
+    });
+  });
+
   it("매도 필요가 하나라도 있으면 매도만 Phase A 주문으로 만들고 매수는 재계산 대기로 둔다", () => {
     const result = createShadowRebalancePlan(sellFirstInput());
 

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Get,
   Header,
@@ -17,6 +18,7 @@ import {
 import type { FastifyReply } from "fastify";
 
 import {
+  CreateRebalancePlanInputSchema,
   InstrumentSearchInputSchema,
   InstrumentValidationInputSchema,
   TargetSettingsDraftInputSchema,
@@ -25,6 +27,7 @@ import {
 import { CronTokenGuard } from "../../../common/auth/guards/cron-token.guard";
 import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
 import { PortfolioService } from "../application/portfolio.service";
+import { RebalancePlanError } from "../domain/rebalance-plan.error";
 import { TargetSettingsError } from "../domain/target-settings.error";
 
 @Controller("internal/v1")
@@ -67,6 +70,34 @@ export class PortfolioController {
       return await this.portfolio.targetSettings();
     } catch (error) {
       throwTargetSettingsHttpError(error);
+    }
+  }
+
+  @Get("rebalance-plans/latest")
+  @UseGuards(ServiceTokenGuard)
+  @Header("cache-control", "no-store")
+  async rebalancePlan(@Res({ passthrough: true }) reply: FastifyReply) {
+    const result = await this.portfolio.rebalancePlan();
+    if (result.state === "UNAVAILABLE") reply.status(503);
+    return result;
+  }
+
+  @Post("rebalance-plans")
+  @HttpCode(200)
+  @UseGuards(ServiceTokenGuard)
+  @Header("cache-control", "no-store")
+  async createRebalancePlan(@Body() body: unknown) {
+    const parsed = CreateRebalancePlanInputSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        code: "REBALANCE_PLAN_INPUT_INVALID",
+        message: "현재 계획 생성은 SHADOW 모드만 허용합니다.",
+      });
+    }
+    try {
+      return await this.portfolio.createRebalancePlan(parsed.data);
+    } catch (error) {
+      throwRebalancePlanHttpError(error);
     }
   }
 
@@ -170,5 +201,27 @@ function throwInstrumentValidationHttpError(error: unknown): never {
   throw new ServiceUnavailableException({
     code: "INSTRUMENT_VALIDATION_UNAVAILABLE",
     message: "토스증권 종목 기본정보와 유의사항을 모두 확인하지 못해 검증을 중단했습니다.",
+  });
+}
+
+function throwRebalancePlanHttpError(error: unknown): never {
+  if (error instanceof RebalancePlanError) {
+    const body = { code: error.code, message: error.message };
+    if (
+      error.code === "NO_SNAPSHOT" ||
+      error.code === "TARGET_CONFIG_MISSING" ||
+      error.code === "TARGET_CONFIG_STALE" ||
+      error.code === "SNAPSHOT_UNVERIFIED" ||
+      error.code === "MANAGED_CASH_MISSING" ||
+      error.code === "PLAN_IN_PROGRESS" ||
+      error.code === "PLAN_PREVIOUSLY_FAILED"
+    ) {
+      throw new ConflictException(body);
+    }
+    throw new ServiceUnavailableException(body);
+  }
+  throw new ServiceUnavailableException({
+    code: "REBALANCE_PLAN_UNAVAILABLE",
+    message: "Shadow 계획을 안전하게 생성하거나 저장하지 못했습니다.",
   });
 }

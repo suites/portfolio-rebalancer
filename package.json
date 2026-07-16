@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "pnpm -r run build",
-    "build:engine-deps": "pnpm --filter @portfolio-rebalancer/domain build && pnpm --filter @portfolio-rebalancer/broker build && pnpm --filter @portfolio-rebalancer/broker-toss build && pnpm --filter @portfolio-rebalancer/contracts build && pnpm --filter @portfolio-rebalancer/database build",
+    "build:engine-deps": "pnpm --filter @portfolio-rebalancer/domain build && pnpm --filter @portfolio-rebalancer/broker build && pnpm --filter @portfolio-rebalancer/broker-toss build && pnpm --filter @portfolio-rebalancer/contracts build && pnpm --filter @portfolio-rebalancer/application build && pnpm --filter @portfolio-rebalancer/database build",
     "check:openapi": "pnpm --filter @portfolio-rebalancer/broker-toss check:openapi",
     "dev": "pnpm --parallel --filter @portfolio-rebalancer/engine --filter @portfolio-rebalancer/web dev",
     "dev:web": "pnpm --filter @portfolio-rebalancer/web dev",

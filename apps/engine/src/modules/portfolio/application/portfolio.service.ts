@@ -7,6 +7,7 @@ import {
   InstrumentSearchInputSchema,
   InstrumentValidationInputSchema,
   InstrumentValidationResultSchema,
+  CreateRebalancePlanInputSchema,
   TargetSettingsDraftInputSchema,
   DashboardSnapshotSchema,
   type ConsoleRecordsSnapshotContract,
@@ -14,6 +15,8 @@ import {
   type DashboardSnapshotContract,
   type InstrumentCatalogSearchResultContract,
   type InstrumentValidationResultContract,
+  type CreateRebalancePlanInputContract,
+  type RebalancePlanSnapshotContract,
   type TargetSettingsDraftInputContract,
   type TargetSettingsSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
@@ -40,7 +43,14 @@ import {
 } from "./console.presenter";
 import { blockedDashboard, getDashboard } from "./dashboard.presenter";
 import { safeErrorMetadata } from "./safe-error-metadata";
+import {
+  getLatestRebalancePlan,
+  presentRebalancePlan,
+  unavailableRebalancePlanSnapshot,
+} from "./rebalance-plan.presenter";
+import { createAndStoreShadowPlan } from "./shadow-plan.use-case";
 import { CollectionError } from "../domain/collection.error";
+import { RebalancePlanError } from "../domain/rebalance-plan.error";
 import { TargetSettingsError } from "../domain/target-settings.error";
 import { TossRuntimeService } from "../infrastructure/broker/toss-runtime.service";
 import {
@@ -89,6 +99,37 @@ export class PortfolioService {
 
   targetSettings(): Promise<TargetSettingsSnapshotContract> {
     return getTargetSettings(this.repository);
+  }
+
+  async rebalancePlan(): Promise<RebalancePlanSnapshotContract> {
+    try {
+      return await getLatestRebalancePlan(this.repository);
+    } catch (error) {
+      this.logger.warn({ event: "rebalance_plan_read_blocked", ...safeErrorMetadata(error) });
+      return unavailableRebalancePlanSnapshot();
+    }
+  }
+
+  async createRebalancePlan(
+    input: CreateRebalancePlanInputContract,
+  ): Promise<RebalancePlanSnapshotContract> {
+    const parsed = CreateRebalancePlanInputSchema.parse(input);
+    if (parsed.mode !== "SHADOW") {
+      throw new RebalancePlanError(
+        "PLAN_PERSIST_FAILED",
+        "현재 계획 생성 API는 Shadow 모드만 허용합니다.",
+        false,
+      );
+    }
+    assertVercelEgressConfigured(this.config);
+    const runtime = this.tossRuntime.get();
+    const run = await createAndStoreShadowPlan({
+      repository: this.repository,
+      source: runtime.source,
+      requestAuditContext: runtime.requestAuditContext,
+      selectedAccountSeq: this.config.TOSSINVEST_ACCOUNT_SEQ,
+    });
+    return presentRebalancePlan(run);
   }
 
   async searchInstrumentCatalog(query: string): Promise<InstrumentCatalogSearchResultContract> {
