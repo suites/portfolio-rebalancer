@@ -68,7 +68,7 @@ model TargetConfigVersion {
   source      Json               @db.JsonB
   createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  config      TargetConfig       @relation(fields: [configId], references: [id], onDelete: Restrict)
+  config      TargetConfig        @relation(fields: [configId], references: [id], onDelete: Restrict)
   allocations TargetAllocation[]
   snapshots   PortfolioSnapshot[]
 
@@ -108,16 +108,16 @@ model TargetInstrument {
 }
 
 model CollectionRun {
-  id            String              @id @default(uuid()) @db.Uuid
-  accountId     String              @map("account_id") @db.Uuid
-  status        CollectionRunStatus @default(RUNNING)
-  startedAt     DateTime            @map("started_at") @db.Timestamptz(6)
-  completedAt   DateTime?           @map("completed_at") @db.Timestamptz(6)
-  appVersion    String              @map("app_version")
-  adapterVersion String             @map("adapter_version")
-  errorCode     String?             @map("error_code")
+  id             String              @id @default(uuid()) @db.Uuid
+  accountId      String              @map("account_id") @db.Uuid
+  status         CollectionRunStatus @default(RUNNING)
+  startedAt      DateTime            @map("started_at") @db.Timestamptz(6)
+  completedAt    DateTime?           @map("completed_at") @db.Timestamptz(6)
+  appVersion     String              @map("app_version")
+  adapterVersion String              @map("adapter_version")
+  errorCode      String?             @map("error_code")
 
-  account      BrokerAccount        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  account      BrokerAccount       @relation(fields: [accountId], references: [id], onDelete: Restrict)
   rawResponses RawBrokerResponse[]
   snapshot     PortfolioSnapshot?
 
@@ -158,10 +158,11 @@ model PortfolioSnapshot {
   usdKrwRate            String?                  @map("usd_krw_rate")
   digest                String                   @db.Char(64)
 
-  collectionRun       CollectionRun        @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
-  account             BrokerAccount        @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  targetConfigVersion TargetConfigVersion? @relation(fields: [targetConfigVersionId], references: [id], onDelete: Restrict)
+  collectionRun       CollectionRun         @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
+  account             BrokerAccount         @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  targetConfigVersion TargetConfigVersion?  @relation(fields: [targetConfigVersionId], references: [id], onDelete: Restrict)
   holdings            HoldingSnapshot[]
+  buyingPower         BuyingPowerSnapshot[]
   checks              SnapshotCheck[]
 
   @@index([accountId, observedAt(sort: Desc)])
@@ -186,6 +187,21 @@ model HoldingSnapshot {
 
   @@unique([snapshotId, market, symbol])
   @@map("holding_snapshot")
+}
+
+model BuyingPowerSnapshot {
+  id                String   @id @default(uuid()) @db.Uuid
+  snapshotId        String   @map("snapshot_id") @db.Uuid
+  currency          String
+  amount            String
+  valueKrwMinor     BigInt   @map("value_krw_minor")
+  observedAt        DateTime @map("observed_at") @db.Timestamptz(6)
+  valuationEligible Boolean  @default(false) @map("valuation_eligible")
+
+  snapshot PortfolioSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+
+  @@unique([snapshotId, currency])
+  @@map("buying_power_snapshot")
 }
 
 model SnapshotCheck {

@@ -1,9 +1,11 @@
 import {
   TossAccountsResponseSchema,
+  TossBuyingPowerResponseSchema,
   TossExchangeRateResponseSchema,
   TossHoldingsResponseSchema,
   TossOpenApiClient,
   type TossAccount,
+  type TossBuyingPowerResponse,
   type TossExchangeRateResponse,
   type TossHoldingsResponse,
 } from "@portfolio-rebalancer/broker-toss";
@@ -13,6 +15,7 @@ import { CollectionError } from "../../domain/collection.error";
 export interface TossReadSource {
   listAccounts(): Promise<readonly TossAccount[]>;
   getHoldings(accountSeq: number): Promise<TossHoldingsResponse>;
+  getBuyingPower(accountSeq: number, currency: "KRW" | "USD"): Promise<TossBuyingPowerResponse>;
   getUsdKrwRate(): Promise<TossExchangeRateResponse>;
 }
 
@@ -38,6 +41,19 @@ export function createTossReadSource(credentials: {
         return TossHoldingsResponseSchema.parse(response.data);
       } catch (error) {
         throw normalizeTossError(error, "보유자산");
+      }
+    },
+    async getBuyingPower(accountSeq, currency) {
+      try {
+        const response = await client.read.getBuyingPower({
+          params: {
+            header: { "X-Tossinvest-Account": accountSeq },
+            query: { currency },
+          },
+        });
+        return TossBuyingPowerResponseSchema.parse(response.data);
+      } catch (error) {
+        throw normalizeTossError(error, `${currency} 매수 가능 금액`);
       }
     },
     async getUsdKrwRate() {

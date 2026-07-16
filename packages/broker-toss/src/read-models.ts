@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const decimalString = z.string().regex(/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/);
+const nonNegativeDecimalString = z.string().regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/);
 const nullableDecimal = decimalString.nullable();
 
 const priceByCurrency = z.object({
@@ -87,7 +88,15 @@ export const TossExchangeRateResponseSchema = z.object({
   }),
 });
 
+export const TossBuyingPowerResponseSchema = z.object({
+  result: z.object({
+    currency: z.enum(["KRW", "USD"]),
+    cashBuyingPower: nonNegativeDecimalString,
+  }),
+});
+
 export type TossAccount = z.infer<typeof TossAccountSchema>;
 export type TossHoldingItem = z.infer<typeof TossHoldingItemSchema>;
 export type TossHoldingsResponse = z.infer<typeof TossHoldingsResponseSchema>;
 export type TossExchangeRateResponse = z.infer<typeof TossExchangeRateResponseSchema>;
+export type TossBuyingPowerResponse = z.infer<typeof TossBuyingPowerResponseSchema>;

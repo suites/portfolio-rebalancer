@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { TossAccountsResponseSchema, TossHoldingsResponseSchema } from "./read-models";
+import {
+  TossAccountsResponseSchema,
+  TossBuyingPowerResponseSchema,
+  TossHoldingsResponseSchema,
+} from "./read-models";
 
 describe("Toss read response schemas", () => {
   it("안전 정수 범위를 벗어난 accountSeq를 거부한다", () => {
@@ -52,5 +56,28 @@ describe("Toss read response schemas", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("매수 가능 금액은 KRW·USD의 0 이상 decimal 문자열만 허용한다", () => {
+    expect(
+      TossBuyingPowerResponseSchema.safeParse({
+        result: { currency: "KRW", cashBuyingPower: "5000000" },
+      }).success,
+    ).toBe(true);
+    expect(
+      TossBuyingPowerResponseSchema.safeParse({
+        result: { currency: "JPY", cashBuyingPower: "5000" },
+      }).success,
+    ).toBe(false);
+    expect(
+      TossBuyingPowerResponseSchema.safeParse({
+        result: { currency: "USD", cashBuyingPower: "-1" },
+      }).success,
+    ).toBe(false);
+    expect(
+      TossBuyingPowerResponseSchema.safeParse({
+        result: { currency: "USD", cashBuyingPower: 1 },
+      }).success,
+    ).toBe(false);
   });
 });

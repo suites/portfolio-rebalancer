@@ -24,7 +24,7 @@
 
 .summaryGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1rem;
   margin: 1.5rem 0;
 }
@@ -34,6 +34,11 @@
   grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.8fr);
   gap: 1.125rem;
   align-items: start;
+}
+
+.buyingPowerValues {
+  display: grid;
+  gap: 0.2rem;
 }
 
 .allocations,
@@ -131,9 +136,6 @@
   .summaryGrid {
     grid-template-columns: 1fr 1fr;
   }
-  .summaryGrid > :first-child {
-    grid-column: 1 / -1;
-  }
   .contentGrid {
     grid-template-columns: 1fr;
   }
@@ -153,8 +155,5 @@
   .summaryGrid,
   .rightColumn {
     grid-template-columns: 1fr;
-  }
-  .summaryGrid > :first-child {
-    grid-column: auto;
   }
 }

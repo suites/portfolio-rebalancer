@@ -67,7 +67,6 @@ export interface BrokerConditionalOrderSummary {
 
 export interface BuyingPowerQuote {
   readonly accountId: AccountId;
-  readonly symbol: SymbolCode;
   readonly currency: Currency;
   readonly amount: DecimalString;
   readonly observedAt: IsoDateTime;

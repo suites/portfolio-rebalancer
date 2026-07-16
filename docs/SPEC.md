@@ -6,7 +6,7 @@
 
 현재 명세의 최종 구현 목표는 **조회, 계산, 위험 검증, paper 검증, 안전한 실거래 및 감사 가능한 기록**입니다. 기능은 단계적으로 검증하지만 최종 완료 기준은 실제 계좌에서 지속적으로 사용할 수 있는 운영 품질입니다.
 
-현재 구현은 실제 조회 기반 shadow 수직 슬라이스입니다. 토스 계좌·보유자산과 필요한 USD/KRW 환율을 런타임 검증하고, Prisma/PostgreSQL 불변 스냅샷으로 저장한 뒤 별도 engine 계약을 통해 6개 Web GUI 화면에 표시합니다. 현재 보유종목의 목표와 허용 범위는 원본 스냅샷 ID·digest에 묶인 DRAFT 버전 저장과 별도 ACTIVE 전환으로 관리하며, 새 수집 시 스냅샷에 설정 버전을 고정합니다. 검증된 관리 현금, 주문 계획, 주문 원장, paper 체결과 live 실행은 아직 구현 범위에 포함되지 않습니다.
+현재 구현은 실제 조회 기반 shadow 수직 슬라이스입니다. 토스 계좌·보유자산, KRW·USD 매수 가능 금액과 필요한 USD/KRW 환율을 런타임 검증하고, Prisma/PostgreSQL 불변 스냅샷으로 저장한 뒤 별도 engine 계약을 통해 6개 Web GUI 화면에 표시합니다. 매수 가능 금액은 `valuationEligible=false`인 별도 증거로 저장하며 평가용 관리 현금이나 총 포트폴리오 가치에 자동 합산하지 않습니다. 현재 보유종목의 목표와 허용 범위는 원본 스냅샷 ID·digest에 묶인 DRAFT 버전 저장과 별도 ACTIVE 전환으로 관리하며, 새 수집 시 스냅샷에 설정 버전을 고정합니다. 검증된 관리 현금, 주문 계획, 주문 원장, paper 체결과 live 실행은 아직 구현 범위에 포함되지 않습니다.
 
 ## 2. 목표
 
@@ -46,7 +46,7 @@
 
 2026-07-16에 저장소에 고정한 공식 OpenAPI는 `3.1.0`, API 버전은 `1.2.4`입니다. operation은 OAuth 토큰 발급 1개를 포함해 30개이며, business API는 조회용 GET 23개와 계좌 상태를 변경하는 6개 operation으로 구성됩니다. `packages/broker-toss/openapi/openapi.json`을 기준 스냅샷으로 사용하고 생성 타입과 operation manifest가 이 스냅샷과 일치하는지 테스트합니다.
 
-현재 공식 API는 REST 기반입니다. 별도의 paper 또는 sandbox 주문 API가 확인되지 않았으므로 paper 체결은 애플리케이션 내부에서 구현합니다. 계좌·보유·USD/KRW 환율 응답은 Zod 런타임 스키마로 검증하고 redaction 후 저장합니다. 나머지 조회 operation의 중립 모델 변환과 대사는 후속 구현입니다.
+현재 공식 API는 REST 기반입니다. 별도의 paper 또는 sandbox 주문 API가 확인되지 않았으므로 paper 체결은 애플리케이션 내부에서 구현합니다. 계좌·보유·매수 가능 금액·USD/KRW 환율 응답은 Zod 런타임 스키마로 검증하고 redaction 후 저장합니다. 나머지 조회 operation의 중립 모델 변환과 대사는 후속 구현입니다.
 
 클라이언트 origin은 코드 상수 `https://openapi.tossinvest.com`으로 고정하며 호출자가 임의 `baseUrl`을 주입할 수 없습니다. 토큰과 업무 요청에는 공통 10초 timeout을 적용하고, timeout·네트워크 실패와 비정상 HTTP 상태를 원문 응답 본문을 노출하지 않는 한국어 오류로 정규화합니다. `401`은 캐시 토큰을 폐기하며, `429` 오류에는 정수형 `Retry-After`, rate-limit group과 request ID 메타데이터를 가능한 범위에서 보존합니다.
 
@@ -138,6 +138,11 @@ current_weight = asset_value / portfolio_value
 ```
 
 `buying power`는 주문 가능성 검증에만 사용하며 평가용 현금과 동일시하지 않습니다. 현금 목표를 활성화하려면 보유자산 평가액과 중복되지 않고 미결제 금액과 대기 주문을 정확히 반영하는 현금 source of truth를 fixture 및 실계좌 표본으로 검증해야 합니다. 검증 전에는 사용자가 명시적으로 입력한 `managed_cash`만 평가에 사용할 수 있으며, 입력이 없으면 현금 비중 계산을 차단합니다.
+
+수집한 통화별 `cashBuyingPower`는 `BuyingPowerSnapshot`으로 고정하며 원화 환산 참고값,
+관측 시각과 `valuationEligible=false`를 함께 저장합니다. 이 값이 존재하더라도 사용자가
+관리 범위를 선택하고 현금 source of truth 검증을 통과하기 전에는
+`PortfolioSnapshot.managedCashMinor`를 채우지 않습니다.
 
 ### 5.5 Rebalance Calculator
 

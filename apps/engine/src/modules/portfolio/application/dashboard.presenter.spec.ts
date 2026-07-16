@@ -16,6 +16,16 @@ describe("dashboard presenter with snapshot-bound target", () => {
       upperBasisPoints: 6_500,
       bandStatus: "OUTSIDE_BAND",
     });
+    expect(dashboard.buyingPower).toEqual([
+      {
+        currency: "KRW",
+        amount: "5000000",
+        valueKrwMinor: "5000000",
+        observedAt: "2026-07-16T03:00:00.000Z",
+        valuationEligible: false,
+      },
+    ]);
+    expect(dashboard.verifiedCashMinor).toBeNull();
     expect(dashboard.liveOrdersEnabled).toBe(false);
   });
 
@@ -55,6 +65,15 @@ function dashboardState({ managedCashMinor }: { readonly managedCashMinor: bigin
       totalValueMinor: 1_000_000n,
       managedCashMinor,
       account: { maskedNumber: "****1234" },
+      buyingPower: [
+        {
+          currency: "KRW",
+          amount: "5000000",
+          valueKrwMinor: 5_000_000n,
+          observedAt: new Date("2026-07-16T03:00:00.000Z"),
+          valuationEligible: false,
+        },
+      ],
       holdings: [
         {
           market: "NASDAQ",

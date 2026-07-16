@@ -64,6 +64,14 @@ export const DashboardAllocationSchema = z
     }
   });
 
+export const DashboardBuyingPowerSchema = z.object({
+  currency: z.enum(["KRW", "USD"]),
+  amount: z.string().regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/),
+  valueKrwMinor: z.string().regex(/^\d+$/),
+  observedAt: z.iso.datetime({ offset: true }),
+  valuationEligible: z.literal(false),
+});
+
 export const DashboardSnapshotSchema = z.object({
   state: z.enum(["READY", "EMPTY", "BLOCKED"]),
   mode: z.literal("SHADOW"),
@@ -74,6 +82,7 @@ export const DashboardSnapshotSchema = z.object({
   conclusion: z.enum(["NO_ACTION", "REBALANCE_REQUIRED", "BLOCKED"]),
   totalValueMinor: z.string().regex(/^\d+$/).nullable(),
   verifiedCashMinor: z.string().regex(/^\d+$/).nullable(),
+  buyingPower: z.array(DashboardBuyingPowerSchema).max(2).default([]),
   allocations: z.array(DashboardAllocationSchema),
   blockReason: DashboardBlockReasonSchema.nullable(),
   liveOrdersEnabled: z.literal(false),

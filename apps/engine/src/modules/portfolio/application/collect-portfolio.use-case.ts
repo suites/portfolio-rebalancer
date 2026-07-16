@@ -8,6 +8,7 @@ import {
 
 import type {
   PrismaPortfolioRepository,
+  StoredBuyingPowerInput,
   StoredHoldingInput,
 } from "../infrastructure/persistence/prisma-portfolio.repository";
 import type { TossReadSource } from "../infrastructure/broker/toss-read-source.adapter";
@@ -50,6 +51,14 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
     try {
       const holdingsResponse = await options.source.getHoldings(selected.accountSeq);
       const hasUsd = holdingsResponse.result.items.some(({ currency }) => currency === "USD");
+      const buyingPowerCurrencies: readonly ("KRW" | "USD")[] = hasUsd ? ["KRW", "USD"] : ["KRW"];
+      const buyingPowerResponses = await Promise.all(
+        buyingPowerCurrencies.map(async (currency) => {
+          const response = await options.source.getBuyingPower(selected.accountSeq, currency);
+          validateBuyingPowerCurrency(response.result.currency, currency);
+          return response;
+        }),
+      );
       const exchangeResponse = hasUsd ? await options.source.getUsdKrwRate() : null;
       if (
         exchangeResponse &&
@@ -70,6 +79,32 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
         (total, holding) => total + holding.marketValueKrwMinor,
         0n,
       );
+      const buyingPower: readonly StoredBuyingPowerInput[] = buyingPowerResponses.map(
+        ({ result }) => {
+          if (result.currency === "KRW") {
+            return {
+              currency: result.currency,
+              amount: result.cashBuyingPower,
+              valueKrwMinor: krwAmountToMinor(result.cashBuyingPower),
+            };
+          }
+          if (!exchangeResponse) {
+            throw new CollectionError(
+              "DATA_INVALID",
+              "USD 매수 가능 금액이 있지만 USD/KRW 환율을 확인하지 못했습니다.",
+              "환율 API 상태를 확인한 뒤 다시 수집하세요.",
+            );
+          }
+          return {
+            currency: result.currency,
+            amount: result.cashBuyingPower,
+            valueKrwMinor: usdAmountToKrwMinor(
+              result.cashBuyingPower,
+              exchangeResponse.result.rate,
+            ),
+          };
+        },
+      );
       await options.repository.completeCollection({
         runId: run.id,
         accountId: account.id,
@@ -77,6 +112,7 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
         totalValueMinor,
         usdKrwRate: exchangeResponse?.result.rate ?? null,
         holdings,
+        buyingPower,
         rawResponses: [
           {
             operationId: "getAccounts",
@@ -96,6 +132,12 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
             receivedAt: observedAt,
             body: holdingsResponse,
           },
+          ...buyingPowerResponses.map((response, ordinal) => ({
+            operationId: "getBuyingPower",
+            ordinal,
+            receivedAt: observedAt,
+            body: response,
+          })),
           ...(exchangeResponse
             ? [
                 {
@@ -123,6 +165,16 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
     }
   } finally {
     await options.repository.releaseCollectionLease(leaseOwner);
+  }
+}
+
+function validateBuyingPowerCurrency(actual: string, expected: "KRW" | "USD"): void {
+  if (actual !== expected) {
+    throw new CollectionError(
+      "DATA_INVALID",
+      `${expected} 매수 가능 금액 응답의 통화가 일치하지 않습니다.`,
+      "토스증권 매수 가능 금액 응답을 확인한 뒤 다시 수집하세요.",
+    );
   }
 }
 

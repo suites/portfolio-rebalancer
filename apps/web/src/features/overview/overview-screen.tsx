@@ -70,7 +70,7 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
 
       <section className={styles.summaryGrid} aria-label="포트폴리오 요약">
         <SummaryCard
-          label="총 관리 자산"
+          label="보유주식 평가액"
           value={
             snapshot.totalValueMinor === null
               ? "확인 불가"
@@ -80,6 +80,31 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
           }
           description={`${observedAt} 기준`}
           emphasis="strong"
+        />
+        <SummaryCard
+          label="토스 매수 가능 금액"
+          value={
+            snapshot.buyingPower.length === 0 ? (
+              "미수집"
+            ) : amountsHidden ? (
+              "••••••••"
+            ) : (
+              <span className={styles.buyingPowerValues}>
+                {snapshot.buyingPower.map((item) => (
+                  <span key={item.currency}>
+                    {item.currency === "KRW"
+                      ? formatWon(item.amount)
+                      : `US$${formatDecimal(item.amount)}`}
+                  </span>
+                ))}
+              </span>
+            )
+          }
+          description={
+            snapshot.buyingPower.length === 0
+              ? "토스 계좌에서 아직 수집하지 않았습니다"
+              : "통화별 주문 가능성 참고값이며 서로 합산하지 않습니다"
+          }
         />
         <SummaryCard
           label="검증된 관리 현금"
@@ -163,6 +188,12 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
       </div>
     </>
   );
+}
+
+function formatDecimal(value: string): string {
+  const [whole = "0", fraction] = value.split(".");
+  const formattedWhole = BigInt(whole).toLocaleString("en-US");
+  return fraction === undefined ? formattedWhole : `${formattedWhole}.${fraction}`;
 }
 
 function getConclusionCopy(conclusion: DashboardSnapshotContract["conclusion"]): {

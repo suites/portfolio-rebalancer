@@ -87,7 +87,7 @@ rankings.read                 indicators.read
 | Order                     |    3 | 일반 주문 생성·정정·취소               |
 | Conditional Order         |    3 | 조건주문 생성·수정·취소                |
 
-전체 타입 전송 계층이 있다는 것은 모든 제품 유스케이스가 완성되었다는 뜻이 아닙니다. 현재 계좌·보유자산·필요 시 USD/KRW 환율의 실제 read-only 수집, 런타임 검증과 PostgreSQL 저장까지 연결했습니다. 다음은 아직 미구현입니다.
+전체 타입 전송 계층이 있다는 것은 모든 제품 유스케이스가 완성되었다는 뜻이 아닙니다. 현재 계좌·보유자산·KRW·USD 매수 가능 금액과 필요 시 USD/KRW 환율의 실제 read-only 수집, 런타임 검증과 PostgreSQL 저장까지 연결했습니다. 매수 가능 금액은 관리 현금과 분리된 `valuationEligible=false` 증거로만 사용합니다. 다음은 아직 미구현입니다.
 
 - 나머지 조회 API를 `packages/broker`의 중립 모델로 변환하는 어댑터
 - 가격 API의 관측 시각을 이용한 주문용 freshness 검증

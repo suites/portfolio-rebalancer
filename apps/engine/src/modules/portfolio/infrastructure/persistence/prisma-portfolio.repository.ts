@@ -28,6 +28,12 @@ export interface RedactedResponseInput {
   readonly body: Prisma.InputJsonValue;
 }
 
+export interface StoredBuyingPowerInput {
+  readonly currency: "KRW" | "USD";
+  readonly amount: string;
+  readonly valueKrwMinor: bigint;
+}
+
 export interface StoredTargetAllocationInput {
   readonly assetKey: string;
   readonly label: string;
@@ -126,6 +132,7 @@ export class PrismaPortfolioRepository {
     readonly totalValueMinor: bigint;
     readonly usdKrwRate: string | null;
     readonly holdings: readonly StoredHoldingInput[];
+    readonly buyingPower: readonly StoredBuyingPowerInput[];
     readonly rawResponses: readonly RedactedResponseInput[];
   }): Promise<void> {
     const digest = createHash("sha256")
@@ -135,6 +142,10 @@ export class PrismaPortfolioRepository {
           holdings: input.holdings.map(({ rawPayload: _rawPayload, ...holding }) => ({
             ...holding,
             marketValueKrwMinor: holding.marketValueKrwMinor.toString(),
+          })),
+          buyingPower: input.buyingPower.map((item) => ({
+            ...item,
+            valueKrwMinor: item.valueKrwMinor.toString(),
           })),
         }),
       )
@@ -171,12 +182,21 @@ export class PrismaPortfolioRepository {
           usdKrwRate: input.usdKrwRate,
           digest,
           holdings: { create: [...input.holdings] },
+          buyingPower: {
+            create: input.buyingPower.map((item) => ({
+              ...item,
+              observedAt: input.observedAt,
+              valuationEligible: false,
+            })),
+          },
           checks: {
             create: [
               {
                 ruleCode: "BROKER_DATA_SCHEMA",
                 outcome: CheckOutcome.PASSED,
-                detail: { message: "토스 계좌·보유 응답의 런타임 스키마를 검증했습니다." },
+                detail: {
+                  message: "토스 계좌·보유·매수 가능 금액 응답의 런타임 스키마를 검증했습니다.",
+                },
                 checkedAt: input.observedAt,
               },
             ],
@@ -200,6 +220,7 @@ export class PrismaPortfolioRepository {
       include: {
         account: true,
         holdings: { orderBy: [{ market: "asc" }, { symbol: "asc" }] },
+        buyingPower: { orderBy: { currency: "asc" } },
         targetConfigVersion: {
           include: { allocations: { orderBy: { assetKey: "asc" } } },
         },

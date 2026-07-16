@@ -69,4 +69,50 @@ describe("DashboardSnapshotSchema", () => {
 
     expect(result.success).toBe(true);
   });
+
+  it("매수 가능 금액을 관리 현금과 구분된 비평가 증거로만 허용한다", () => {
+    const base = {
+      state: "BLOCKED",
+      mode: "SHADOW",
+      dataSource: "TOSS",
+      brokerConnection: "CONNECTED",
+      accountLabel: "**** 4821",
+      observedAt: "2026-07-16T09:00:00+09:00",
+      conclusion: "BLOCKED",
+      totalValueMinor: "1000",
+      verifiedCashMinor: null,
+      allocations: [],
+      blockReason: null,
+      liveOrdersEnabled: false,
+    };
+
+    expect(
+      DashboardSnapshotSchema.safeParse({
+        ...base,
+        buyingPower: [
+          {
+            currency: "KRW",
+            amount: "5000000",
+            valueKrwMinor: "5000000",
+            observedAt: "2026-07-16T09:00:00+09:00",
+            valuationEligible: false,
+          },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      DashboardSnapshotSchema.safeParse({
+        ...base,
+        buyingPower: [
+          {
+            currency: "KRW",
+            amount: "5000000",
+            valueKrwMinor: "5000000",
+            observedAt: "2026-07-16T09:00:00+09:00",
+            valuationEligible: true,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
 });

@@ -209,6 +209,82 @@ describe("PrismaPortfolioRepository target settings", () => {
   });
 });
 
+describe("PrismaPortfolioRepository collection evidence", () => {
+  it("매수 가능 금액을 관리 현금과 분리된 append-only snapshot 자식으로 저장한다", async () => {
+    const createSnapshot = vi.fn().mockResolvedValue({ id: "snapshot-1" });
+    const transaction = {
+      targetConfigVersion: {
+        findFirst: vi.fn().mockResolvedValue(null),
+      },
+      rawBrokerResponse: {
+        createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      portfolioSnapshot: {
+        create: createSnapshot,
+      },
+      collectionRun: {
+        update: vi.fn().mockResolvedValue({ id: "run-1" }),
+      },
+    };
+    const repository = repositoryWithTransaction(transaction);
+    const observedAt = new Date("2026-07-16T03:00:00.000Z");
+
+    await repository.completeCollection({
+      runId: "run-1",
+      accountId: "account-1",
+      observedAt,
+      totalValueMinor: 3_142_919n,
+      usdKrwRate: "1380",
+      holdings: [],
+      buyingPower: [
+        { currency: "KRW", amount: "5000000", valueKrwMinor: 5_000_000n },
+        { currency: "USD", amount: "10.5", valueKrwMinor: 14_490n },
+      ],
+      rawResponses: [],
+    });
+
+    const snapshotInput = createSnapshot.mock.calls[0]?.[0] as
+      | {
+          data: {
+            managedCashMinor: bigint | null;
+            totalValueMinor: bigint;
+            buyingPower: {
+              create: readonly {
+                currency: string;
+                amount: string;
+                valueKrwMinor: bigint;
+                observedAt: Date;
+                valuationEligible: boolean;
+              }[];
+            };
+          };
+        }
+      | undefined;
+    expect(snapshotInput?.data).toMatchObject({
+      managedCashMinor: null,
+      totalValueMinor: 3_142_919n,
+      buyingPower: {
+        create: [
+          {
+            currency: "KRW",
+            amount: "5000000",
+            valueKrwMinor: 5_000_000n,
+            observedAt,
+            valuationEligible: false,
+          },
+          {
+            currency: "USD",
+            amount: "10.5",
+            valueKrwMinor: 14_490n,
+            observedAt,
+            valuationEligible: false,
+          },
+        ],
+      },
+    });
+  });
+});
+
 function repositoryWithTransaction(transaction: object) {
   const database = {
     $transaction: vi.fn((callback: (value: object) => unknown) =>

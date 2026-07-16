@@ -13,6 +13,7 @@ import type {
   SellableQuantityQuote,
   SymbolCode,
 } from "./models";
+import type { Currency } from "@portfolio-rebalancer/domain";
 
 export interface AccountReader {
   listAccounts(): Promise<readonly BrokerAccount[]>;
@@ -47,7 +48,7 @@ export interface ConditionalOrderReader {
 }
 
 export interface PreTradeReader {
-  getBuyingPower(accountId: AccountId, symbol: SymbolCode): Promise<BuyingPowerQuote>;
+  getBuyingPower(accountId: AccountId, currency: Currency): Promise<BuyingPowerQuote>;
   getSellableQuantity(accountId: AccountId, symbol: SymbolCode): Promise<SellableQuantityQuote>;
   getCommission(accountId: AccountId, symbol: SymbolCode): Promise<CommissionQuote>;
 }
