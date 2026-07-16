@@ -83,7 +83,7 @@ apps/web -> apps/engine -> application -> broker ports -> domain
 - `packages/broker`: 계좌, 보유, 시세, 호가, 종목, 캘린더, 일반·조건주문 조회와 pretrade 기능을 드러내는 capability와 좁은 포트
 - `packages/broker-toss`: 공식 OpenAPI 생성 타입, 인증과 토스 전송 계층. 중립 어댑터는 후속 범위
 - `packages/application`: 필요한 capability를 조합하는 유스케이스
-- `apps/engine`: Toss 자격증명, 수집, Prisma와 PostgreSQL을 소유하는 Fastify/Vercel Function
+- `apps/engine`: Toss 자격증명, 수집, Prisma와 PostgreSQL을 소유하는 NestJS 11/Vercel Function. Fastify adapter를 사용하며 HTTP 계층은 Controller, Guard와 singleton Provider로 구성한다.
 - `apps/web`: engine 결과를 공유 Zod 계약으로 재검증한 뒤 브라우저에 전달
 
 새 증권사는 별도 어댑터 패키지에서 중립 포트를 구현하고, 지원하지 않는 기능은 capability에 선언하지 않습니다. 최소 공통분모를 넓혀 증권사 차이를 숨기지 않으며, 필수 capability가 없으면 주문 계획을 만들지 않고 한국어 오류로 차단합니다. 브로커 원본 응답과 상태는 대사·감사를 위해 보존하되 도메인 모델과 분리합니다.

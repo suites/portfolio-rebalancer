@@ -165,7 +165,7 @@ rankings.read                 indicators.read
 
 ## 8. 현재 engine 및 Web API
 
-Fastify engine은 다음 내부 route를 제공합니다. dashboard와 refresh는 `ENGINE_SERVICE_TOKEN`, Cron은 별도 `CRON_SECRET`으로 보호합니다.
+NestJS 11 engine은 Fastify adapter로 다음 내부 route를 제공합니다. dashboard와 refresh는 `ENGINE_SERVICE_TOKEN` Guard, Cron은 별도 `CRON_SECRET` Guard로 보호합니다.
 
 - `GET /internal/v1/health`
 - `GET /internal/v1/dashboard`

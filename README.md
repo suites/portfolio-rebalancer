@@ -22,7 +22,7 @@
 - 계좌 변경 메서드의 네트워크 전송 하드 차단(`TOSS_LIVE_TRADING_DISABLED`)
 - 계좌·보유·시세·호가·종목·주문 조회를 분리한 capability 기반 중립 포트
 - Toss transport가 제공하는 read-only capability 18개와 write capability 미제공
-- Fastify 기반 별도 engine과 Next.js Web/BFF의 모노레포 분리
+- NestJS 11과 Fastify adapter 기반 별도 engine, Next.js Web/BFF의 모노레포 분리
 - Prisma 7과 PostgreSQL 17 기반 계좌 참조·수집 실행·redacted 응답·불변 스냅샷
 - Vercel web/engine 별도 Project, 평일 09:00 KST Cron과 PostgreSQL collection lease
 
@@ -71,7 +71,7 @@ pnpm toss:sync
 ```text
 apps/
 ├── web/                 Next.js Web GUI와 engine BFF
-└── engine/              Fastify API, Toss 수집과 Vercel Cron 진입점
+└── engine/              NestJS API, Toss 수집과 Vercel Cron 진입점
 packages/
 ├── domain/              bigint 기반 값 객체와 순수 비중 계산
 ├── broker/              증권사 중립 모델, capability와 좁은 포트
@@ -123,6 +123,7 @@ Production engine에는 `TOSSINVEST_CLIENT_ID`, `TOSSINVEST_CLIENT_SECRET`, `DAT
 - [Web GUI 설계](docs/WEB_UI.md)
 - [토스증권 API 연동](docs/API_TOSS.md)
 - [아키텍처 결정 기록](docs/adr/0001-typescript-hexagonal-monorepo.md)
+- [NestJS engine 결정 기록](docs/adr/0002-nestjs-engine-on-vercel.md)
 - [에이전트 작업 지침](AGENTS.md)
 
 ## 개발 단계

@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["icn1"],
   "functions": {
-    "src/index.ts": {
+    "src/main.ts": {
       "maxDuration": 120,
       "memory": 1024
     }

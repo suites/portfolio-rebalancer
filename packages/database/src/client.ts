@@ -9,7 +9,7 @@ export function createDatabaseClient(databaseUrl: string): PrismaClient {
   const adapter = new PrismaPg(
     {
       connectionString: databaseUrl,
-      max: 5,
+      max: 2,
       connectionTimeoutMillis: 5_000,
       idleTimeoutMillis: 30_000,
     },

@@ -70,6 +70,8 @@
 
 ### Phase 3B — 운영 가능한 조회 어댑터
 
+- [x] engine HTTP 계층을 NestJS 11 모듈·DI·Controller·Guard 구조로 전환
+- [x] Vercel zero-config `src/main.ts` 진입점과 Prisma 생성 단계 구성
 - [x] Vercel 민감 환경변수에서 OAuth 자격증명을 로딩하는 운영 구성
 - [x] 계좌 및 보유 주식 조회
 - [ ] 가격, 종목, 시장 캘린더 조회
@@ -86,6 +88,7 @@
 - [ ] request ID 감사 로그 저장
 - [x] Vercel Static IPs 또는 Secure Compute 기반 고정 출구 IP 방식 결정
 - [ ] `doctor`에서 토큰, 허용 IP, 계좌 및 조회 API를 주문 없이 점검
+- [ ] collection lease heartbeat와 fencing token 기반 최종 쓰기 검증
 
 ## Phase 4 — Shadow 모드
 

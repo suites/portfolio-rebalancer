@@ -1,10 +1,10 @@
+import { fileURLToPath } from "node:url";
+
+import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
 
 const EnvironmentSchema = z.object({
-  DATABASE_URL: z
-    .string()
-    .min(1)
-    .default("postgresql://portfolio:portfolio_local@127.0.0.1:15432/portfolio_rebalancer"),
+  DATABASE_URL: z.string().min(1),
   TOSSINVEST_CLIENT_ID: z.string().min(1).optional(),
   TOSSINVEST_CLIENT_SECRET: z.string().min(1).optional(),
   TOSSINVEST_ACCOUNT_SEQ: z.coerce.number().int().safe().positive().optional(),
@@ -20,12 +20,26 @@ const EnvironmentSchema = z.object({
 export type EngineConfig = z.infer<typeof EnvironmentSchema>;
 
 export function loadEngineConfig(environment: NodeJS.ProcessEnv): EngineConfig {
-  const result = EnvironmentSchema.safeParse(environment);
+  const result = EnvironmentSchema.safeParse({
+    ...environment,
+    DATABASE_URL:
+      environment.DATABASE_URL ??
+      (environment.VERCEL === "1"
+        ? undefined
+        : "postgresql://portfolio:portfolio_local@127.0.0.1:15432/portfolio_rebalancer"),
+  });
   if (!result.success) {
     const missing = result.error.issues.map(({ path }) => path.join(".")).join(", ");
     throw new Error(`엔진 환경설정을 확인할 수 없습니다: ${missing}`);
   }
   return result.data;
+}
+
+export function loadEngineConfigFromProcess(): EngineConfig {
+  if (process.env.VERCEL !== "1") {
+    loadDotenv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
+  }
+  return loadEngineConfig(process.env);
 }
 
 export function assertVercelEgressConfigured(config: EngineConfig): void {
