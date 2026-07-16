@@ -32,7 +32,7 @@ export class PortfolioController {
   @UseGuards(CronTokenGuard)
   async collectFromCron(@Res({ passthrough: true }) reply: FastifyReply) {
     const result = await this.portfolio.collectFromCron();
-    if (!result.ok) {
+    if ("code" in result) {
       reply.status(503);
       return { ok: false as const, code: result.code };
     }
