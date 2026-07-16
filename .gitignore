@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 .next/
+apps/web/next-env.d.ts
 .pnpm-store/
 .openapi-sync-*/
 coverage/
