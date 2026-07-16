@@ -24,6 +24,21 @@
 - `valuationEligible`는 현재 항상 `false`다.
 - `verifiedCashMinor`와 `totalValueMinor`는 이 값 때문에 변경되지 않는다.
 
+## Target draft 밴드 계약
+
+기본 입력은 목표와 정책만 전달한다.
+
+```json
+{
+  "assetKey": "KR:005930",
+  "targetBasisPoints": 6000,
+  "bandPolicy": { "mode": "AUTO", "version": "MIXED_V1" }
+}
+```
+
+응답과 저장 버전에는 확정된 `lowerBasisPoints`, `upperBasisPoints`와 같은
+`bandPolicy`가 포함된다. `CUSTOM_V1`은 고급 호출에서만 명시적 범위를 받는다.
+
 - `GET /internal/v1/health`: live 주문 비활성 상태
 - `GET /internal/v1/dashboard`: 저장된 최신 실제 snapshot
 - `POST /internal/v1/portfolio/refresh`: service token, Toss read-only 수집

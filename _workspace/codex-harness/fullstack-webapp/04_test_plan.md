@@ -14,6 +14,9 @@
 - heartbeat 실패 시 계좌·스냅샷 쓰기 없음
 - 최종 transaction fencing token 불일치 시 snapshot evidence 쓰기 없음
 - 최신 dashboard snapshot을 최근 수집 계좌로 제한
+- 자동 밴드 0, 1, 100, 1000, 1999, 2000, 9999, 10000bp 경계
+- 상대 편차 올림, 500bp 상한과 0/10000bp clamp
+- 기본 Web form에 목표 필드만 존재하고 CUSTOM 역전 범위는 계약에서 거부
 
 - Toss 계좌·보유·환율 런타임 schema rejection
 - USD/KRW bigint 환산과 KRW fractional rejection

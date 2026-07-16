@@ -88,6 +88,7 @@ function presentVersion(version: {
     readonly targetBasisPoints: number;
     readonly lowerBasisPoints: number;
     readonly upperBasisPoints: number;
+    readonly bandPolicy: unknown;
   }[];
 }) {
   return {
@@ -100,6 +101,7 @@ function presentVersion(version: {
       targetBasisPoints: allocation.targetBasisPoints,
       lowerBasisPoints: allocation.lowerBasisPoints,
       upperBasisPoints: allocation.upperBasisPoints,
+      bandPolicy: allocation.bandPolicy,
     })),
   };
 }

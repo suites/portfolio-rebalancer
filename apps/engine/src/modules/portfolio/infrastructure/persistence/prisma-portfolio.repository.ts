@@ -48,6 +48,14 @@ export interface StoredTargetAllocationInput {
   readonly targetBasisPoints: number;
   readonly lowerBasisPoints: number;
   readonly upperBasisPoints: number;
+  readonly bandPolicy:
+    | { readonly mode: "AUTO"; readonly version: "MIXED_V1" }
+    | {
+        readonly mode: "CUSTOM";
+        readonly version: string;
+        readonly lowerBasisPoints: number;
+        readonly upperBasisPoints: number;
+      };
 }
 
 export interface StoredTargetDraftInput {
@@ -311,9 +319,10 @@ export class PrismaPortfolioRepository {
         targetBasisPoints: allocation.targetBasisPoints,
         lowerBasisPoints: allocation.lowerBasisPoints,
         upperBasisPoints: allocation.upperBasisPoints,
+        bandPolicy: allocation.bandPolicy,
       }));
     const source = {
-      version: 1,
+      version: 2,
       managedCashMinor: null,
       sourceSnapshotId: input.sourceSnapshotId,
       sourceSnapshotDigest: input.sourceSnapshotDigest,
@@ -380,6 +389,7 @@ export class PrismaPortfolioRepository {
                 targetBasisPoints: allocation.targetBasisPoints,
                 lowerBasisPoints: allocation.lowerBasisPoints,
                 upperBasisPoints: allocation.upperBasisPoints,
+                bandPolicy: allocation.bandPolicy,
                 instruments: {
                   create: {
                     market: allocation.market,

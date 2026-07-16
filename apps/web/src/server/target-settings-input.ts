@@ -3,23 +3,15 @@ import { TargetSettingsDraftInputSchema } from "@portfolio-rebalancer/contracts"
 export function targetSettingsInputFromFormData(formData: FormData) {
   const assetKeys = formData.getAll("assetKey");
   const targets = formData.getAll("targetPercent");
-  const lowers = formData.getAll("lowerPercent");
-  const uppers = formData.getAll("upperPercent");
-  if (
-    assetKeys.length === 0 ||
-    targets.length !== assetKeys.length ||
-    lowers.length !== assetKeys.length ||
-    uppers.length !== assetKeys.length
-  ) {
-    throw new Error("모든 보유자산의 목표와 허용 범위를 입력하세요.");
+  if (assetKeys.length === 0 || targets.length !== assetKeys.length) {
+    throw new Error("모든 보유자산의 목표 비중을 입력하세요.");
   }
 
   return TargetSettingsDraftInputSchema.parse({
     allocations: assetKeys.map((key, index) => ({
       assetKey: requiredString(key),
       targetBasisPoints: percentToBasisPoints(requiredString(targets[index])),
-      lowerBasisPoints: percentToBasisPoints(requiredString(lowers[index])),
-      upperBasisPoints: percentToBasisPoints(requiredString(uppers[index])),
+      bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
     })),
   });
 }

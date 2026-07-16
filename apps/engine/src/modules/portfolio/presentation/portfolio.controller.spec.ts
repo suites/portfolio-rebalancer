@@ -141,8 +141,6 @@ describe("NestJS engine HTTP contract", () => {
           {
             assetKey: "NASDAQ:AAPL",
             targetBasisPoints: 9_999,
-            lowerBasisPoints: 9_000,
-            upperBasisPoints: 10_000,
           },
         ],
       },

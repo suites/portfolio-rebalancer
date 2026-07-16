@@ -9,6 +9,7 @@ import {
   type TargetSettingsDraftInputContract,
   type TargetSettingsSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
+import { resolveAutoAllocationBand } from "@portfolio-rebalancer/domain";
 
 import { ENGINE_CONFIG } from "../../../config/engine-config.token";
 import { assertVercelEgressConfigured, type EngineConfig } from "../../../config/engine.config";
@@ -105,8 +106,10 @@ export class PortfolioService {
         if (!holding) {
           throw new TargetSettingsError("ASSET_SET_MISMATCH", "보유자산을 찾을 수 없습니다.");
         }
+        const band = resolveTargetBand(allocation);
         return {
           ...allocation,
+          ...band,
           label: holding.name,
           market: holding.market,
           symbol: holding.symbol,
@@ -186,6 +189,23 @@ export class PortfolioService {
       return { ok: false, code };
     }
   }
+}
+
+function resolveTargetBand(allocation: TargetSettingsDraftInputContract["allocations"][number]): {
+  readonly lowerBasisPoints: number;
+  readonly upperBasisPoints: number;
+} {
+  if (allocation.bandPolicy.mode === "CUSTOM") {
+    return {
+      lowerBasisPoints: allocation.bandPolicy.lowerBasisPoints,
+      upperBasisPoints: allocation.bandPolicy.upperBasisPoints,
+    };
+  }
+  const resolved = resolveAutoAllocationBand(BigInt(allocation.targetBasisPoints));
+  return {
+    lowerBasisPoints: Number(resolved.lowerBasisPoints),
+    upperBasisPoints: Number(resolved.upperBasisPoints),
+  };
 }
 
 function targetSourceMatchesSnapshot(

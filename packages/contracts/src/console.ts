@@ -7,11 +7,40 @@ const assetKey = z
   .max(160)
   .regex(/^[^:]+:[^:]+$/);
 
+const AutoBandPolicySchema = z.object({
+  mode: z.literal("AUTO"),
+  version: z.literal("MIXED_V1").default("MIXED_V1"),
+});
+
+const CustomBandPolicyInputSchema = z.object({
+  mode: z.literal("CUSTOM"),
+  version: z.literal("CUSTOM_V1").default("CUSTOM_V1"),
+  lowerBasisPoints: basisPoints,
+  upperBasisPoints: basisPoints,
+});
+
+export const TargetBandPolicyInputSchema = z.discriminatedUnion("mode", [
+  AutoBandPolicySchema,
+  CustomBandPolicyInputSchema,
+]);
+
+export const TargetResolvedBandPolicySchema = z.discriminatedUnion("mode", [
+  AutoBandPolicySchema,
+  z.object({
+    mode: z.literal("CUSTOM"),
+    version: z.string().min(1),
+    lowerBasisPoints: basisPoints,
+    upperBasisPoints: basisPoints,
+  }),
+]);
+
 export const TargetAllocationInputSchema = z.object({
   assetKey,
   targetBasisPoints: basisPoints,
-  lowerBasisPoints: basisPoints,
-  upperBasisPoints: basisPoints,
+  bandPolicy: TargetBandPolicyInputSchema.default({
+    mode: "AUTO",
+    version: "MIXED_V1",
+  }),
 });
 
 export const TargetSettingsDraftInputSchema = z
@@ -37,8 +66,9 @@ export const TargetSettingsDraftInputSchema = z
 
     allocations.forEach((allocation, index) => {
       if (
-        allocation.lowerBasisPoints > allocation.targetBasisPoints ||
-        allocation.targetBasisPoints > allocation.upperBasisPoints
+        allocation.bandPolicy.mode === "CUSTOM" &&
+        (allocation.bandPolicy.lowerBasisPoints > allocation.targetBasisPoints ||
+          allocation.targetBasisPoints > allocation.bandPolicy.upperBasisPoints)
       ) {
         context.addIssue({
           code: "custom",
@@ -49,9 +79,30 @@ export const TargetSettingsDraftInputSchema = z
     });
   });
 
-export const TargetSettingsAllocationSchema = TargetAllocationInputSchema.extend({
-  label: z.string().min(1),
-});
+export const TargetSettingsAllocationSchema = z
+  .object({
+    assetKey,
+    label: z.string().min(1),
+    targetBasisPoints: basisPoints,
+    lowerBasisPoints: basisPoints,
+    upperBasisPoints: basisPoints,
+    bandPolicy: TargetResolvedBandPolicySchema,
+  })
+  .superRefine((allocation, context) => {
+    if (
+      allocation.lowerBasisPoints > allocation.targetBasisPoints ||
+      allocation.targetBasisPoints > allocation.upperBasisPoints
+    ) {
+      context.addIssue({ code: "custom", message: "저장된 목표 밴드 순서가 올바르지 않습니다." });
+    }
+    if (
+      allocation.bandPolicy.mode === "CUSTOM" &&
+      (allocation.bandPolicy.lowerBasisPoints !== allocation.lowerBasisPoints ||
+        allocation.bandPolicy.upperBasisPoints !== allocation.upperBasisPoints)
+    ) {
+      context.addIssue({ code: "custom", message: "수동 밴드 정책과 저장된 범위가 다릅니다." });
+    }
+  });
 
 export const TargetSettingsVersionSchema = z.object({
   version: z.number().int().positive(),

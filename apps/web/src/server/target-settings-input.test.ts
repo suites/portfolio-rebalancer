@@ -13,13 +13,20 @@ describe("target settings form parser", () => {
     const formData = new FormData();
     formData.append("assetKey", "NASDAQ:AAPL");
     formData.append("targetPercent", "60");
-    formData.append("lowerPercent", "55");
-    formData.append("upperPercent", "65");
     formData.append("assetKey", "NYSE:BRK.B");
     formData.append("targetPercent", "40");
-    formData.append("lowerPercent", "35");
-    formData.append("upperPercent", "45");
 
-    expect(targetSettingsInputFromFormData(formData).allocations).toHaveLength(2);
+    expect(targetSettingsInputFromFormData(formData).allocations).toEqual([
+      {
+        assetKey: "NASDAQ:AAPL",
+        targetBasisPoints: 6_000,
+        bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
+      },
+      {
+        assetKey: "NYSE:BRK.B",
+        targetBasisPoints: 4_000,
+        bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
+      },
+    ]);
   });
 });

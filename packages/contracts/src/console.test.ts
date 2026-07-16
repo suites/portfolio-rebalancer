@@ -6,33 +6,27 @@ const validAllocations = [
   {
     assetKey: "NASDAQ:AAPL",
     targetBasisPoints: 6_000,
-    lowerBasisPoints: 5_500,
-    upperBasisPoints: 6_500,
   },
   {
     assetKey: "NYSE:BRK.B",
     targetBasisPoints: 4_000,
-    lowerBasisPoints: 3_500,
-    upperBasisPoints: 4_500,
   },
 ];
 
 describe("target settings contract", () => {
-  it("10000bp인 고유 자산 목표와 밴드를 허용한다", () => {
-    expect(
-      TargetSettingsDraftInputSchema.safeParse({ allocations: validAllocations }).success,
-    ).toBe(true);
+  it("10000bp인 고유 자산 목표에 AUTO 밴드 정책을 기본 적용한다", () => {
+    const result = TargetSettingsDraftInputSchema.parse({ allocations: validAllocations });
+
+    expect(result.allocations.every(({ bandPolicy }) => bandPolicy.mode === "AUTO")).toBe(true);
   });
 
-  it("합계 오류, 중복 자산과 뒤집힌 밴드를 거부한다", () => {
+  it("합계 오류와 중복 자산을 거부한다", () => {
     const invalid = TargetSettingsDraftInputSchema.safeParse({
       allocations: [
         validAllocations[0],
         {
           ...validAllocations[0],
           targetBasisPoints: 3_000,
-          lowerBasisPoints: 3_500,
-          upperBasisPoints: 2_500,
         },
       ],
     });
@@ -43,8 +37,30 @@ describe("target settings contract", () => {
         expect.arrayContaining([
           expect.stringContaining("한 번씩"),
           expect.stringContaining("10000bp"),
-          expect.stringContaining("하한"),
         ]),
+      );
+    }
+  });
+
+  it("고급 CUSTOM 밴드는 하한, 목표, 상한 순서를 검증한다", () => {
+    const invalid = TargetSettingsDraftInputSchema.safeParse({
+      allocations: [
+        {
+          assetKey: "NASDAQ:AAPL",
+          targetBasisPoints: 10_000,
+          bandPolicy: {
+            mode: "CUSTOM",
+            lowerBasisPoints: 9_000,
+            upperBasisPoints: 8_000,
+          },
+        },
+      ],
+    });
+
+    expect(invalid.success).toBe(false);
+    if (!invalid.success) {
+      expect(invalid.error.issues.map(({ message }) => message)).toContain(
+        "허용 범위는 하한, 목표, 상한 순서여야 합니다.",
       );
     }
   });

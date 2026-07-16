@@ -15,14 +15,12 @@ const validInput = {
     {
       assetKey: "NASDAQ:AAPL",
       targetBasisPoints: 6_000,
-      lowerBasisPoints: 5_500,
-      upperBasisPoints: 6_500,
+      bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
     {
       assetKey: "NYSE:BRK.B",
       targetBasisPoints: 4_000,
-      lowerBasisPoints: 3_500,
-      upperBasisPoints: 4_500,
+      bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
   ],
 };
@@ -44,6 +42,10 @@ describe("PortfolioService target settings", () => {
       label: "Apple",
       market: "NASDAQ",
       symbol: "AAPL",
+      targetBasisPoints: 6_000,
+      lowerBasisPoints: 5_500,
+      upperBasisPoints: 6_500,
+      bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
     });
   });
 
@@ -54,8 +56,7 @@ describe("PortfolioService target settings", () => {
         {
           assetKey: "NASDAQ:AAPL",
           targetBasisPoints: 10_000,
-          lowerBasisPoints: 9_000,
-          upperBasisPoints: 10_000,
+          bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
         },
       ],
     };

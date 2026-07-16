@@ -8,8 +8,9 @@
 - 통화별 buying-power를 불변 저장하고 `valuationEligible=false`로 고정했다.
 - 보유주식 평가액, 매수 가능 금액과 관리 현금을 UI에서 분리했다.
 - 로컬 PostgreSQL `127.0.0.1:15432/portfolio_rebalancer`에 migration을 적용했다.
-- `pnpm verify`는 변경 후 96개 테스트를 포함해 통과했다.
+- `pnpm verify`는 변경 후 107개 테스트를 포함해 통과했다.
 - collection fencing/heartbeat와 최신 수집 계좌 범위 고정을 완료했다.
+- 목표 입력을 서버 확정 `AUTO/MIXED_V1` 밴드로 단순화하고 policy version을 저장한다.
 
 - 실제 주문 전송 차단 유지: 통과
 - 브라우저/Next의 Toss secret 접근 금지: 통과

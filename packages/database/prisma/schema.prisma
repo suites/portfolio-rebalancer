@@ -85,6 +85,7 @@ model TargetAllocation {
   targetBasisPoints Int    @map("target_basis_points")
   lowerBasisPoints  Int    @map("lower_basis_points")
   upperBasisPoints  Int    @map("upper_basis_points")
+  bandPolicy        Json   @map("band_policy") @db.JsonB
 
   configVersion TargetConfigVersion @relation(fields: [configVersionId], references: [id], onDelete: Restrict)
   instruments   TargetInstrument[]

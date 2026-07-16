@@ -26,7 +26,7 @@ export function SettingsScreen({
       <ConsolePageHeader
         eyebrow="설정"
         title="목표 비중 설정"
-        description="보유자산별 목표 비중과 허용 범위를 설정하세요."
+        description="보유자산별 목표 비중을 정하면 허용 범위는 서버가 자동 계산합니다."
       />
       <div className={styles.pageStack}>
         {feedback ? (
@@ -71,7 +71,7 @@ export function SettingsScreen({
             <div className={styles.sectionHeader}>
               <div>
                 <h2 id="target-form-title">목표 초안</h2>
-                <p>하한, 목표, 상한 순서로 입력하고 전체 목표 합계를 100%로 맞춰 주세요.</p>
+                <p>목표 합계를 100%로 맞춰 주세요. 허용 범위는 목표의 25%, 최대 ±5%p입니다.</p>
               </div>
               {settings.draftVersion ? (
                 <Badge tone="attention">초안 v{settings.draftVersion.version}</Badge>
@@ -93,21 +93,18 @@ export function SettingsScreen({
                       <input type="hidden" name="assetKey" value={asset.assetKey} />
                       <div className={styles.fieldGrid}>
                         <PercentField
-                          label="하한"
-                          name="lowerPercent"
-                          value={configured?.lowerBasisPoints}
-                        />
-                        <PercentField
                           label="목표"
                           name="targetPercent"
                           value={configured?.targetBasisPoints}
                         />
-                        <PercentField
-                          label="상한"
-                          name="upperPercent"
-                          value={configured?.upperBasisPoints}
-                        />
                       </div>
+                      <p className={styles.fieldDescription}>
+                        {configured
+                          ? `저장된 허용 범위 ${formatBasisPoints(
+                              configured.lowerBasisPoints,
+                            )}–${formatBasisPoints(configured.upperBasisPoints)}`
+                          : "초안 저장 시 MIXED_V1 정책으로 하한·상한을 계산합니다."}
+                      </p>
                     </fieldset>
                   );
                 })}
@@ -222,7 +219,7 @@ function feedbackFor(
   if (status === "invalid")
     return {
       title: "목표 초안을 저장하지 못했습니다.",
-      description: "합계 100%, 모든 보유자산과 하한·목표·상한 순서를 확인하세요.",
+      description: "모든 보유자산의 목표 합계가 정확히 100%인지 확인하세요.",
       tone: "blocked",
     };
   if (status === "activate-invalid")
