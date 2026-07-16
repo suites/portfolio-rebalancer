@@ -1,5 +1,6 @@
 import type {
   AccountId,
+  BuyingPowerQuote,
   CommissionRatePeriod,
   CommissionRateSchedule,
   InstrumentIdentifier,
@@ -21,6 +22,7 @@ import type { Currency, DecimalString } from "@portfolio-rebalancer/domain";
 
 import type {
   TossCommissionsResponse,
+  TossBuyingPowerResponse,
   TossKrAfterMarketSession,
   TossKrMarketCalendarResponse,
   TossKrMarketDay,
@@ -56,6 +58,9 @@ export type TossNeutralReadModelIssue =
   | "AUCTION_BOUNDARY_INVALID"
   | "SELLABLE_QUANTITY_NEGATIVE"
   | "SELLABLE_QUANTITY_NOT_INTEGER"
+  | "BUYING_POWER_CURRENCY_MISMATCH"
+  | "BUYING_POWER_NEGATIVE"
+  | "BUYING_POWER_NOT_INTEGER"
   | "REQUESTED_MARKETS_EMPTY"
   | "REQUESTED_MARKET_DUPLICATE"
   | "COMMISSION_RATE_NEGATIVE"
@@ -267,6 +272,31 @@ export function normalizeTossSellableQuantity(
     marketCountry: instrument.marketCountry,
     symbol: instrument.symbol,
     quantity: quantity as DecimalString,
+  };
+}
+
+export function normalizeTossBuyingPower(
+  response: TossBuyingPowerResponse,
+  accountId: AccountId,
+  requestedCurrency: Currency,
+): BuyingPowerQuote {
+  const { cashBuyingPower, currency } = response.result;
+  if (currency !== requestedCurrency) {
+    fail(
+      "BUYING_POWER_CURRENCY_MISMATCH",
+      `매수 가능 금액 응답 통화 ${currency}가 요청 통화 ${requestedCurrency}와 다릅니다.`,
+    );
+  }
+  if (hasNegativeSign(cashBuyingPower)) {
+    fail("BUYING_POWER_NEGATIVE", `${currency} 매수 가능 금액이 음수입니다.`);
+  }
+  if (currency === "KRW" && !/^\d+$/.test(cashBuyingPower)) {
+    fail("BUYING_POWER_NOT_INTEGER", "원화 매수 가능 금액은 원 단위 정수여야 합니다.");
+  }
+  return {
+    accountId,
+    currency,
+    cashBuyingPower: cashBuyingPower as DecimalString,
   };
 }
 

@@ -7,7 +7,7 @@ import type { EngineConfig } from "../../../../config/engine.config";
 import { CollectionError } from "../../domain/collection.error";
 import {
   createTossReadSource,
-  type TossReadSource,
+  type TossPretradeReadSource,
   type TossResponseValidationEvent,
 } from "./toss-read-source.adapter";
 import { TossRequestAuditContext } from "./toss-request-audit.context";
@@ -17,7 +17,7 @@ import {
 } from "../persistence/prisma-portfolio.repository";
 
 export interface TossRuntime {
-  readonly source: TossReadSource;
+  readonly source: TossPretradeReadSource;
   readonly accountReferenceKey: string;
   readonly requestAuditContext: TossRequestAuditContext;
 }
@@ -67,15 +67,16 @@ export class TossRuntimeService {
     return attempt.id;
   }
 
-  private async appendResponseValidation(event: TossResponseValidationEvent): Promise<void> {
+  private async appendResponseValidation(event: TossResponseValidationEvent): Promise<string> {
     const validatedAt = new Date(event.validatedAt);
     if (!Number.isFinite(validatedAt.getTime())) {
       throw new Error("토스증권 응답 검증 감사 시각이 올바르지 않습니다.");
     }
-    await this.repository.appendBrokerResponseValidation({
+    const validation = await this.repository.appendBrokerResponseValidation({
       ...event,
       validatedAt,
     });
+    return validation.id;
   }
 }
 

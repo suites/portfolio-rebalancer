@@ -2,6 +2,7 @@ import type {
   AccountId,
   BrokerId,
   BrokerReadResult,
+  BuyingPowerQuote,
   CommissionRateSchedule,
   InstrumentIdentifier,
   IsoDate,
@@ -31,6 +32,7 @@ import {
   getTossResponseAuditReference,
   getTossResponseMetadata,
   normalizeTossCommissions,
+  normalizeTossBuyingPower,
   normalizeTossKrMarketCalendar,
   normalizeTossOrderbook,
   normalizeTossPriceLimit,
@@ -57,6 +59,7 @@ export interface TossAccountReadReference {
 
 export interface TossNeutralReadResult<Value> extends BrokerReadResult<Value> {
   readonly redactedBody: unknown;
+  readonly responseValidationId: string | null;
 }
 
 export type TossResponseValidationOutcome = "PASSED" | "SCHEMA_ERROR";
@@ -82,7 +85,7 @@ export type TossResponseValidationEvent = TossResponseValidationEventBase &
 
 export type TossResponseValidationCallback = (
   event: TossResponseValidationEvent,
-) => void | Promise<void>;
+) => string | Promise<string>;
 
 export interface TossReadSource {
   listAccounts(): Promise<readonly TossAccount[]>;
@@ -110,6 +113,17 @@ export interface TossReadSource {
   getStockWarnings(symbol: string): Promise<TossStockWarningsResponse>;
 }
 
+export interface TossPretradeReadSource extends TossReadSource {
+  getBuyingPowerEvidence(
+    account: TossAccountReadReference,
+    currency: "KRW" | "USD",
+  ): Promise<TossNeutralReadResult<BuyingPowerQuote>>;
+  getStocksEvidence(symbols: readonly string[]): Promise<TossNeutralReadResult<TossStocksResponse>>;
+  getStockWarningsEvidence(
+    symbol: string,
+  ): Promise<TossNeutralReadResult<TossStockWarningsResponse>>;
+}
+
 export interface TossReadSourceDependencies {
   readonly client?: Pick<TossOpenApiClient, "read">;
 }
@@ -124,7 +138,7 @@ export function createTossReadSource(
     readonly onResponseValidation?: TossResponseValidationCallback;
   },
   dependencies: TossReadSourceDependencies = {},
-): TossReadSource {
+): TossPretradeReadSource {
   const onResponseValidation = credentials.onResponseValidation;
   const responseSensitiveValues = [credentials.clientId, credentials.clientSecret];
   const validateResponse = <Value>(
@@ -190,6 +204,31 @@ export function createTossReadSource(
         throw normalizeTossError(error, `${currency} 매수 가능 금액`);
       }
     },
+    async getBuyingPowerEvidence(account, currency) {
+      assertAccountReference(account);
+      try {
+        const response = await client.read.getBuyingPower({
+          params: {
+            header: { "X-Tossinvest-Account": account.accountSeq },
+            query: { currency },
+          },
+        });
+        const validated = await validateResponse(
+          response,
+          "getBuyingPower",
+          TossBuyingPowerResponseSchema,
+        );
+        return withBrokerMetadata(
+          response.response,
+          "getBuyingPower",
+          normalizeTossBuyingPower(validated.value, account.accountId, currency),
+          validated.redactedBody,
+          validated.responseValidationId,
+        );
+      } catch (error) {
+        throw normalizeTossError(error, `${currency} 매수 가능 금액`);
+      }
+    },
     async getPrices(instruments) {
       assertInstrumentRequest(instruments, 200, "시세");
       try {
@@ -202,6 +241,7 @@ export function createTossReadSource(
           "getPrices",
           normalizeTossPrices(validated.value, instruments),
           validated.redactedBody,
+          validated.responseValidationId,
         );
       } catch (error) {
         throw normalizeTossError(error, "현재가");
@@ -223,6 +263,7 @@ export function createTossReadSource(
           "getOrderbook",
           normalizeTossOrderbook(validated.value, instrument),
           validated.redactedBody,
+          validated.responseValidationId,
         );
       } catch (error) {
         throw normalizeTossError(error, "호가");
@@ -244,6 +285,7 @@ export function createTossReadSource(
           "getPriceLimit",
           normalizeTossPriceLimit(validated.value, instrument),
           validated.redactedBody,
+          validated.responseValidationId,
         );
       } catch (error) {
         throw normalizeTossError(error, "가격 제한");
@@ -266,6 +308,7 @@ export function createTossReadSource(
             "getKrMarketCalendar",
             normalizeTossKrMarketCalendar(validated.value),
             validated.redactedBody,
+            validated.responseValidationId,
           );
         }
         if (marketCountry === "US") {
@@ -282,6 +325,7 @@ export function createTossReadSource(
             "getUsMarketCalendar",
             normalizeTossUsMarketCalendar(validated.value),
             validated.redactedBody,
+            validated.responseValidationId,
           );
         }
         throw invalidRequest(
@@ -312,6 +356,7 @@ export function createTossReadSource(
           "getSellableQuantity",
           normalizeTossSellableQuantity(validated.value, account.accountId, instrument),
           validated.redactedBody,
+          validated.responseValidationId,
         );
       } catch (error) {
         throw normalizeTossError(error, "매도 가능 수량");
@@ -333,6 +378,7 @@ export function createTossReadSource(
           "getCommissions",
           normalizeTossCommissions(validated.value, account.accountId, requestedMarkets),
           validated.redactedBody,
+          validated.responseValidationId,
         );
       } catch (error) {
         throw normalizeTossError(error, "수수료 일정");
@@ -350,17 +396,7 @@ export function createTossReadSource(
       }
     },
     async getStocks(symbols) {
-      if (
-        symbols.length === 0 ||
-        symbols.length > 200 ||
-        symbols.some((symbol) => !/^[A-Za-z0-9.-]+$/.test(symbol))
-      ) {
-        throw new CollectionError(
-          "DATA_INVALID",
-          "종목 심볼 조회 요청이 올바르지 않습니다.",
-          "국내 종목코드 또는 미국 티커를 확인하세요.",
-        );
-      }
+      assertStockSymbols(symbols);
       try {
         const response = await client.read.getStocks({
           params: { query: { symbols: symbols.join(",") } },
@@ -370,14 +406,26 @@ export function createTossReadSource(
         throw normalizeTossError(error, "종목 기본 정보");
       }
     },
-    async getStockWarnings(symbol) {
-      if (!/^[A-Za-z0-9.-]+$/.test(symbol)) {
-        throw new CollectionError(
-          "DATA_INVALID",
-          "종목 유의사항 조회 심볼이 올바르지 않습니다.",
-          "국내 종목코드 또는 미국 티커를 확인하세요.",
+    async getStocksEvidence(symbols) {
+      assertStockSymbols(symbols);
+      try {
+        const response = await client.read.getStocks({
+          params: { query: { symbols: symbols.join(",") } },
+        });
+        const validated = await validateResponse(response, "getStocks", TossStocksResponseSchema);
+        return withBrokerMetadata(
+          response.response,
+          "getStocks",
+          validated.value,
+          validated.redactedBody,
+          validated.responseValidationId,
         );
+      } catch (error) {
+        throw normalizeTossError(error, "종목 기본 정보");
       }
+    },
+    async getStockWarnings(symbol) {
+      assertStockWarningSymbol(symbol);
       try {
         const response = await client.read.getStockWarnings({
           params: { path: { symbol } },
@@ -385,6 +433,28 @@ export function createTossReadSource(
         return (
           await validateResponse(response, "getStockWarnings", TossStockWarningsResponseSchema)
         ).value;
+      } catch (error) {
+        throw normalizeTossError(error, "종목 유의사항");
+      }
+    },
+    async getStockWarningsEvidence(symbol) {
+      assertStockWarningSymbol(symbol);
+      try {
+        const response = await client.read.getStockWarnings({
+          params: { path: { symbol } },
+        });
+        const validated = await validateResponse(
+          response,
+          "getStockWarnings",
+          TossStockWarningsResponseSchema,
+        );
+        return withBrokerMetadata(
+          response.response,
+          "getStockWarnings",
+          validated.value,
+          validated.redactedBody,
+          validated.responseValidationId,
+        );
       } catch (error) {
         throw normalizeTossError(error, "종목 유의사항");
       }
@@ -428,6 +498,7 @@ interface TossBusinessResponse {
 interface ValidatedTossResponse<Value> {
   readonly value: Value;
   readonly redactedBody: unknown;
+  readonly responseValidationId: string | null;
 }
 
 async function validateTossResponse<Value>(
@@ -458,8 +529,9 @@ async function validateTossResponse<Value>(
     throw parsed.error;
   }
 
+  let responseValidationId: string | null = null;
   if (onResponseValidation && requestAttemptId) {
-    await emitResponseValidation(onResponseValidation, {
+    responseValidationId = await emitResponseValidation(onResponseValidation, {
       requestAttemptId,
       operationId,
       outcome: "PASSED",
@@ -469,7 +541,7 @@ async function validateTossResponse<Value>(
     });
   }
 
-  return { value: parsed.data, redactedBody };
+  return { value: parsed.data, redactedBody, responseValidationId };
 }
 
 function requireResponseAuditReference(response: Response, operationId: TossOperationId): string {
@@ -487,9 +559,13 @@ function requireResponseAuditReference(response: Response, operationId: TossOper
 async function emitResponseValidation(
   callback: TossResponseValidationCallback,
   event: TossResponseValidationEvent,
-): Promise<void> {
+): Promise<string> {
   try {
-    await callback(event);
+    const reference = await callback(event);
+    if (!isUuid(reference)) {
+      throw new Error("토스증권 응답 검증 감사 참조가 UUID가 아닙니다.");
+    }
+    return reference;
   } catch (cause) {
     throw new CollectionError(
       "BROKER_FETCH_FAILED",
@@ -571,6 +647,7 @@ function withBrokerMetadata<Value>(
   expectedOperationId: TossOperationId,
   value: Value,
   redactedBody: unknown,
+  responseValidationId: string | null,
 ): TossNeutralReadResult<Value> {
   const metadata = getTossResponseMetadata(response);
   if (
@@ -600,6 +677,7 @@ function withBrokerMetadata<Value>(
       auditReference: getTossResponseAuditReference(response),
     },
     redactedBody,
+    responseValidationId,
   };
 }
 
@@ -651,6 +729,32 @@ function assertAccountReference(account: TossAccountReadReference): void {
       "계좌 목록의 accountSeq와 저장된 계좌 ID를 다시 확인하세요.",
     );
   }
+}
+
+function assertStockSymbols(symbols: readonly string[]): void {
+  if (
+    symbols.length === 0 ||
+    symbols.length > 200 ||
+    symbols.some((symbol) => !/^[A-Za-z0-9.-]+$/.test(symbol))
+  ) {
+    throw invalidRequest(
+      "종목 심볼 조회 요청이 올바르지 않습니다.",
+      "국내 종목코드 또는 미국 티커를 확인하세요.",
+    );
+  }
+}
+
+function assertStockWarningSymbol(symbol: string): void {
+  if (!/^[A-Za-z0-9.-]+$/.test(symbol)) {
+    throw invalidRequest(
+      "종목 유의사항 조회 심볼이 올바르지 않습니다.",
+      "국내 종목코드 또는 미국 티커를 확인하세요.",
+    );
+  }
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function assertIsoDate(date: IsoDate): void {

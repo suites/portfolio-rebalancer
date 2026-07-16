@@ -34,6 +34,7 @@ const mocks = {
     getStockWarnings: vi.fn(),
   },
 };
+const responseValidationId = "55555555-5555-4555-8555-555555555555";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -84,6 +85,7 @@ describe("TossReadSource neutral market reads", () => {
       auditReference: null,
     });
     expect(result.redactedBody).toEqual(business.data);
+    expect(result.responseValidationId).toBeNull();
     expect(getTossResponseMetadata(business.response)?.receivedAt).toBe("2026-07-16T00:00:00.125Z");
   });
 
@@ -191,6 +193,28 @@ describe("TossReadSource neutral account reads", () => {
     });
   });
 
+  it("매수 가능 금액 evidence는 저장 AccountId·요청 통화·응답 검증 ID를 함께 반환한다", async () => {
+    mocks.read.getBuyingPower.mockResolvedValue(
+      await reply(
+        "getBuyingPower",
+        { result: { currency: "KRW", cashBuyingPower: "5000000" } },
+        { auditReference: "11111111-1111-4111-8111-111111111111" },
+      ),
+    );
+    const source = createSource(
+      vi.fn<TossResponseValidationCallback>().mockResolvedValue(responseValidationId),
+    );
+
+    const result = await source.getBuyingPowerEvidence(accountReference, "KRW");
+
+    expect(result.value).toEqual({
+      accountId: "stored-account-id",
+      currency: "KRW",
+      cashBuyingPower: "5000000",
+    });
+    expect(result.responseValidationId).toBe(responseValidationId);
+  });
+
   it("수수료는 계좌 header와 요청 시장 누락 검증을 거쳐 계좌별 일정으로 반환한다", async () => {
     mocks.read.getCommissions.mockResolvedValue(
       await reply("getCommissions", {
@@ -289,7 +313,7 @@ describe("TossReadSource validation and compatibility", () => {
     mocks.read.getPrices.mockResolvedValue(business);
     const onResponseValidation = vi
       .fn<TossResponseValidationCallback>()
-      .mockResolvedValue(undefined);
+      .mockResolvedValue(responseValidationId);
     const source = createSource(onResponseValidation);
 
     const result = await source.getPrices([samsung]);
@@ -321,6 +345,7 @@ describe("TossReadSource validation and compatibility", () => {
       unknownRoot: { request_token: "[REDACTED]", version: 7 },
     };
     expect(result.redactedBody).toEqual(expectedRedactedBody);
+    expect(result.responseValidationId).toBe(responseValidationId);
     expect(raw.result[0]?.providerExtension.clientSecret).toBe("never-store-this");
     expect(onResponseValidation).toHaveBeenCalledOnce();
     const event = onResponseValidation.mock.calls[0]?.[0];
@@ -346,7 +371,7 @@ describe("TossReadSource validation and compatibility", () => {
     );
     const onResponseValidation = vi
       .fn<TossResponseValidationCallback>()
-      .mockResolvedValue(undefined);
+      .mockResolvedValue(responseValidationId);
     const source = createSource(onResponseValidation);
 
     await expect(source.getPrices([samsung])).rejects.toMatchObject({
@@ -380,7 +405,7 @@ describe("TossReadSource validation and compatibility", () => {
     );
     const onResponseValidation = vi
       .fn<TossResponseValidationCallback>()
-      .mockResolvedValue(undefined);
+      .mockResolvedValue(responseValidationId);
     const source = createSource(onResponseValidation);
 
     await expect(source.getPrices([samsung])).rejects.toMatchObject({
@@ -419,7 +444,7 @@ describe("TossReadSource validation and compatibility", () => {
     );
     const onResponseValidation = vi
       .fn<TossResponseValidationCallback>()
-      .mockResolvedValue(undefined);
+      .mockResolvedValue(responseValidationId);
     const source = createSource(onResponseValidation);
 
     await expect(source.getPrices([samsung])).rejects.toMatchObject({
@@ -447,6 +472,76 @@ describe("TossReadSource validation and compatibility", () => {
       code: "BROKER_FETCH_FAILED",
       message: "토스증권 응답 검증 감사 기록을 저장하지 못했습니다.",
     });
+  });
+
+  it("검증 callback이 빈 참조를 반환하면 정상 응답도 반환하지 않는다", async () => {
+    mocks.read.getPrices.mockResolvedValue(
+      await reply(
+        "getPrices",
+        {
+          result: [{ symbol: "005930", lastPrice: "72000", currency: "KRW" }],
+        },
+        { auditReference: "33333333-3333-4333-8333-333333333333" },
+      ),
+    );
+    const source = createSource(vi.fn<TossResponseValidationCallback>().mockResolvedValue(""));
+
+    await expect(source.getPrices([samsung])).rejects.toMatchObject({
+      code: "BROKER_FETCH_FAILED",
+      message: "토스증권 응답 검증 감사 기록을 저장하지 못했습니다.",
+    });
+  });
+
+  it("종목·유의사항 evidence는 원문 검증 ID를 중립 metadata와 분리해 반환한다", async () => {
+    mocks.read.getStocks.mockResolvedValue(
+      await reply(
+        "getStocks",
+        {
+          result: [
+            {
+              symbol: "005930",
+              market: "KOSPI",
+              currency: "KRW",
+              status: "ACTIVE",
+              securityType: "STOCK",
+              name: "삼성전자",
+              englishName: "Samsung Electronics",
+              isinCode: "KR7005930003",
+              isCommonShare: true,
+              listDate: "1975-06-11",
+              delistDate: null,
+              sharesOutstanding: "1000",
+              leverageFactor: null,
+              koreanMarketDetail: {
+                liquidationTrading: false,
+                nxtSupported: true,
+                krxTradingSuspended: false,
+                nxtTradingSuspended: false,
+              },
+            },
+          ],
+        },
+        { auditReference: "11111111-1111-4111-8111-111111111111" },
+      ),
+    );
+    mocks.read.getStockWarnings.mockResolvedValue(
+      await reply(
+        "getStockWarnings",
+        { result: [] },
+        { auditReference: "22222222-2222-4222-8222-222222222222" },
+      ),
+    );
+    const source = createSource(
+      vi.fn<TossResponseValidationCallback>().mockResolvedValue(responseValidationId),
+    );
+
+    const stocks = await source.getStocksEvidence(["005930"]);
+    const warnings = await source.getStockWarningsEvidence("005930");
+
+    expect(stocks.value.result[0]?.symbol).toBe("005930");
+    expect(warnings.value.result).toEqual([]);
+    expect(stocks.responseValidationId).toBe(responseValidationId);
+    expect(warnings.responseValidationId).toBe(responseValidationId);
   });
 
   it("요청 시세 누락과 계획 준비 불가 빈 호가는 BROKER_FETCH_FAILED로 차단한다", async () => {
@@ -592,6 +687,12 @@ function operationUrl(operationId: TossOperationId): string {
       return `${origin}/api/v1/sellable-quantity?symbol=005930`;
     case "getCommissions":
       return `${origin}/api/v1/commissions`;
+    case "getBuyingPower":
+      return `${origin}/api/v1/buying-power?currency=KRW`;
+    case "getStocks":
+      return `${origin}/api/v1/stocks?symbols=005930`;
+    case "getStockWarnings":
+      return `${origin}/api/v1/stocks/005930/warnings`;
     default:
       throw new Error(`테스트 business operation URL이 없습니다: ${operationId}`);
   }

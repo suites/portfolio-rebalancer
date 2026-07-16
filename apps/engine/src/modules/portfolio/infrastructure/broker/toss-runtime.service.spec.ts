@@ -184,14 +184,16 @@ describe("TossRuntimeService request audit", () => {
 describe("TossRuntimeService response validation audit", () => {
   it("adapter 검증 이벤트의 시각을 Date로 변환해 append-only 저장소에 전달한다", async () => {
     const appendBrokerResponseValidation = vi.fn().mockResolvedValue({
-      id: "validation-id",
+      id: "55555555-5555-4555-8555-555555555555",
     });
     mocks.createTossReadSource.mockReturnValue(sourceStub());
     new TossRuntimeService(config(), {
       appendBrokerResponseValidation,
     } as unknown as PrismaPortfolioRepository).get();
 
-    await createdValidationCallback()(validationEvent());
+    await expect(createdValidationCallback()(validationEvent())).resolves.toBe(
+      "55555555-5555-4555-8555-555555555555",
+    );
 
     expect(appendBrokerResponseValidation).toHaveBeenCalledExactlyOnceWith({
       requestAttemptId: "11111111-1111-4111-8111-111111111111",
@@ -238,12 +240,12 @@ function createdMetadataCallback(): (
   return async (metadata) => callback(metadata);
 }
 
-function createdValidationCallback(): (event: TossResponseValidationEvent) => Promise<void> {
+function createdValidationCallback(): (event: TossResponseValidationEvent) => Promise<string> {
   const options = mocks.createTossReadSource.mock.calls.at(-1)?.[0] as
     | {
         readonly onResponseValidation?: (
           event: TossResponseValidationEvent,
-        ) => void | Promise<void>;
+        ) => string | Promise<string>;
       }
     | undefined;
   const callback = options?.onResponseValidation;

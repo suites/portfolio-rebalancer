@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   normalizeTossCommissions,
+  normalizeTossBuyingPower,
   normalizeTossKrMarketCalendar,
   normalizeTossOrderbook,
   normalizeTossPriceLimit,
@@ -441,6 +442,52 @@ describe("normalizeTossSellableQuantity", () => {
     expectIssue(
       () => normalizeTossSellableQuantity(sellable("1.0"), accountId, samsung),
       "SELLABLE_QUANTITY_NOT_INTEGER",
+    );
+  });
+});
+
+describe("normalizeTossBuyingPower", () => {
+  it("요청 계좌와 통화에 원화 정수 매수 가능 금액을 결합한다", () => {
+    expect(
+      normalizeTossBuyingPower(
+        { result: { currency: "KRW", cashBuyingPower: "5000000" } },
+        accountId,
+        "KRW",
+      ),
+    ).toEqual({
+      accountId: "account-1",
+      currency: "KRW",
+      cashBuyingPower: "5000000",
+    });
+  });
+
+  it("통화 불일치·음수·원화 소수 금액을 차단한다", () => {
+    expectIssue(
+      () =>
+        normalizeTossBuyingPower(
+          { result: { currency: "USD", cashBuyingPower: "10" } },
+          accountId,
+          "KRW",
+        ),
+      "BUYING_POWER_CURRENCY_MISMATCH",
+    );
+    expectIssue(
+      () =>
+        normalizeTossBuyingPower(
+          { result: { currency: "KRW", cashBuyingPower: "-1" } },
+          accountId,
+          "KRW",
+        ),
+      "BUYING_POWER_NEGATIVE",
+    );
+    expectIssue(
+      () =>
+        normalizeTossBuyingPower(
+          { result: { currency: "KRW", cashBuyingPower: "1.5" } },
+          accountId,
+          "KRW",
+        ),
+      "BUYING_POWER_NOT_INTEGER",
     );
   });
 });
