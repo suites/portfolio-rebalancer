@@ -1,5 +1,16 @@
 # Review
 
+## 2026-07-16 전체 실행 재개
+
+- 전체 TODO와 대화 요구사항을 Live까지 구현 범위에 포함했다.
+- 자동 검증 중 실제 주문은 보내지 않으며 실계좌 소액 검증은 최종 별도 실행 게이트다.
+- 첫 수직 슬라이스에서 neutral buying-power 포트를 account+currency로 바로잡았다.
+- 통화별 buying-power를 불변 저장하고 `valuationEligible=false`로 고정했다.
+- 보유주식 평가액, 매수 가능 금액과 관리 현금을 UI에서 분리했다.
+- 로컬 PostgreSQL `127.0.0.1:15432/portfolio_rebalancer`에 migration을 적용했다.
+- `pnpm verify`는 변경 후 91개 테스트를 포함해 통과했다.
+- 남은 우선 안전 결함은 collection fencing/heartbeat와 계좌 범위 고정이다.
+
 - 실제 주문 전송 차단 유지: 통과
 - 브라우저/Next의 Toss secret 접근 금지: 통과
 - accountNo DB 저장 금지: 통과

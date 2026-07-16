@@ -1,5 +1,17 @@
 # Test Plan
 
+## Buying-power 첫 슬라이스
+
+- KRW 정수와 USD decimal 문자열 허용
+- 음수, number 타입과 지원하지 않는 통화 거부
+- 요청 통화와 응답 통화 불일치 시 스냅샷 저장 차단
+- USD 보유가 있을 때만 USD buying-power와 USD/KRW 환율 수집
+- buying-power를 별도 불변 자식으로 저장
+- `managedCashMinor`는 `null`, 보유주식 평가액 합계는 그대로 유지
+- Dashboard 계약의 `valuationEligible`는 `false`만 허용
+- Web에서 KRW·USD를 서로 합산하지 않고 통화별 표시
+- 실제 주문 메서드와 네트워크 쓰기 호출 0회
+
 - Toss 계좌·보유·환율 런타임 schema rejection
 - USD/KRW bigint 환산과 KRW fractional rejection
 - 복수 계좌 자동 선택 금지

@@ -1,5 +1,29 @@
 # API
 
+## Dashboard buying-power 계약
+
+`GET /internal/v1/dashboard`는 통화별 매수 가능 금액을 다음 형태로 전달한다.
+
+```json
+{
+  "buyingPower": [
+    {
+      "currency": "KRW",
+      "amount": "5000000",
+      "valueKrwMinor": "5000000",
+      "observedAt": "2026-07-16T09:00:00+09:00",
+      "valuationEligible": false
+    }
+  ]
+}
+```
+
+- `amount`는 브로커가 반환한 통화별 decimal 문자열이다.
+- `valueKrwMinor`는 화면 참고 및 감사용 환산값이며 통화 간 합산이나 평가 입력으로
+  사용할 수 없다.
+- `valuationEligible`는 현재 항상 `false`다.
+- `verifiedCashMinor`와 `totalValueMinor`는 이 값 때문에 변경되지 않는다.
+
 - `GET /internal/v1/health`: live 주문 비활성 상태
 - `GET /internal/v1/dashboard`: 저장된 최신 실제 snapshot
 - `POST /internal/v1/portfolio/refresh`: service token, Toss read-only 수집
