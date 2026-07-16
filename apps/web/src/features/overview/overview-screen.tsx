@@ -70,7 +70,7 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
 
       <section className={styles.summaryGrid} aria-label="포트폴리오 요약">
         <SummaryCard
-          label="보유주식 평가액"
+          label="총 관리 자산"
           value={
             snapshot.totalValueMinor === null
               ? "확인 불가"
@@ -107,18 +107,20 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
           }
         />
         <SummaryCard
-          label="검증된 관리 현금"
+          label="관리 현금"
           value={
-            snapshot.verifiedCashMinor === null
+            snapshot.managedCashMinor === null
               ? "확인 불가"
               : amountsHidden
                 ? "••••••••"
-                : formatWon(snapshot.verifiedCashMinor)
+                : formatWon(snapshot.managedCashMinor)
           }
           description={
-            snapshot.verifiedCashMinor === null
-              ? "현금 비중 계산과 주문을 차단합니다"
-              : "목표 현금 비중에 포함되는 금액입니다"
+            snapshot.managedCashSource === "UNSET"
+              ? "설정에서 포함 또는 제외를 선택하세요"
+              : snapshot.managedCashSource === "EXCLUDED"
+                ? "포트폴리오 평가에서 제외됨"
+                : "사용자가 정한 고정 관리금액"
           }
         />
         <SummaryCard

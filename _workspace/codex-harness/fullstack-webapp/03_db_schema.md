@@ -12,6 +12,11 @@ RuntimeLease.
   `valuationEligible=false`를 저장하며 관리 현금과 분리한다.
 - `TargetAllocation.bandPolicy` JSONB는 `AUTO/MIXED_V1` 또는 versioned CUSTOM 정책을
   확정 lower/upper와 함께 보존한다. 기존 행은 `CUSTOM/LEGACY_V1`으로 migration한다.
+- `TargetConfigVersion.cashPolicy` JSONB는 `UNSET`, `EXCLUDED`, `FIXED_KRW` 정책을
+  버전과 함께 보존한다.
+- `PortfolioSnapshot.securitiesValueMinor`는 주식 평가액이고 DB CHECK가
+  `totalValueMinor = securitiesValueMinor + COALESCE(managedCashMinor, 0)`을 보장한다.
+- snapshot의 target version ID와 managed cash는 같은 fenced transaction에서 결정한다.
 - `HoldingSnapshot.marketCountry`와 `TargetInstrument.marketCountry`는 기존 `market`
   DB 열을 정규 국가 키로 해석한다. `TargetInstrument.listingMarket`은 별도 nullable
   metadata 열이다.

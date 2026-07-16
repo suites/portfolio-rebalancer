@@ -137,10 +137,18 @@ describe("NestJS engine HTTP contract", () => {
         "content-type": "application/json",
       },
       payload: {
+        cashPolicy: {
+          mode: "EXCLUDED",
+          version: "CASH_V1",
+        },
         allocations: [
           {
             assetKey: "US:AAPL",
             targetBasisPoints: 9_999,
+          },
+          {
+            assetKey: "CASH",
+            targetBasisPoints: 0,
           },
         ],
       },

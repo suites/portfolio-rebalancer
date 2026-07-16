@@ -78,7 +78,7 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
       const holdings = holdingsResponse.result.items.map((item) =>
         normalizeHolding(item, exchangeResponse?.result.rate),
       );
-      const totalValueMinor = holdings.reduce(
+      const securitiesValueMinor = holdings.reduce(
         (total, holding) => total + holding.marketValueKrwMinor,
         0n,
       );
@@ -113,7 +113,7 @@ export async function collectPortfolio(options: CollectPortfolioOptions): Promis
         runId: run.id,
         accountId: account.id,
         observedAt,
-        totalValueMinor,
+        securitiesValueMinor,
         usdKrwRate: exchangeResponse?.result.rate ?? null,
         holdings,
         buyingPower,

@@ -102,8 +102,8 @@ export function RebalancingScreen({ snapshot }: { readonly snapshot: DashboardSn
               <CheckRow label="목표 설정" description="현재 계좌에 적용됨" passed={targetFixed} />
               <CheckRow
                 label="관리 현금"
-                description="사용 가능한 현금 확인"
-                passed={snapshot.verifiedCashMinor !== null}
+                description="평가에 사용할 관리 기준 반영"
+                passed={snapshot.managedCashMinor !== null}
               />
               <li>
                 <div>

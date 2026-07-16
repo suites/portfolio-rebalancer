@@ -81,7 +81,7 @@ describe("collectPortfolio", () => {
     expect(repository.heartbeatCollectionLease).toHaveBeenCalledTimes(2);
     const stored = completeCollection.mock.calls[0]?.[0] as
       | {
-          totalValueMinor: bigint;
+          securitiesValueMinor: bigint;
           buyingPower: readonly {
             currency: string;
             amount: string;
@@ -90,7 +90,7 @@ describe("collectPortfolio", () => {
           rawResponses: readonly { operationId: string; ordinal: number }[];
         }
       | undefined;
-    expect(stored?.totalValueMinor).toBe(0n);
+    expect(stored?.securitiesValueMinor).toBe(0n);
     expect(stored?.buyingPower).toEqual([
       { currency: "KRW", amount: "5000000", valueKrwMinor: 5_000_000n },
     ]);
@@ -147,7 +147,7 @@ describe("collectPortfolio", () => {
 
     const stored = completeCollection.mock.calls[0]?.[0] as
       | {
-          totalValueMinor: bigint;
+          securitiesValueMinor: bigint;
           buyingPower: readonly {
             currency: string;
             amount: string;
@@ -155,7 +155,7 @@ describe("collectPortfolio", () => {
           }[];
         }
       | undefined;
-    expect(stored?.totalValueMinor).toBe(1_380n);
+    expect(stored?.securitiesValueMinor).toBe(1_380n);
     expect(stored?.buyingPower).toContainEqual({
       currency: "USD",
       amount: "10.5",

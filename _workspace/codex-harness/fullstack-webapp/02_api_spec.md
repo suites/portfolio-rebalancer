@@ -22,17 +22,46 @@
 - `valueKrwMinor`는 화면 참고 및 감사용 환산값이며 통화 간 합산이나 평가 입력으로
   사용할 수 없다.
 - `valuationEligible`는 현재 항상 `false`다.
-- `verifiedCashMinor`와 `totalValueMinor`는 이 값 때문에 변경되지 않는다.
+- `managedCashMinor`와 `totalValueMinor`는 이 값 때문에 변경되지 않는다.
 
-## Target draft 밴드 계약
-
-기본 입력은 목표와 정책만 전달한다.
+## Dashboard 관리 현금 계약
 
 ```json
 {
-  "assetKey": "KR:005930",
-  "targetBasisPoints": 6000,
-  "bandPolicy": { "mode": "AUTO", "version": "MIXED_V1" }
+  "managedCashMinor": "1000000",
+  "managedCashSource": "USER_FIXED",
+  "totalValueMinor": "4142919"
+}
+```
+
+- `managedCashSource`는 `UNSET`, `EXCLUDED`, `USER_FIXED` 중 하나다.
+- `UNSET`은 금액 `null`, `EXCLUDED`는 금액 `"0"`, `USER_FIXED`는 비음수 원 단위
+  문자열을 요구한다.
+- 총액은 주식 평가액과 관리 현금의 합이며 매수 가능 금액을 포함하지 않는다.
+
+## Target draft 밴드 계약
+
+기본 입력은 관리 현금 정책과 각 목표 정책을 전달한다.
+
+```json
+{
+  "cashPolicy": {
+    "mode": "FIXED_KRW",
+    "version": "CASH_V1",
+    "amountMinor": "1000000"
+  },
+  "allocations": [
+    {
+      "assetKey": "KR:005930",
+      "targetBasisPoints": 9000,
+      "bandPolicy": { "mode": "AUTO", "version": "MIXED_V1" }
+    },
+    {
+      "assetKey": "CASH",
+      "targetBasisPoints": 1000,
+      "bandPolicy": { "mode": "AUTO", "version": "MIXED_V1" }
+    }
+  ]
 }
 ```
 

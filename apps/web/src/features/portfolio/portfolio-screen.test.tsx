@@ -16,7 +16,8 @@ describe("PortfolioScreen", () => {
       observedAt: "2026-07-16T03:00:00.000Z",
       conclusion: "BLOCKED",
       totalValueMinor: "1000000",
-      verifiedCashMinor: null,
+      managedCashMinor: null,
+      managedCashSource: "UNSET",
       allocations: [
         {
           id: "US:AAPL",

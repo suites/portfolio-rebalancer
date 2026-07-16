@@ -26,6 +26,7 @@ export async function getTargetSettings(
   }
 
   const total = snapshot.totalValueMinor;
+  const cash = snapshot.managedCashMinor ?? null;
   return TargetSettingsSnapshotSchema.parse({
     state: activeVersion ? "CONFIGURED" : "NOT_CONFIGURED",
     accountLabel: snapshot.account.maskedNumber,
@@ -35,13 +36,25 @@ export async function getTargetSettings(
     draftVersion: draftVersion ? presentVersion(draftVersion) : null,
     requiresCollection:
       activeVersion !== null && activeVersion.id !== snapshot.targetConfigVersionId,
-    assets: snapshot.holdings.map((holding) => ({
-      assetKey: `${holding.marketCountry}:${holding.symbol}`,
-      label: holding.name,
-      description: `${holding.marketCountry} · ${holding.currency} · ${holding.quantity}주`,
-      currentBasisPointHundredths:
-        total === 0n ? 0 : Number((holding.marketValueKrwMinor * 1_000_000n) / total),
-    })),
+    assets: [
+      ...snapshot.holdings.map((holding) => ({
+        assetKey: `${holding.marketCountry}:${holding.symbol}`,
+        label: holding.name,
+        description: `${holding.marketCountry} · ${holding.currency} · ${holding.quantity}주`,
+        currentBasisPointHundredths:
+          total === 0n ? 0 : Number((holding.marketValueKrwMinor * 1_000_000n) / total),
+      })),
+      {
+        assetKey: "CASH",
+        label: "관리 현금",
+        description:
+          cash === null
+            ? "평가에 포함할 관리 현금을 아직 선택하지 않았습니다."
+            : `현재 스냅샷 관리 현금 ${cash.toLocaleString("ko-KR")}원`,
+        currentBasisPointHundredths:
+          cash === null ? null : total === 0n ? 0 : Number((cash * 1_000_000n) / total),
+      },
+    ],
     liveOrdersEnabled: false,
   });
 }
@@ -82,6 +95,7 @@ function presentVersion(version: {
   readonly version: number;
   readonly status: "DRAFT" | "ACTIVE" | "RETIRED";
   readonly createdAt: Date;
+  readonly cashPolicy: unknown;
   readonly allocations: readonly {
     readonly assetKey: string;
     readonly label: string;
@@ -95,6 +109,7 @@ function presentVersion(version: {
     version: version.version,
     status: version.status,
     createdAt: version.createdAt.toISOString(),
+    cashPolicy: version.cashPolicy,
     allocations: version.allocations.map((allocation) => ({
       assetKey: allocation.assetKey,
       label: allocation.label,

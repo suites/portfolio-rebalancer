@@ -25,7 +25,8 @@ describe("dashboard presenter with snapshot-bound target", () => {
         valuationEligible: false,
       },
     ]);
-    expect(dashboard.verifiedCashMinor).toBeNull();
+    expect(dashboard.managedCashMinor).toBeNull();
+    expect(dashboard.managedCashSource).toBe("UNSET");
     expect(dashboard.liveOrdersEnabled).toBe(false);
   });
 
@@ -44,6 +45,14 @@ describe("dashboard presenter with snapshot-bound target", () => {
 
     expect(dashboard.blockReason).toBeNull();
     expect(dashboard.conclusion).toBe("REBALANCE_REQUIRED");
+    expect(dashboard.managedCashMinor).toBe("0");
+    expect(dashboard.managedCashSource).toBe("EXCLUDED");
+    expect(dashboard.allocations.at(-1)).toMatchObject({
+      id: "CASH",
+      valueMinor: "0",
+      targetBasisPoints: 0,
+      bandStatus: "IN_RANGE",
+    });
   });
 });
 
@@ -62,6 +71,7 @@ function dashboardState({ managedCashMinor }: { readonly managedCashMinor: bigin
       accountId: "44444444-4444-4444-8444-444444444444",
       targetConfigVersionId: targetId,
       observedAt: new Date("2026-07-16T03:00:00.000Z"),
+      securitiesValueMinor: 1_000_000n,
       totalValueMinor: 1_000_000n,
       managedCashMinor,
       account: { maskedNumber: "****1234" },
@@ -95,6 +105,10 @@ function dashboardState({ managedCashMinor }: { readonly managedCashMinor: bigin
       targetConfigVersion: {
         id: targetId,
         version: 1,
+        cashPolicy:
+          managedCashMinor === null
+            ? { mode: "UNSET", version: "LEGACY_V1" }
+            : { mode: "EXCLUDED", version: "CASH_V1" },
         allocations: [
           {
             assetKey: "US:AAPL",
@@ -107,6 +121,12 @@ function dashboardState({ managedCashMinor }: { readonly managedCashMinor: bigin
             targetBasisPoints: 4_000,
             lowerBasisPoints: 3_500,
             upperBasisPoints: 4_500,
+          },
+          {
+            assetKey: "CASH",
+            targetBasisPoints: 0,
+            lowerBasisPoints: 0,
+            upperBasisPoints: 0,
           },
         ],
       },

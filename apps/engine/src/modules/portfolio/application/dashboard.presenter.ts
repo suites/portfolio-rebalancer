@@ -1,5 +1,6 @@
 import {
   DashboardSnapshotSchema,
+  TargetStoredCashPolicySchema,
   type DashboardBlockReasonContract,
   type DashboardSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
@@ -13,7 +14,14 @@ export async function getDashboard(
   const { snapshot, activeTargetVersionId } = await repository.latestDashboardState();
   if (!snapshot) return blockedDashboard("NO_SNAPSHOT");
 
-  if (snapshot.holdings.length === 0) {
+  const managedCashSource = cashSourceFor(
+    snapshot.targetConfigVersion?.cashPolicy,
+    snapshot.managedCashMinor,
+  );
+  if (
+    snapshot.holdings.length === 0 &&
+    (snapshot.managedCashMinor === null || snapshot.managedCashMinor === 0n)
+  ) {
     return DashboardSnapshotSchema.parse({
       state: "EMPTY",
       mode: "SHADOW",
@@ -23,7 +31,8 @@ export async function getDashboard(
       observedAt: snapshot.observedAt.toISOString(),
       conclusion: "BLOCKED",
       totalValueMinor: "0",
-      verifiedCashMinor: null,
+      managedCashMinor: snapshot.managedCashMinor?.toString() ?? null,
+      managedCashSource,
       buyingPower: (snapshot.buyingPower ?? []).map((item) => ({
         currency: item.currency,
         amount: item.amount,
@@ -76,19 +85,59 @@ export async function getDashboard(
       bandStatus: outside ? ("OUTSIDE_BAND" as const) : ("IN_RANGE" as const),
     };
   });
+  const cashTarget = targets.get("CASH");
+  if (snapshot.managedCashMinor !== null || cashTarget) {
+    const valueMinor = snapshot.managedCashMinor ?? 0n;
+    const common = {
+      id: "CASH",
+      label: "관리 현금",
+      description:
+        managedCashSource === "EXCLUDED"
+          ? "포트폴리오 평가에서 제외"
+          : managedCashSource === "USER_FIXED"
+            ? "사용자가 정한 고정 원화 관리금액"
+            : "관리 현금 기준이 아직 스냅샷에 반영되지 않음",
+      valueMinor: valueMinor.toString(),
+      currentBasisPointHundredths: total === 0n ? 0 : Number((valueMinor * 1_000_000n) / total),
+    };
+    if (!cashTarget || total <= 0n || snapshot.managedCashMinor === null) {
+      allocations.push({
+        ...common,
+        targetBasisPoints: null,
+        lowerBasisPoints: null,
+        upperBasisPoints: null,
+        bandStatus: "TARGET_NOT_CONFIGURED" as const,
+      });
+    } else {
+      const outside = isOutsideAllocationBand({
+        valueMinor,
+        totalValueMinor: total,
+        lowerBasisPoints: BigInt(cashTarget.lowerBasisPoints),
+        upperBasisPoints: BigInt(cashTarget.upperBasisPoints),
+      });
+      allocations.push({
+        ...common,
+        targetBasisPoints: cashTarget.targetBasisPoints,
+        lowerBasisPoints: cashTarget.lowerBasisPoints,
+        upperBasisPoints: cashTarget.upperBasisPoints,
+        bandStatus: outside ? ("OUTSIDE_BAND" as const) : ("IN_RANGE" as const),
+      });
+    }
+  }
 
   let blockCode: DashboardBlockReasonContract["code"] | null = null;
   if (activeTargetVersionId !== (pinnedTarget?.id ?? null)) {
     blockCode = activeTargetVersionId ? "TARGET_CONFIG_STALE" : "TARGET_CONFIG_MISSING";
   } else if (!pinnedTarget) {
     blockCode = "TARGET_CONFIG_MISSING";
-  } else if (
-    allocations.some(({ bandStatus }) => bandStatus === "TARGET_NOT_CONFIGURED") ||
-    targets.size !== snapshot.holdings.length
-  ) {
-    blockCode = "UNMANAGED_ASSET";
   } else if (snapshot.managedCashMinor === null) {
     blockCode = "MANAGED_CASH_MISSING";
+  } else if (
+    allocations.some(({ bandStatus }) => bandStatus === "TARGET_NOT_CONFIGURED") ||
+    targets.size !== snapshot.holdings.length + 1 ||
+    !targets.has("CASH")
+  ) {
+    blockCode = "UNMANAGED_ASSET";
   }
 
   const outsideBand = allocations.some(({ bandStatus }) => bandStatus === "OUTSIDE_BAND");
@@ -101,7 +150,8 @@ export async function getDashboard(
     observedAt: snapshot.observedAt.toISOString(),
     conclusion: blockCode ? "BLOCKED" : outsideBand ? "REBALANCE_REQUIRED" : "NO_ACTION",
     totalValueMinor: total.toString(),
-    verifiedCashMinor: snapshot.managedCashMinor?.toString() ?? null,
+    managedCashMinor: snapshot.managedCashMinor?.toString() ?? null,
+    managedCashSource,
     buyingPower: (snapshot.buyingPower ?? []).map((item) => ({
       currency: item.currency,
       amount: item.amount,
@@ -127,7 +177,8 @@ export function blockedDashboard(
     observedAt: null,
     conclusion: "BLOCKED",
     totalValueMinor: null,
-    verifiedCashMinor: null,
+    managedCashMinor: null,
+    managedCashSource: "UNSET",
     buyingPower: [],
     allocations: [],
     blockReason: reasonFor(code),
@@ -172,8 +223,9 @@ function reasonFor(code: DashboardBlockReasonContract["code"]): DashboardBlockRe
       return {
         ...common,
         code,
-        problem: "목표 비중은 확인했지만 평가에 포함할 관리 현금이 검증되지 않았습니다.",
-        nextAction: "관리 현금 source of truth가 구현될 때까지 현재·목표 비중만 검토하세요.",
+        problem: "목표 비중은 확인했지만 평가에 사용할 관리 현금 기준이 스냅샷에 없습니다.",
+        nextAction:
+          "설정에서 관리 현금을 고정 금액으로 포함하거나 제외한 뒤 토스 데이터를 다시 점검하세요.",
       };
     case "UNMANAGED_ASSET":
       return {
@@ -219,4 +271,14 @@ function reasonFor(code: DashboardBlockReasonContract["code"]): DashboardBlockRe
         nextAction: "엔진 로그와 토스증권 연결 상태를 확인한 뒤 다시 시도하세요.",
       };
   }
+}
+
+function cashSourceFor(
+  cashPolicy: unknown,
+  managedCashMinor: bigint | null,
+): "UNSET" | "EXCLUDED" | "USER_FIXED" {
+  if (managedCashMinor === null) return "UNSET";
+  const parsed = TargetStoredCashPolicySchema.safeParse(cashPolicy);
+  if (!parsed.success || parsed.data.mode === "UNSET") return "UNSET";
+  return parsed.data.mode === "EXCLUDED" ? "EXCLUDED" : "USER_FIXED";
 }

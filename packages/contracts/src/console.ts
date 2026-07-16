@@ -1,11 +1,20 @@
 import { z } from "zod";
 
 const basisPoints = z.number().int().min(0).max(10_000);
-const assetKey = z
+const minorUnitString = z
   .string()
-  .min(3)
-  .max(160)
-  .regex(/^[^:]+:[^:]+$/);
+  .regex(/^(?:0|[1-9]\d*)$/)
+  .refine((value) => BigInt(value) <= 9_223_372_036_854_775_807n, {
+    message: "금액이 저장 가능한 범위를 넘었습니다.",
+  });
+const assetKey = z.union([
+  z
+    .string()
+    .min(3)
+    .max(160)
+    .regex(/^[^:]+:[^:]+$/),
+  z.literal("CASH"),
+]);
 
 const AutoBandPolicySchema = z.object({
   mode: z.literal("AUTO"),
@@ -34,6 +43,31 @@ export const TargetResolvedBandPolicySchema = z.discriminatedUnion("mode", [
   }),
 ]);
 
+const ExcludedCashPolicySchema = z.object({
+  mode: z.literal("EXCLUDED"),
+  version: z.literal("CASH_V1").default("CASH_V1"),
+});
+
+const FixedKrwCashPolicySchema = z.object({
+  mode: z.literal("FIXED_KRW"),
+  version: z.literal("CASH_V1").default("CASH_V1"),
+  amountMinor: minorUnitString,
+});
+
+export const TargetCashPolicyInputSchema = z.discriminatedUnion("mode", [
+  ExcludedCashPolicySchema,
+  FixedKrwCashPolicySchema,
+]);
+
+export const TargetStoredCashPolicySchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("UNSET"),
+    version: z.string().min(1),
+  }),
+  ExcludedCashPolicySchema,
+  FixedKrwCashPolicySchema,
+]);
+
 export const TargetAllocationInputSchema = z.object({
   assetKey,
   targetBasisPoints: basisPoints,
@@ -44,8 +78,11 @@ export const TargetAllocationInputSchema = z.object({
 });
 
 export const TargetSettingsDraftInputSchema = z
-  .object({ allocations: z.array(TargetAllocationInputSchema).min(1).max(100) })
-  .superRefine(({ allocations }, context) => {
+  .object({
+    cashPolicy: TargetCashPolicyInputSchema,
+    allocations: z.array(TargetAllocationInputSchema).min(1).max(100),
+  })
+  .superRefine(({ cashPolicy, allocations }, context) => {
     const keys = allocations.map(({ assetKey: key }) => key);
     if (new Set(keys).size !== keys.length) {
       context.addIssue({
@@ -61,6 +98,21 @@ export const TargetSettingsDraftInputSchema = z
         code: "custom",
         path: ["allocations"],
         message: `목표 비중 합계는 10000bp여야 합니다: ${total}bp`,
+      });
+    }
+
+    const cashAllocation = allocations.find(({ assetKey: key }) => key === "CASH");
+    if (!cashAllocation) {
+      context.addIssue({
+        code: "custom",
+        path: ["allocations"],
+        message: "관리 현금 목표(CASH)를 포함해야 합니다.",
+      });
+    } else if (cashPolicy.mode === "EXCLUDED" && cashAllocation.targetBasisPoints !== 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["allocations"],
+        message: "현금을 제외할 때 CASH 목표 비중은 0%여야 합니다.",
       });
     }
 
@@ -108,6 +160,7 @@ export const TargetSettingsVersionSchema = z.object({
   version: z.number().int().positive(),
   status: z.enum(["DRAFT", "ACTIVE"]),
   createdAt: z.iso.datetime({ offset: true }),
+  cashPolicy: TargetStoredCashPolicySchema,
   allocations: z.array(TargetSettingsAllocationSchema).min(1),
 });
 
@@ -115,7 +168,7 @@ export const TargetSettingsAssetSchema = z.object({
   assetKey,
   label: z.string().min(1),
   description: z.string().min(1),
-  currentBasisPointHundredths: z.number().int().min(0).max(1_000_000),
+  currentBasisPointHundredths: z.number().int().min(0).max(1_000_000).nullable(),
 });
 
 export const TargetSettingsSnapshotSchema = z.object({
@@ -155,5 +208,6 @@ export const ConsoleRecordsSnapshotSchema = z.object({
 });
 
 export type TargetSettingsDraftInputContract = z.infer<typeof TargetSettingsDraftInputSchema>;
+export type TargetStoredCashPolicyContract = z.infer<typeof TargetStoredCashPolicySchema>;
 export type TargetSettingsSnapshotContract = z.infer<typeof TargetSettingsSnapshotSchema>;
 export type ConsoleRecordsSnapshotContract = z.infer<typeof ConsoleRecordsSnapshotSchema>;

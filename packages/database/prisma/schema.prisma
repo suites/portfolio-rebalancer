@@ -66,6 +66,7 @@ model TargetConfigVersion {
   contentHash String             @map("content_hash") @db.Char(64)
   appVersion  String             @map("app_version")
   source      Json               @db.JsonB
+  cashPolicy  Json               @map("cash_policy") @db.JsonB
   createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
 
   config      TargetConfig        @relation(fields: [configId], references: [id], onDelete: Restrict)
@@ -156,6 +157,7 @@ model PortfolioSnapshot {
   validationStatus      SnapshotValidationStatus @map("validation_status")
   baseCurrency          String                   @map("base_currency")
   managedCashMinor      BigInt?                  @map("managed_cash_minor")
+  securitiesValueMinor BigInt                   @map("securities_value_minor")
   totalValueMinor       BigInt                   @map("total_value_minor")
   usdKrwRate            String?                  @map("usd_krw_rate")
   digest                String                   @db.Char(64)

@@ -11,7 +11,7 @@ describe("buildDashboardSnapshot", () => {
       accountLabel: "**** 4821",
       observedAt: "2026-07-16T09:00:00+09:00",
       dataStatus: "VERIFIED",
-      verifiedCashMinor: "1000000",
+      managedCashMinor: "1000000",
       assets: [
         {
           id: "core",
@@ -32,7 +32,7 @@ describe("buildDashboardSnapshot", () => {
           upperBasisPoints: 1_875n,
         },
         {
-          id: "cash",
+          id: "CASH",
           label: "현금",
           description: "운용 대기 자금",
           valueMinor: 1_000_000n,
@@ -48,7 +48,7 @@ describe("buildDashboardSnapshot", () => {
     expect(result.conclusion).toBe("REBALANCE_REQUIRED");
   });
 
-  it("검증된 관리 현금이 없으면 비중과 무관하게 거래를 차단한다", () => {
+  it("관리 현금 기준이 없으면 비중과 무관하게 거래를 차단한다", () => {
     const result = buildDashboardSnapshot({
       mode: "PAPER",
       dataSource: "SYNTHETIC",
@@ -56,7 +56,7 @@ describe("buildDashboardSnapshot", () => {
       accountLabel: "**** 4821",
       observedAt: "2026-07-16T09:00:00+09:00",
       dataStatus: "VERIFIED",
-      verifiedCashMinor: null,
+      managedCashMinor: null,
       assets: [
         {
           id: "core",
@@ -81,7 +81,7 @@ describe("buildDashboardSnapshot", () => {
       accountLabel: "**** 4821",
       observedAt: "2026-07-16T09:00:00+09:00",
       dataStatus: "VERIFIED",
-      verifiedCashMinor: "0",
+      managedCashMinor: "0",
       assets: [
         {
           id: "core",
@@ -102,9 +102,9 @@ describe("buildDashboardSnapshot", () => {
           upperBasisPoints: 3_000n,
         },
         {
-          id: "cash",
+          id: "CASH",
           label: "현금",
-          description: "검증된 관리 현금",
+          description: "관리 현금",
           valueMinor: 0n,
           targetBasisPoints: 0n,
           lowerBasisPoints: 0n,
@@ -116,7 +116,7 @@ describe("buildDashboardSnapshot", () => {
     expect(result.conclusion).toBe("REBALANCE_REQUIRED");
   });
 
-  it("검증된 현금과 cash 자산 평가액이 다르면 차단한다", () => {
+  it("관리 현금과 CASH 자산 평가액이 다르면 차단한다", () => {
     expect(() =>
       buildDashboardSnapshot({
         mode: "PAPER",
@@ -125,12 +125,12 @@ describe("buildDashboardSnapshot", () => {
         accountLabel: "**** 4821",
         observedAt: "2026-07-16T09:00:00+09:00",
         dataStatus: "VERIFIED",
-        verifiedCashMinor: "100",
+        managedCashMinor: "100",
         assets: [
           {
-            id: "cash",
+            id: "CASH",
             label: "현금",
-            description: "검증된 현금",
+            description: "관리 현금",
             valueMinor: 99n,
             targetBasisPoints: 10_000n,
             lowerBasisPoints: 10_000n,

@@ -11,15 +11,25 @@ import type {
 import { PortfolioService } from "./portfolio.service";
 
 const validInput = {
+  cashPolicy: {
+    mode: "FIXED_KRW" as const,
+    version: "CASH_V1" as const,
+    amountMinor: "100000",
+  },
   allocations: [
     {
       assetKey: "US:AAPL",
-      targetBasisPoints: 6_000,
+      targetBasisPoints: 5_500,
       bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
     {
       assetKey: "US:BRK.B",
-      targetBasisPoints: 4_000,
+      targetBasisPoints: 3_500,
+      bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
+    },
+    {
+      assetKey: "CASH",
+      targetBasisPoints: 1_000,
       bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
     },
   ],
@@ -36,25 +46,51 @@ describe("PortfolioService target settings", () => {
     expect(draftInput?.accountId).toBe("44444444-4444-4444-8444-444444444444");
     expect(draftInput?.sourceSnapshotId).toBe("55555555-5555-4555-8555-555555555555");
     expect(draftInput?.sourceSnapshotDigest).toBe("digest-current");
+    expect(draftInput?.cashPolicy).toEqual({
+      mode: "FIXED_KRW",
+      version: "CASH_V1",
+      amountMinor: "100000",
+    });
     expect(draftInput?.allocations.find(({ assetKey }) => assetKey === "US:AAPL")).toMatchObject({
       label: "Apple",
-      marketCountry: "US",
-      listingMarket: null,
-      symbol: "AAPL",
-      targetBasisPoints: 6_000,
-      lowerBasisPoints: 5_500,
-      upperBasisPoints: 6_500,
+      targetBasisPoints: 5_500,
+      lowerBasisPoints: 5_000,
+      upperBasisPoints: 6_000,
       bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
+      instruments: [
+        {
+          marketCountry: "US",
+          listingMarket: null,
+          symbol: "AAPL",
+          currency: "USD",
+          withinAssetPoints: 10_000,
+        },
+      ],
+    });
+    expect(draftInput?.allocations.find(({ assetKey }) => assetKey === "CASH")).toMatchObject({
+      label: "관리 현금",
+      targetBasisPoints: 1_000,
+      instruments: [],
     });
   });
 
   it("최신 보유자산 일부가 빠진 목표 설정을 거부한다", async () => {
     const service = createService(repositoryMock());
     const incomplete = {
+      cashPolicy: {
+        mode: "FIXED_KRW" as const,
+        version: "CASH_V1" as const,
+        amountMinor: "100000",
+      },
       allocations: [
         {
           assetKey: "US:AAPL",
-          targetBasisPoints: 10_000,
+          targetBasisPoints: 9_000,
+          bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
+        },
+        {
+          assetKey: "CASH",
+          targetBasisPoints: 1_000,
           bandPolicy: { mode: "AUTO" as const, version: "MIXED_V1" as const },
         },
       ],
@@ -112,6 +148,8 @@ function repositoryMock(options?: {
     accountId: "44444444-4444-4444-8444-444444444444",
     account: { maskedNumber: "****1234" },
     observedAt: new Date("2026-07-16T03:00:00.000Z"),
+    securitiesValueMinor: 1_000_000n,
+    managedCashMinor: null,
     totalValueMinor: 1_000_000n,
     targetConfigVersionId: null,
     targetConfigVersion: null,

@@ -50,9 +50,15 @@ export function PortfolioScreen({ snapshot }: { readonly snapshot: DashboardSnap
           />
           <SummaryCard
             label="관리 현금"
-            value={snapshot.verifiedCashMinor ? formatWon(snapshot.verifiedCashMinor) : "미확인"}
+            value={
+              snapshot.managedCashMinor === null ? "미확인" : formatWon(snapshot.managedCashMinor)
+            }
             description={
-              snapshot.verifiedCashMinor === null ? "관리 현금을 확인해 주세요" : "확인 완료"
+              snapshot.managedCashSource === "UNSET"
+                ? "관리 현금 기준을 선택해 주세요"
+                : snapshot.managedCashSource === "EXCLUDED"
+                  ? "포트폴리오 평가에서 제외"
+                  : "사용자 고정 금액 반영"
             }
           />
         </section>

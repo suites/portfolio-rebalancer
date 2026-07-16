@@ -7,6 +7,7 @@ import {
   SnapshotValidationStatus,
   type DatabaseClient,
 } from "@portfolio-rebalancer/database";
+import { TargetStoredCashPolicySchema } from "@portfolio-rebalancer/contracts";
 
 export interface StoredHoldingInput {
   readonly marketCountry: string;
@@ -39,13 +40,26 @@ export interface CollectionLease {
   readonly fencingToken: bigint;
 }
 
-export interface StoredTargetAllocationInput {
-  readonly assetKey: string;
-  readonly label: string;
+export interface StoredTargetInstrumentInput {
   readonly marketCountry: string;
   readonly listingMarket: string | null;
   readonly symbol: string;
   readonly currency: string;
+  readonly withinAssetPoints: number;
+}
+
+export type StoredCashPolicy =
+  | { readonly mode: "UNSET"; readonly version: string }
+  | { readonly mode: "EXCLUDED"; readonly version: "CASH_V1" }
+  | {
+      readonly mode: "FIXED_KRW";
+      readonly version: "CASH_V1";
+      readonly amountMinor: string;
+    };
+
+export interface StoredTargetAllocationInput {
+  readonly assetKey: string;
+  readonly label: string;
   readonly targetBasisPoints: number;
   readonly lowerBasisPoints: number;
   readonly upperBasisPoints: number;
@@ -57,12 +71,14 @@ export interface StoredTargetAllocationInput {
         readonly lowerBasisPoints: number;
         readonly upperBasisPoints: number;
       };
+  readonly instruments: readonly StoredTargetInstrumentInput[];
 }
 
 export interface StoredTargetDraftInput {
   readonly accountId: string;
   readonly sourceSnapshotId: string;
   readonly sourceSnapshotDigest: string;
+  readonly cashPolicy: StoredCashPolicy;
   readonly allocations: readonly StoredTargetAllocationInput[];
 }
 
@@ -161,29 +177,13 @@ export class PrismaPortfolioRepository {
     readonly runId: string;
     readonly accountId: string;
     readonly observedAt: Date;
-    readonly totalValueMinor: bigint;
+    readonly securitiesValueMinor: bigint;
     readonly usdKrwRate: string | null;
     readonly holdings: readonly StoredHoldingInput[];
     readonly buyingPower: readonly StoredBuyingPowerInput[];
     readonly rawResponses: readonly RedactedResponseInput[];
     readonly lease: CollectionLease;
   }): Promise<boolean> {
-    const digest = createHash("sha256")
-      .update(
-        JSON.stringify({
-          observedAt: input.observedAt.toISOString(),
-          holdings: input.holdings.map(({ rawPayload: _rawPayload, ...holding }) => ({
-            ...holding,
-            marketValueKrwMinor: holding.marketValueKrwMinor.toString(),
-          })),
-          buyingPower: input.buyingPower.map((item) => ({
-            ...item,
-            valueKrwMinor: item.valueKrwMinor.toString(),
-          })),
-        }),
-      )
-      .digest("hex");
-
     return this.database.$transaction(async (transaction) => {
       const activeLease = await transaction.$queryRaw<readonly { fencingToken: bigint }[]>`
         SELECT "fencing_token" AS "fencingToken"
@@ -198,8 +198,27 @@ export class PrismaPortfolioRepository {
 
       const activeTarget = await transaction.targetConfigVersion.findFirst({
         where: { config: { accountId: input.accountId }, status: "ACTIVE" },
-        select: { id: true },
+        select: { id: true, cashPolicy: true },
       });
+      const managedCashMinor = resolveManagedCashMinor(activeTarget?.cashPolicy);
+      const digest = createHash("sha256")
+        .update(
+          JSON.stringify({
+            observedAt: input.observedAt.toISOString(),
+            targetConfigVersionId: activeTarget?.id ?? null,
+            holdings: input.holdings.map(({ rawPayload: _rawPayload, ...holding }) => ({
+              ...holding,
+              marketValueKrwMinor: holding.marketValueKrwMinor.toString(),
+            })),
+            buyingPower: input.buyingPower.map((item) => ({
+              ...item,
+              valueKrwMinor: item.valueKrwMinor.toString(),
+            })),
+            managedCashMinor: managedCashMinor?.toString() ?? null,
+            securitiesValueMinor: input.securitiesValueMinor.toString(),
+          }),
+        )
+        .digest("hex");
       await transaction.rawBrokerResponse.createMany({
         data: input.rawResponses.map((response) => ({
           collectionRunId: input.runId,
@@ -221,8 +240,9 @@ export class PrismaPortfolioRepository {
           observedAt: input.observedAt,
           validationStatus: SnapshotValidationStatus.VERIFIED,
           baseCurrency: "KRW",
-          managedCashMinor: null,
-          totalValueMinor: input.totalValueMinor,
+          managedCashMinor,
+          securitiesValueMinor: input.securitiesValueMinor,
+          totalValueMinor: input.securitiesValueMinor + (managedCashMinor ?? 0n),
           usdKrwRate: input.usdKrwRate,
           digest,
           holdings: { create: [...input.holdings] },
@@ -314,21 +334,26 @@ export class PrismaPortfolioRepository {
       .map((allocation) => ({
         assetKey: allocation.assetKey,
         label: allocation.label,
-        marketCountry: allocation.marketCountry,
-        listingMarket: allocation.listingMarket,
-        symbol: allocation.symbol,
-        currency: allocation.currency,
         targetBasisPoints: allocation.targetBasisPoints,
         lowerBasisPoints: allocation.lowerBasisPoints,
         upperBasisPoints: allocation.upperBasisPoints,
         bandPolicy: allocation.bandPolicy,
+        instruments: [...allocation.instruments].sort((left, right) => {
+          const leftKey = `${left.marketCountry}:${left.symbol}`;
+          const rightKey = `${right.marketCountry}:${right.symbol}`;
+          return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+        }),
       }));
-    const source = {
-      version: 3,
-      managedCashMinor: null,
+    const source: Prisma.InputJsonObject = {
+      version: 4,
+      cashPolicy: { ...input.cashPolicy },
       sourceSnapshotId: input.sourceSnapshotId,
       sourceSnapshotDigest: input.sourceSnapshotDigest,
-      allocations: canonical,
+      allocations: canonical.map((allocation) => ({
+        ...allocation,
+        bandPolicy: { ...allocation.bandPolicy },
+        instruments: allocation.instruments.map((instrument) => ({ ...instrument })),
+      })),
     };
     const contentHash = createHash("sha256").update(JSON.stringify(source)).digest("hex");
 
@@ -384,6 +409,7 @@ export class PrismaPortfolioRepository {
             contentHash,
             appVersion: "0.1.0",
             source,
+            cashPolicy: input.cashPolicy,
             allocations: {
               create: canonical.map((allocation) => ({
                 assetKey: allocation.assetKey,
@@ -391,16 +417,14 @@ export class PrismaPortfolioRepository {
                 targetBasisPoints: allocation.targetBasisPoints,
                 lowerBasisPoints: allocation.lowerBasisPoints,
                 upperBasisPoints: allocation.upperBasisPoints,
-                bandPolicy: allocation.bandPolicy,
-                instruments: {
-                  create: {
-                    marketCountry: allocation.marketCountry,
-                    listingMarket: allocation.listingMarket,
-                    symbol: allocation.symbol,
-                    currency: allocation.currency,
-                    withinAssetPoints: 10_000,
-                  },
-                },
+                bandPolicy: { ...allocation.bandPolicy },
+                ...(allocation.instruments.length === 0
+                  ? {}
+                  : {
+                      instruments: {
+                        create: allocation.instruments.map((instrument) => ({ ...instrument })),
+                      },
+                    }),
               })),
             },
           },
@@ -483,4 +507,18 @@ function targetSourceMatchesSnapshot(
   if (source === null || Array.isArray(source) || typeof source !== "object") return false;
   const record = source as Record<string, unknown>;
   return record.sourceSnapshotId === snapshotId && record.sourceSnapshotDigest === snapshotDigest;
+}
+
+function resolveManagedCashMinor(cashPolicy: Prisma.JsonValue | undefined): bigint | null {
+  const parsed = TargetStoredCashPolicySchema.parse(
+    cashPolicy ?? { mode: "UNSET", version: "NO_ACTIVE_TARGET" },
+  );
+  switch (parsed.mode) {
+    case "UNSET":
+      return null;
+    case "EXCLUDED":
+      return 0n;
+    case "FIXED_KRW":
+      return BigInt(parsed.amountMinor);
+  }
 }

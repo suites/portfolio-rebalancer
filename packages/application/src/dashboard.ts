@@ -28,7 +28,7 @@ export interface DashboardSnapshot {
   readonly observedAt: string;
   readonly conclusion: DashboardConclusion;
   readonly totalValueMinor: string;
-  readonly verifiedCashMinor: string | null;
+  readonly managedCashMinor: string | null;
   readonly allocations: readonly DashboardAllocation[];
 }
 
@@ -45,7 +45,7 @@ export function buildDashboardSnapshot(
     readonly assets: readonly DashboardAssetInput[];
   },
 ): DashboardSnapshot {
-  validateDashboardAssets(input.assets, input.verifiedCashMinor);
+  validateDashboardAssets(input.assets, input.managedCashMinor);
   const calculated = calculateAllocationSnapshot(input.assets);
   const conclusion = determineConclusion(input, calculated.totalValueMinor);
   return {
@@ -56,7 +56,7 @@ export function buildDashboardSnapshot(
     observedAt: input.observedAt,
     conclusion,
     totalValueMinor: calculated.totalValueMinor.toString(),
-    verifiedCashMinor: input.verifiedCashMinor,
+    managedCashMinor: input.managedCashMinor,
     allocations: calculated.allocations.map((allocation) => {
       const source = input.assets.find(({ id }) => id === allocation.id);
       if (!source) {
@@ -89,13 +89,13 @@ export function buildDashboardSnapshot(
 function determineConclusion(
   input: {
     readonly dataStatus: DashboardDataStatus;
-    readonly verifiedCashMinor: string | null;
+    readonly managedCashMinor: string | null;
     readonly assets: readonly DashboardAssetInput[];
   },
   totalValueMinor: bigint,
 ): DashboardConclusion {
   if (input.dataStatus === "UNKNOWN") return "UNKNOWN";
-  if (input.dataStatus === "BLOCKED" || input.verifiedCashMinor === null) return "BLOCKED";
+  if (input.dataStatus === "BLOCKED" || input.managedCashMinor === null) return "BLOCKED";
 
   const outsideBand = input.assets.some((asset) =>
     isOutsideAllocationBand({
@@ -110,7 +110,7 @@ function determineConclusion(
 
 function validateDashboardAssets(
   assets: readonly DashboardAssetInput[],
-  verifiedCashMinor: string | null,
+  managedCashMinor: string | null,
 ): void {
   for (const asset of assets) {
     if (
@@ -123,13 +123,13 @@ function validateDashboardAssets(
     }
   }
 
-  if (verifiedCashMinor !== null) {
-    if (!/^\d+$/.test(verifiedCashMinor)) {
-      throw new Error("검증된 관리 현금은 0 이상의 minor-unit 정수 문자열이어야 합니다.");
+  if (managedCashMinor !== null) {
+    if (!/^\d+$/.test(managedCashMinor)) {
+      throw new Error("관리 현금은 0 이상의 minor-unit 정수 문자열이어야 합니다.");
     }
-    const cashAsset = assets.find(({ id }) => id === "cash");
-    if (!cashAsset || cashAsset.valueMinor !== BigInt(verifiedCashMinor)) {
-      throw new Error("검증된 관리 현금과 cash 자산 평가액이 일치해야 합니다.");
+    const cashAsset = assets.find(({ id }) => id === "CASH");
+    if (!cashAsset || cashAsset.valueMinor !== BigInt(managedCashMinor)) {
+      throw new Error("관리 현금과 CASH 자산 평가액이 일치해야 합니다.");
     }
   }
 }

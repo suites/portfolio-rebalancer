@@ -73,21 +73,46 @@ export const DashboardBuyingPowerSchema = z.object({
   valuationEligible: z.literal(false),
 });
 
-export const DashboardSnapshotSchema = z.object({
-  state: z.enum(["READY", "EMPTY", "BLOCKED"]),
-  mode: z.literal("SHADOW"),
-  dataSource: z.literal("TOSS"),
-  brokerConnection: z.enum(["CONNECTED", "NOT_CONFIGURED", "FAILED"]),
-  accountLabel: z.string().min(1).nullable(),
-  observedAt: z.iso.datetime({ offset: true }).nullable(),
-  conclusion: z.enum(["NO_ACTION", "REBALANCE_REQUIRED", "BLOCKED"]),
-  totalValueMinor: z.string().regex(/^\d+$/).nullable(),
-  verifiedCashMinor: z.string().regex(/^\d+$/).nullable(),
-  buyingPower: z.array(DashboardBuyingPowerSchema).max(2).default([]),
-  allocations: z.array(DashboardAllocationSchema),
-  blockReason: DashboardBlockReasonSchema.nullable(),
-  liveOrdersEnabled: z.literal(false),
-});
+export const DashboardSnapshotSchema = z
+  .object({
+    state: z.enum(["READY", "EMPTY", "BLOCKED"]),
+    mode: z.literal("SHADOW"),
+    dataSource: z.literal("TOSS"),
+    brokerConnection: z.enum(["CONNECTED", "NOT_CONFIGURED", "FAILED"]),
+    accountLabel: z.string().min(1).nullable(),
+    observedAt: z.iso.datetime({ offset: true }).nullable(),
+    conclusion: z.enum(["NO_ACTION", "REBALANCE_REQUIRED", "BLOCKED"]),
+    totalValueMinor: z.string().regex(/^\d+$/).nullable(),
+    managedCashMinor: z.string().regex(/^\d+$/).nullable(),
+    managedCashSource: z.enum(["UNSET", "EXCLUDED", "USER_FIXED"]),
+    buyingPower: z.array(DashboardBuyingPowerSchema).max(2).default([]),
+    allocations: z.array(DashboardAllocationSchema),
+    blockReason: DashboardBlockReasonSchema.nullable(),
+    liveOrdersEnabled: z.literal(false),
+  })
+  .superRefine((snapshot, context) => {
+    if (snapshot.managedCashSource === "UNSET" && snapshot.managedCashMinor !== null) {
+      context.addIssue({
+        code: "custom",
+        path: ["managedCashMinor"],
+        message: "관리 현금 기준이 없으면 금액도 없어야 합니다.",
+      });
+    }
+    if (snapshot.managedCashSource === "EXCLUDED" && snapshot.managedCashMinor !== "0") {
+      context.addIssue({
+        code: "custom",
+        path: ["managedCashMinor"],
+        message: "현금 제외 정책의 관리 현금은 0원이어야 합니다.",
+      });
+    }
+    if (snapshot.managedCashSource === "USER_FIXED" && snapshot.managedCashMinor === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["managedCashMinor"],
+        message: "사용자 고정 관리 현금에는 금액이 필요합니다.",
+      });
+    }
+  });
 
 export type DashboardBlockReasonContract = z.infer<typeof DashboardBlockReasonSchema>;
 export type DashboardSnapshotContract = z.infer<typeof DashboardSnapshotSchema>;

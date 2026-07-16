@@ -45,7 +45,9 @@ function engineUnavailableDashboard(): DashboardSnapshotContract {
     observedAt: null,
     conclusion: "BLOCKED",
     totalValueMinor: null,
-    verifiedCashMinor: null,
+    managedCashMinor: null,
+    managedCashSource: "UNSET",
+    buyingPower: [],
     allocations: [],
     blockReason: {
       code: "ENGINE_UNAVAILABLE",

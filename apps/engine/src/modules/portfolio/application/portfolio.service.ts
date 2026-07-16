@@ -88,12 +88,13 @@ export class PortfolioService {
       snapshot.holdings.map((holding) => [`${holding.marketCountry}:${holding.symbol}`, holding]),
     );
     if (
-      requested.size !== holdings.size ||
-      [...requested.keys()].some((key) => !holdings.has(key))
+      requested.size !== holdings.size + 1 ||
+      !requested.has("CASH") ||
+      [...requested.keys()].some((key) => key !== "CASH" && !holdings.has(key))
     ) {
       throw new TargetSettingsError(
         "ASSET_SET_MISMATCH",
-        "목표 설정은 최신 스냅샷의 모든 보유자산을 정확히 한 번씩 포함해야 합니다.",
+        "목표 설정은 CASH와 최신 스냅샷의 모든 보유자산을 정확히 한 번씩 포함해야 합니다.",
       );
     }
 
@@ -101,7 +102,17 @@ export class PortfolioService {
       accountId: snapshot.accountId,
       sourceSnapshotId: snapshot.id,
       sourceSnapshotDigest: snapshot.digest,
+      cashPolicy: parsed.cashPolicy,
       allocations: [...requested.entries()].map(([key, allocation]) => {
+        if (key === "CASH") {
+          const band = resolveTargetBand(allocation);
+          return {
+            ...allocation,
+            ...band,
+            label: "관리 현금",
+            instruments: [],
+          };
+        }
         const holding = holdings.get(key);
         if (!holding) {
           throw new TargetSettingsError("ASSET_SET_MISMATCH", "보유자산을 찾을 수 없습니다.");
@@ -111,10 +122,15 @@ export class PortfolioService {
           ...allocation,
           ...band,
           label: holding.name,
-          marketCountry: holding.marketCountry,
-          listingMarket: null,
-          symbol: holding.symbol,
-          currency: holding.currency,
+          instruments: [
+            {
+              marketCountry: holding.marketCountry,
+              listingMarket: null,
+              symbol: holding.symbol,
+              currency: holding.currency,
+              withinAssetPoints: 10_000,
+            },
+          ],
         };
       }),
     });

@@ -64,6 +64,12 @@ describe("SettingsScreen", () => {
           description: "KR · KRW · 1주",
           currentBasisPointHundredths: 1_000_000,
         },
+        {
+          assetKey: "CASH",
+          label: "관리 현금",
+          description: "평가에 포함할 관리 현금을 아직 선택하지 않았습니다.",
+          currentBasisPointHundredths: null,
+        },
       ],
       liveOrdersEnabled: false,
     });
@@ -74,5 +80,8 @@ describe("SettingsScreen", () => {
     expect(html).not.toContain('name="lowerPercent"');
     expect(html).not.toContain('name="upperPercent"');
     expect(html).toContain("목표의 25%, 최대 ±5%p");
+    expect(html).toContain('name="cashMode"');
+    expect(html).toContain('name="managedCashWon"');
+    expect(html).toContain("계산 전");
   });
 });

@@ -6,14 +6,16 @@ import type { DatabaseClient } from "@portfolio-rebalancer/database";
 
 import { PrismaPortfolioRepository } from "./prisma-portfolio.repository";
 
+const cashPolicy = {
+  mode: "FIXED_KRW" as const,
+  version: "CASH_V1" as const,
+  amountMinor: "1000000",
+};
+
 const allocations = [
   {
     assetKey: "US:AAPL",
     label: "Apple",
-    marketCountry: "US",
-    listingMarket: "NASDAQ",
-    symbol: "AAPL",
-    currency: "USD",
     targetBasisPoints: 10_000,
     lowerBasisPoints: 9_000,
     upperBasisPoints: 10_000,
@@ -23,6 +25,15 @@ const allocations = [
       lowerBasisPoints: 9_000,
       upperBasisPoints: 10_000,
     },
+    instruments: [
+      {
+        marketCountry: "US",
+        listingMarket: "NASDAQ",
+        symbol: "AAPL",
+        currency: "USD",
+        withinAssetPoints: 10_000,
+      },
+    ],
   },
 ];
 
@@ -54,6 +65,7 @@ describe("PrismaPortfolioRepository target settings", () => {
       accountId: "account-1",
       sourceSnapshotId: "snapshot-1",
       sourceSnapshotDigest: "digest-1",
+      cashPolicy,
       allocations,
     });
 
@@ -63,8 +75,9 @@ describe("PrismaPortfolioRepository target settings", () => {
             version: number;
             status: string;
             contentHash: string;
+            cashPolicy: typeof cashPolicy;
             source: {
-              managedCashMinor: string | null;
+              cashPolicy: typeof cashPolicy;
               sourceSnapshotId: string;
               sourceSnapshotDigest: string;
               version: number;
@@ -78,8 +91,8 @@ describe("PrismaPortfolioRepository target settings", () => {
       createHash("sha256")
         .update(
           JSON.stringify({
-            version: 3,
-            managedCashMinor: null,
+            version: 4,
+            cashPolicy,
             sourceSnapshotId: "snapshot-1",
             sourceSnapshotDigest: "digest-1",
             allocations,
@@ -87,8 +100,9 @@ describe("PrismaPortfolioRepository target settings", () => {
         )
         .digest("hex"),
     );
-    expect(createInput?.data.source.version).toBe(3);
-    expect(createInput?.data.source.managedCashMinor).toBeNull();
+    expect(createInput?.data.cashPolicy).toEqual(cashPolicy);
+    expect(createInput?.data.source.version).toBe(4);
+    expect(createInput?.data.source.cashPolicy).toEqual(cashPolicy);
     expect(createInput?.data.source.sourceSnapshotId).toBe("snapshot-1");
     expect(createInput?.data.source.sourceSnapshotDigest).toBe("digest-1");
     expect(retireDrafts.mock.calls[0]?.[0]).toEqual({
@@ -158,6 +172,7 @@ describe("PrismaPortfolioRepository target settings", () => {
         accountId: "account-1",
         sourceSnapshotId: "snapshot-1",
         sourceSnapshotDigest: "digest-1",
+        cashPolicy,
         allocations,
       }),
     ).resolves.toBeNull();
@@ -243,7 +258,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
       runId: "run-1",
       accountId: "account-1",
       observedAt,
-      totalValueMinor: 3_142_919n,
+      securitiesValueMinor: 3_142_919n,
       usdKrwRate: "1380",
       holdings: [],
       buyingPower: [
@@ -261,6 +276,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
       | {
           data: {
             managedCashMinor: bigint | null;
+            securitiesValueMinor: bigint;
             totalValueMinor: bigint;
             buyingPower: {
               create: readonly {
@@ -276,6 +292,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
       | undefined;
     expect(snapshotInput?.data).toMatchObject({
       managedCashMinor: null,
+      securitiesValueMinor: 3_142_919n,
       totalValueMinor: 3_142_919n,
       buyingPower: {
         create: [
@@ -295,6 +312,66 @@ describe("PrismaPortfolioRepository collection evidence", () => {
           },
         ],
       },
+    });
+  });
+
+  it("최종 fenced 트랜잭션에서 고정한 ACTIVE 정책으로 관리 현금과 총액을 함께 저장한다", async () => {
+    const createSnapshot = vi.fn().mockResolvedValue({ id: "snapshot-1" });
+    const findActive = vi.fn().mockResolvedValue({
+      id: "target-1",
+      cashPolicy: {
+        mode: "FIXED_KRW",
+        version: "CASH_V1",
+        amountMinor: "100000",
+      },
+    });
+    const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([{ fencingToken: 1n }]),
+      targetConfigVersion: { findFirst: findActive },
+      rawBrokerResponse: {
+        createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      portfolioSnapshot: { create: createSnapshot },
+      collectionRun: {
+        update: vi.fn().mockResolvedValue({ id: "run-1" }),
+      },
+    };
+    const repository = repositoryWithTransaction(transaction);
+
+    await repository.completeCollection({
+      runId: "run-1",
+      accountId: "account-1",
+      observedAt: new Date("2026-07-16T03:00:00.000Z"),
+      securitiesValueMinor: 900_000n,
+      usdKrwRate: null,
+      holdings: [],
+      buyingPower: [],
+      rawResponses: [],
+      lease: {
+        owner: "11111111-1111-4111-8111-111111111111",
+        fencingToken: 1n,
+      },
+    });
+
+    expect(findActive).toHaveBeenCalledWith({
+      where: { config: { accountId: "account-1" }, status: "ACTIVE" },
+      select: { id: true, cashPolicy: true },
+    });
+    const snapshotInput = createSnapshot.mock.calls[0]?.[0] as
+      | {
+          data: {
+            targetConfigVersionId: string | null;
+            securitiesValueMinor: bigint;
+            managedCashMinor: bigint | null;
+            totalValueMinor: bigint;
+          };
+        }
+      | undefined;
+    expect(snapshotInput?.data).toMatchObject({
+      targetConfigVersionId: "target-1",
+      securitiesValueMinor: 900_000n,
+      managedCashMinor: 100_000n,
+      totalValueMinor: 1_000_000n,
     });
   });
 
@@ -323,7 +400,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
         runId: "run-1",
         accountId: "account-1",
         observedAt: new Date("2026-07-16T03:00:00.000Z"),
-        totalValueMinor: 0n,
+        securitiesValueMinor: 0n,
         usdKrwRate: null,
         holdings: [],
         buyingPower: [],
