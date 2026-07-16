@@ -13,4 +13,12 @@ describe("Vercel Nest deployment configuration", () => {
     expect(config).not.toHaveProperty("routes");
     expect(config).not.toHaveProperty("rewrites");
   });
+
+  it("Vercel detector가 읽는 main 진입점에서 Nest를 직접 시작한다", async () => {
+    const entrypoint = await readFile(new URL("./main.ts", import.meta.url), "utf8");
+
+    expect(entrypoint).toContain('from "@nestjs/core"');
+    expect(entrypoint).toContain("NestFactory.create");
+    expect(entrypoint).toContain("app.listen");
+  });
 });
