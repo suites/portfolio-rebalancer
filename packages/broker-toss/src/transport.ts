@@ -116,6 +116,10 @@ export function assertTossResponse(response: Response): void {
   if (!response.ok) throw new TossApiResponseError(response);
 }
 
+export function getTossResponseMetadata(response: Response): TossResponseMetadata | null {
+  return responseMetadata.get(response) ?? null;
+}
+
 export function createTimedFetch(
   fetchImplementation: typeof globalThis.fetch,
   timeoutMs: number,

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { assertTossResponse, createTimedFetch, createTossManagedFetch } from "./transport";
+import {
+  assertTossResponse,
+  createTimedFetch,
+  createTossManagedFetch,
+  getTossResponseMetadata,
+} from "./transport";
 
 describe("createTimedFetch", () => {
   it("시간이 초과된 요청을 재제출 경고가 있는 안전 오류로 변환한다", async () => {
@@ -22,6 +27,39 @@ describe("createTimedFetch", () => {
 });
 
 describe("createTossManagedFetch", () => {
+  it("실제 business Response에 연결된 읽기 전용 메타데이터를 반환한다", async () => {
+    const now = vi
+      .fn<() => number>()
+      .mockReturnValueOnce(Date.parse("2026-07-16T00:00:00.000Z"))
+      .mockReturnValueOnce(Date.parse("2026-07-16T00:00:00.125Z"));
+    const managedFetch = createTossManagedFetch(
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify({ result: [] }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": "official-request-id",
+          },
+        }),
+      ),
+      { now },
+    );
+
+    const response = await managedFetch(
+      "https://openapi.tossinvest.com/api/v1/prices?symbols=005930",
+    );
+
+    expect(getTossResponseMetadata(response)).toMatchObject({
+      operationId: "getPrices",
+      staticRateLimitGroup: "MARKET_DATA",
+      outcome: "SUCCESS",
+      httpStatus: 200,
+      requestId: "official-request-id",
+      receivedAt: "2026-07-16T00:00:00.125Z",
+    });
+    expect(getTossResponseMetadata(new Response())).toBeNull();
+  });
+
   it("같은 rate group은 직렬화하고 다른 그룹은 독립적으로 실행한다", async () => {
     let releaseFirstMarketRequest: () => void = () => undefined;
     const firstMarketResponse = new Promise<Response>((resolve) => {

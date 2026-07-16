@@ -16,6 +16,7 @@
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-fastify": "^11.1.28",
+    "@portfolio-rebalancer/broker": "workspace:*",
     "@portfolio-rebalancer/broker-toss": "workspace:*",
     "@portfolio-rebalancer/contracts": "workspace:*",
     "@portfolio-rebalancer/database": "workspace:*",

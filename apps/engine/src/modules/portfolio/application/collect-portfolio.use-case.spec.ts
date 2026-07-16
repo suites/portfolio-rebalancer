@@ -26,6 +26,7 @@ describe("collectPortfolio", () => {
       getUsdKrwRate: vi.fn(),
       getStocks: vi.fn(),
       getStockWarnings: vi.fn(),
+      ...neutralReadSourceStubs(),
     };
     const repository = {
       acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
@@ -63,6 +64,7 @@ describe("collectPortfolio", () => {
       getUsdKrwRate: vi.fn(),
       getStocks: vi.fn(),
       getStockWarnings: vi.fn(),
+      ...neutralReadSourceStubs(),
     };
     const completeCollection = vi.fn().mockResolvedValue(true);
     const repository = {
@@ -145,6 +147,7 @@ describe("collectPortfolio", () => {
       getUsdKrwRate: vi.fn(),
       getStocks: vi.fn(),
       getStockWarnings: vi.fn(),
+      ...neutralReadSourceStubs(),
     };
     const repository = {
       acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
@@ -205,6 +208,7 @@ describe("collectPortfolio", () => {
       }),
       getStocks: vi.fn(),
       getStockWarnings: vi.fn(),
+      ...neutralReadSourceStubs(),
     };
     const completeCollection = vi.fn().mockResolvedValue(true);
     const repository = {
@@ -259,6 +263,7 @@ describe("collectPortfolio", () => {
       getUsdKrwRate: vi.fn(),
       getStocks: vi.fn(),
       getStockWarnings: vi.fn(),
+      ...neutralReadSourceStubs(),
     };
     const completeCollection = vi.fn();
     const failCollection = vi.fn().mockResolvedValue(undefined);
@@ -294,6 +299,7 @@ describe("collectPortfolio", () => {
       getUsdKrwRate: vi.fn(),
       getStocks: vi.fn(),
       getStockWarnings: vi.fn(),
+      ...neutralReadSourceStubs(),
     };
     const repository = {
       acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
@@ -329,6 +335,7 @@ describe("collectPortfolio", () => {
       getUsdKrwRate: vi.fn(),
       getStocks: vi.fn(),
       getStockWarnings: vi.fn(),
+      ...neutralReadSourceStubs(),
     };
     const failCollection = vi.fn().mockResolvedValue(undefined);
     const repository = {
@@ -360,6 +367,17 @@ describe("collectPortfolio", () => {
     expect(reference).not.toContain("12345678901");
   });
 });
+
+function neutralReadSourceStubs() {
+  return {
+    getPrices: vi.fn(),
+    getOrderBook: vi.fn(),
+    getPriceLimit: vi.fn(),
+    getMarketCalendar: vi.fn(),
+    getSellableQuantity: vi.fn(),
+    getCommissionSchedule: vi.fn(),
+  };
+}
 
 function emptyHoldingsResponse() {
   const zeroByCurrency = { krw: "0", usd: "0" };
