@@ -6,6 +6,10 @@ import type { DatabaseClient } from "@portfolio-rebalancer/database";
 
 import { PrismaPortfolioRepository } from "./prisma-portfolio.repository";
 
+const PRICE_ATTEMPT_ID = "11111111-1111-4111-8111-111111111111";
+const KR_CALENDAR_ATTEMPT_ID = "22222222-2222-4222-8222-222222222222";
+const US_CALENDAR_ATTEMPT_ID = "33333333-3333-4333-8333-333333333333";
+
 const cashPolicy = {
   mode: "FIXED_KRW" as const,
   version: "CASH_V1" as const,
@@ -207,6 +211,41 @@ describe("PrismaPortfolioRepository broker request attempts", () => {
       ordinal: 0,
       attempt: 2,
       outcome: "SUCCEEDED",
+    });
+  });
+});
+
+describe("PrismaPortfolioRepository broker response validations", () => {
+  it("pre-Zod redacted 원문과 canonical hash를 append-only 검증 증거로 저장한다", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "validation-1" });
+    const repository = new PrismaPortfolioRepository({
+      brokerResponseValidation: { create },
+    } as unknown as DatabaseClient);
+    const validatedAt = new Date("2026-07-16T03:00:00.250Z");
+
+    await repository.appendBrokerResponseValidation({
+      requestAttemptId: PRICE_ATTEMPT_ID,
+      operationId: "getPrices",
+      outcome: "SCHEMA_ERROR",
+      redactedBody: { z: 1, a: { token: "[REDACTED]", value: 2 } },
+      safeErrorCode: "TOSS_RESPONSE_SCHEMA_ERROR",
+      validatedAt,
+    });
+
+    const redactedBody = {
+      a: { token: "[REDACTED]", value: 2 },
+      z: 1,
+    };
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        requestAttemptId: PRICE_ATTEMPT_ID,
+        operationId: "getPrices",
+        outcome: "SCHEMA_ERROR",
+        redactedBody,
+        bodySha256: createHash("sha256").update(JSON.stringify(redactedBody)).digest("hex"),
+        safeErrorCode: "TOSS_RESPONSE_SCHEMA_ERROR",
+        validatedAt,
+      },
     });
   });
 });
@@ -485,6 +524,36 @@ describe("PrismaPortfolioRepository target settings", () => {
 });
 
 describe("PrismaPortfolioRepository collection evidence", () => {
+  it("redacted 원문 저장값과 SHA-256을 같은 canonical JSON에서 만든다", async () => {
+    const createMany = vi.fn().mockResolvedValue({ count: 1 });
+    const transaction = collectionTransaction(vi.fn().mockResolvedValue({ id: "snapshot-1" }));
+    transaction.rawBrokerResponse.createMany = createMany;
+    const repository = repositoryWithTransaction(transaction);
+
+    await repository.completeCollection({
+      ...emptyCollectionInput(),
+      rawResponses: [
+        {
+          operationId: "getPrices",
+          ordinal: 0,
+          receivedAt: new Date("2026-07-16T00:00:00.000Z"),
+          body: { z: 1, a: { y: 2, x: 3 } },
+        },
+      ],
+    });
+
+    const data = (
+      createMany.mock.calls[0]?.[0] as {
+        data: readonly { redactedBody: unknown; bodySha256: string }[];
+      }
+    ).data[0];
+    const canonical = { a: { x: 3, y: 2 }, z: 1 };
+    expect(data?.redactedBody).toEqual(canonical);
+    expect(data?.bodySha256).toBe(
+      createHash("sha256").update(JSON.stringify(canonical)).digest("hex"),
+    );
+  });
+
   it("매수 가능 금액을 관리 현금과 분리된 append-only snapshot 자식으로 저장한다", async () => {
     const createSnapshot = vi.fn().mockResolvedValue({ id: "snapshot-1" });
     const transaction = {
@@ -672,7 +741,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
       lastPrice: "72000",
       providerObservedAt: observedAt,
       receivedAt,
-      requestAttemptId: null,
+      requestAttemptId: PRICE_ATTEMPT_ID,
     };
     const usPrice = {
       marketCountry: "US" as const,
@@ -681,7 +750,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
       lastPrice: "210.5",
       providerObservedAt: observedAt,
       receivedAt,
-      requestAttemptId: null,
+      requestAttemptId: PRICE_ATTEMPT_ID,
     };
     const krHolding = storedKrHolding();
     const usHolding = storedUsHolding();
@@ -715,7 +784,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
             nextBusinessDay: { date: "2026-07-17", sessions: [] },
           },
           receivedAt,
-          requestAttemptId: null,
+          requestAttemptId: US_CALENDAR_ATTEMPT_ID,
         },
         {
           marketCountry: "KR",
@@ -727,7 +796,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
             marketCountry: "KR",
           },
           receivedAt,
-          requestAttemptId: null,
+          requestAttemptId: KR_CALENDAR_ATTEMPT_ID,
         },
       ],
     });
@@ -740,7 +809,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
       buyingPower: [krwBuyingPower, usdBuyingPower],
       prices: [
         {
-          requestAttemptId: null,
+          requestAttemptId: PRICE_ATTEMPT_ID,
           receivedAt,
           providerObservedAt: observedAt,
           lastPrice: "72000",
@@ -749,7 +818,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
           marketCountry: "KR",
         },
         {
-          requestAttemptId: null,
+          requestAttemptId: PRICE_ATTEMPT_ID,
           receivedAt,
           providerObservedAt: observedAt,
           lastPrice: "210.5",
@@ -769,7 +838,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
             today: { sessions: [], date: "2026-07-16" },
           },
           receivedAt,
-          requestAttemptId: null,
+          requestAttemptId: KR_CALENDAR_ATTEMPT_ID,
         },
         {
           marketCountry: "US",
@@ -781,7 +850,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
             previousBusinessDay: { date: "2026-07-15", sessions: [] },
           },
           receivedAt,
-          requestAttemptId: null,
+          requestAttemptId: US_CALENDAR_ATTEMPT_ID,
         },
       ],
     });
@@ -899,7 +968,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
             lastPrice: "72000",
             providerObservedAt: new Date("2026-07-16T00:00:00.000Z"),
             receivedAt: new Date("2026-07-16T00:00:00.100Z"),
-            requestAttemptId: null,
+            requestAttemptId: PRICE_ATTEMPT_ID,
           },
         ],
         marketCalendars: [storedCalendar("KR")],
@@ -943,7 +1012,7 @@ describe("PrismaPortfolioRepository collection evidence", () => {
           lastPrice: "72000",
           providerObservedAt: null,
           receivedAt: new Date("2026-07-16T00:00:00.100Z"),
-          requestAttemptId: null,
+          requestAttemptId: PRICE_ATTEMPT_ID,
         },
       ],
       marketCalendars: [storedCalendar("KR")],
@@ -958,6 +1027,12 @@ describe("PrismaPortfolioRepository collection evidence", () => {
       }
     ).data;
     expect(data.validationStatus).toBe("BLOCKED");
+    expect(data.checks.create).toContainEqual(
+      expect.objectContaining({
+        ruleCode: "BROKER_RESPONSE_PROVENANCE",
+        outcome: "PASSED",
+      }),
+    );
     expect(data.checks.create).toContainEqual(
       expect.objectContaining({
         ruleCode: "PRICE_OBSERVATION_TIME",
@@ -1165,7 +1240,7 @@ function storedCalendar(marketCountry: "KR" | "US") {
       nextBusinessDay: { date: "2026-07-17", sessions: [] },
     },
     receivedAt: new Date("2026-07-16T00:00:00.100Z"),
-    requestAttemptId: null,
+    requestAttemptId: marketCountry === "KR" ? KR_CALENDAR_ATTEMPT_ID : US_CALENDAR_ATTEMPT_ID,
   } as const;
 }
 

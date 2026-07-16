@@ -12,7 +12,10 @@ import {
 } from "@portfolio-rebalancer/broker-toss";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createTossReadSource } from "./toss-read-source.adapter";
+import {
+  createTossReadSource,
+  type TossResponseValidationCallback,
+} from "./toss-read-source.adapter";
 
 const mocks = {
   read: {
@@ -252,6 +255,200 @@ describe("TossReadSource neutral account reads", () => {
 });
 
 describe("TossReadSource validation and compatibility", () => {
+  it("Zod 전 원문의 미지 필드를 보존하고 계좌·비밀정보를 재귀적으로 마스킹한 뒤 PASSED를 기록한다", async () => {
+    const raw = {
+      result: [
+        {
+          symbol: "005930",
+          lastPrice: "72000",
+          currency: "KRW",
+          accountNo: "12345678901",
+          accountSeq: 17,
+          accountIdentifier: "broker-account-identifier",
+          accountNumberHash: "account-number-hash",
+          accountType: "BROKERAGE",
+          providerExtension: {
+            traceId: "trace-kept",
+            clientSecret: "never-store-this",
+            nested: [{ Authorization: "Bearer never-store-this", safe: "kept" }],
+            header: {
+              name: "Authorization",
+              value: "Bearer header-token-value",
+              extra: "must-also-be-redacted",
+            },
+            freeForm:
+              "client_secret=synthetic-secret; token=abc.defghijkl.mnopqrstuv; 계좌 번호 123-456-7890",
+          },
+        },
+      ],
+      unknownRoot: { request_token: "never-store-this", version: 7 },
+    };
+    const business = await reply("getPrices", raw, {
+      auditReference: "11111111-1111-4111-8111-111111111111",
+    });
+    mocks.read.getPrices.mockResolvedValue(business);
+    const onResponseValidation = vi
+      .fn<TossResponseValidationCallback>()
+      .mockResolvedValue(undefined);
+    const source = createSource(onResponseValidation);
+
+    const result = await source.getPrices([samsung]);
+
+    const expectedRedactedBody = {
+      result: [
+        {
+          symbol: "005930",
+          lastPrice: "72000",
+          currency: "KRW",
+          accountNo: "[REDACTED]",
+          accountSeq: "[REDACTED]",
+          accountIdentifier: "[REDACTED]",
+          accountNumberHash: "[REDACTED]",
+          accountType: "BROKERAGE",
+          providerExtension: {
+            traceId: "trace-kept",
+            clientSecret: "[REDACTED]",
+            nested: [{ Authorization: "[REDACTED]", safe: "kept" }],
+            header: {
+              name: "Authorization",
+              value: "[REDACTED]",
+              extra: "[REDACTED]",
+            },
+            freeForm: "client_secret=[REDACTED]; token=[REDACTED]; 계좌 번호 [REDACTED]",
+          },
+        },
+      ],
+      unknownRoot: { request_token: "[REDACTED]", version: 7 },
+    };
+    expect(result.redactedBody).toEqual(expectedRedactedBody);
+    expect(raw.result[0]?.providerExtension.clientSecret).toBe("never-store-this");
+    expect(onResponseValidation).toHaveBeenCalledOnce();
+    const event = onResponseValidation.mock.calls[0]?.[0];
+    if (!event) throw new Error("PASSED 응답 검증 이벤트가 없습니다.");
+    expect(event).toEqual({
+      requestAttemptId: "11111111-1111-4111-8111-111111111111",
+      operationId: "getPrices",
+      outcome: "PASSED",
+      redactedBody: expectedRedactedBody,
+      safeErrorCode: null,
+      validatedAt: event.validatedAt,
+    });
+    expect(Number.isFinite(Date.parse(event.validatedAt))).toBe(true);
+  });
+
+  it("primitive 오류 문자열의 실제 secret, Bearer/JWT와 계좌 식별자를 마스킹한다", async () => {
+    mocks.read.getPrices.mockResolvedValue(
+      await reply(
+        "getPrices",
+        "Authorization=Bearer abcdefgh.ijklmnop.qrstuvwx; clientSecret=synthetic-secret; accountIdentifier=123-456-7890",
+        { auditReference: "44444444-4444-4444-8444-444444444444" },
+      ),
+    );
+    const onResponseValidation = vi
+      .fn<TossResponseValidationCallback>()
+      .mockResolvedValue(undefined);
+    const source = createSource(onResponseValidation);
+
+    await expect(source.getPrices([samsung])).rejects.toMatchObject({
+      code: "BROKER_FETCH_FAILED",
+    });
+
+    const event = onResponseValidation.mock.calls[0]?.[0];
+    expect(event).toMatchObject({
+      outcome: "SCHEMA_ERROR",
+      redactedBody:
+        "Authorization=[REDACTED]; clientSecret=[REDACTED]; accountIdentifier=[REDACTED]",
+    });
+  });
+
+  it("Zod 실패 시 파싱 전 redacted 원문과 안전 오류 코드로 SCHEMA_ERROR를 먼저 기록한다", async () => {
+    const raw = {
+      result: [
+        {
+          symbol: "005930",
+          lastPrice: 72000,
+          currency: "KRW",
+          accessToken: "never-store-this",
+          unknownEvidence: { providerField: true },
+        },
+      ],
+    };
+    mocks.read.getPrices.mockResolvedValue(
+      await reply("getPrices", raw, {
+        auditReference: "22222222-2222-4222-8222-222222222222",
+      }),
+    );
+    const onResponseValidation = vi
+      .fn<TossResponseValidationCallback>()
+      .mockResolvedValue(undefined);
+    const source = createSource(onResponseValidation);
+
+    await expect(source.getPrices([samsung])).rejects.toMatchObject({
+      code: "BROKER_FETCH_FAILED",
+    });
+
+    expect(onResponseValidation).toHaveBeenCalledOnce();
+    const event = onResponseValidation.mock.calls[0]?.[0];
+    if (!event) throw new Error("SCHEMA_ERROR 응답 검증 이벤트가 없습니다.");
+    expect(event).toEqual({
+      requestAttemptId: "22222222-2222-4222-8222-222222222222",
+      operationId: "getPrices",
+      outcome: "SCHEMA_ERROR",
+      redactedBody: {
+        result: [
+          {
+            symbol: "005930",
+            lastPrice: 72000,
+            currency: "KRW",
+            accessToken: "[REDACTED]",
+            unknownEvidence: { providerField: true },
+          },
+        ],
+      },
+      safeErrorCode: "TOSS_RESPONSE_SCHEMA_ERROR",
+      validatedAt: event.validatedAt,
+    });
+    expect(Number.isFinite(Date.parse(event.validatedAt))).toBe(true);
+  });
+
+  it("응답 검증 callback이 설정되면 요청 감사 참조가 없는 응답을 파싱하지 않는다", async () => {
+    mocks.read.getPrices.mockResolvedValue(
+      await reply("getPrices", {
+        result: [{ symbol: "005930", lastPrice: "72000", currency: "KRW" }],
+      }),
+    );
+    const onResponseValidation = vi
+      .fn<TossResponseValidationCallback>()
+      .mockResolvedValue(undefined);
+    const source = createSource(onResponseValidation);
+
+    await expect(source.getPrices([samsung])).rejects.toMatchObject({
+      code: "BROKER_FETCH_FAILED",
+      message: "토스증권 getPrices 응답에 요청 감사 참조가 없습니다.",
+    });
+    expect(onResponseValidation).not.toHaveBeenCalled();
+  });
+
+  it("PASSED 검증 감사 callback 저장이 실패하면 정상 응답도 반환하지 않는다", async () => {
+    mocks.read.getPrices.mockResolvedValue(
+      await reply(
+        "getPrices",
+        {
+          result: [{ symbol: "005930", lastPrice: "72000", currency: "KRW" }],
+        },
+        { auditReference: "33333333-3333-4333-8333-333333333333" },
+      ),
+    );
+    const source = createSource(
+      vi.fn<TossResponseValidationCallback>().mockRejectedValue(new Error("audit unavailable")),
+    );
+
+    await expect(source.getPrices([samsung])).rejects.toMatchObject({
+      code: "BROKER_FETCH_FAILED",
+      message: "토스증권 응답 검증 감사 기록을 저장하지 못했습니다.",
+    });
+  });
+
   it("요청 시세 누락과 계획 준비 불가 빈 호가는 BROKER_FETCH_FAILED로 차단한다", async () => {
     mocks.read.getPrices.mockResolvedValue(await reply("getPrices", { result: [] }));
     mocks.read.getOrderbook.mockResolvedValue(
@@ -327,11 +524,12 @@ const accountReference = {
   accountId: "stored-account-id" as AccountId,
 } as const;
 
-function createSource() {
+function createSource(onResponseValidation?: TossResponseValidationCallback) {
   return createTossReadSource(
     {
       clientId: "synthetic-client",
       clientSecret: "synthetic-secret",
+      ...(onResponseValidation ? { onResponseValidation } : {}),
     },
     {
       client: { read: mocks.read } as unknown as Pick<TossOpenApiClient, "read">,
@@ -352,6 +550,7 @@ async function reply(
   overrides: {
     readonly requestId?: string;
     readonly receivedAt?: string;
+    readonly auditReference?: string;
   } = {},
 ) {
   const startedAt = Date.parse("2026-07-16T00:00:00.000Z");
@@ -367,7 +566,10 @@ async function reply(
         },
       }),
     ),
-    { now },
+    {
+      now,
+      ...(overrides.auditReference ? { onResponseMetadata: () => overrides.auditReference } : {}),
+    },
   );
   const response = await managedFetch(operationUrl(operationId));
   return { data, response };

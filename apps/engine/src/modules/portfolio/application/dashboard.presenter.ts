@@ -22,8 +22,12 @@ export async function getDashboard(
     snapshot.holdings.length === 0 &&
     (snapshot.managedCashMinor === null || snapshot.managedCashMinor === 0n)
   ) {
+    const emptyBlockCode =
+      snapshot.validationStatus === "VERIFIED"
+        ? ("EMPTY_HOLDINGS" as const)
+        : ("SNAPSHOT_EVIDENCE_UNVERIFIED" as const);
     return DashboardSnapshotSchema.parse({
-      state: "EMPTY",
+      state: emptyBlockCode === "EMPTY_HOLDINGS" ? "EMPTY" : "BLOCKED",
       mode: "SHADOW",
       dataSource: "TOSS",
       brokerConnection: "CONNECTED",
@@ -43,7 +47,7 @@ export async function getDashboard(
       })),
       allocations: [],
       unmanagedHoldings: [],
-      blockReason: reasonFor("EMPTY_HOLDINGS"),
+      blockReason: reasonFor(emptyBlockCode),
       liveOrdersEnabled: false,
     });
   }
@@ -138,7 +142,9 @@ export async function getDashboard(
     ) ?? false;
 
   let blockCode: DashboardBlockReasonContract["code"] | null = null;
-  if (activeTargetVersionId !== (pinnedTarget?.id ?? null)) {
+  if (snapshot.validationStatus !== "VERIFIED") {
+    blockCode = "SNAPSHOT_EVIDENCE_UNVERIFIED";
+  } else if (activeTargetVersionId !== (pinnedTarget?.id ?? null)) {
     blockCode = activeTargetVersionId ? "TARGET_CONFIG_STALE" : "TARGET_CONFIG_MISSING";
   } else if (!pinnedTarget) {
     blockCode = "TARGET_CONFIG_MISSING";
@@ -319,6 +325,13 @@ function reasonFor(code: DashboardBlockReasonContract["code"]): DashboardBlockRe
         code,
         problem: "스냅샷 보유자산과 고정된 목표 설정의 종목 구성이 일치하지 않습니다.",
         nextAction: "설정에서 모든 현재 보유자산을 확인하고 새 목표 버전을 적용하세요.",
+      };
+    case "SNAPSHOT_EVIDENCE_UNVERIFIED":
+      return {
+        ...common,
+        code,
+        problem: "최신 계좌 스냅샷의 요청·응답 검증 증거를 신뢰할 수 없습니다.",
+        nextAction: "토스 데이터를 다시 점검해 새 검증 스냅샷을 생성하세요.",
       };
     case "CREDENTIALS_MISSING":
       return {

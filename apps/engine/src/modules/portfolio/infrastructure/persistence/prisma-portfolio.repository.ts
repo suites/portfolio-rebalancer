@@ -73,6 +73,22 @@ export type StoredBrokerRequestAttemptInput = {
     }
 );
 
+export type StoredBrokerResponseValidationInput = {
+  readonly requestAttemptId: string;
+  readonly operationId: string;
+  readonly redactedBody: unknown;
+  readonly validatedAt: Date;
+} & (
+  | {
+      readonly outcome: "PASSED";
+      readonly safeErrorCode: null;
+    }
+  | {
+      readonly outcome: "SCHEMA_ERROR";
+      readonly safeErrorCode: string;
+    }
+);
+
 export interface StoredBuyingPowerInput {
   readonly currency: "KRW" | "USD";
   readonly amount: string;
@@ -86,7 +102,7 @@ export interface StoredPriceSnapshotInput {
   readonly lastPrice: string;
   readonly providerObservedAt: Date | null;
   readonly receivedAt: Date;
-  readonly requestAttemptId: string | null;
+  readonly requestAttemptId: string;
 }
 
 export interface StoredMarketCalendarSnapshotInput {
@@ -94,7 +110,7 @@ export interface StoredMarketCalendarSnapshotInput {
   readonly requestedDate: string;
   readonly calendar: unknown;
   readonly receivedAt: Date;
-  readonly requestAttemptId: string | null;
+  readonly requestAttemptId: string;
 }
 
 export interface CollectionTargetInstrument {
@@ -226,6 +242,21 @@ export class PrismaPortfolioRepository {
         retryAfterSeconds: input.retryAfterSeconds,
         safeErrorCode: input.safeErrorCode,
         redactedRequestSummary: normalizedJson(input.redactedRequestSummary),
+      },
+    });
+  }
+
+  appendBrokerResponseValidation(input: StoredBrokerResponseValidationInput) {
+    const redactedBody = canonicalJsonForStorage(input.redactedBody);
+    return this.database.brokerResponseValidation.create({
+      data: {
+        requestAttemptId: input.requestAttemptId,
+        operationId: input.operationId,
+        outcome: input.outcome,
+        redactedBody,
+        bodySha256: createHash("sha256").update(JSON.stringify(redactedBody)).digest("hex"),
+        safeErrorCode: input.safeErrorCode,
+        validatedAt: input.validatedAt,
       },
     });
   }
@@ -544,17 +575,20 @@ export class PrismaPortfolioRepository {
         )
         .digest("hex");
       await transaction.rawBrokerResponse.createMany({
-        data: input.rawResponses.map((response) => ({
-          collectionRunId: input.runId,
-          operationId: response.operationId,
-          ordinal: response.ordinal,
-          requestId: response.requestId ?? null,
-          httpStatus: response.httpStatus ?? 200,
-          receivedAt: response.receivedAt,
-          redactedBody: normalizedJson(response.body),
-          bodySha256: createHash("sha256").update(JSON.stringify(response.body)).digest("hex"),
-          redactionVersion: "v1",
-        })),
+        data: input.rawResponses.map((response) => {
+          const canonicalBody = canonicalJsonForStorage(response.body);
+          return {
+            collectionRunId: input.runId,
+            operationId: response.operationId,
+            ordinal: response.ordinal,
+            requestId: response.requestId ?? null,
+            httpStatus: response.httpStatus ?? 200,
+            receivedAt: response.receivedAt,
+            redactedBody: canonicalBody,
+            bodySha256: createHash("sha256").update(JSON.stringify(canonicalBody)).digest("hex"),
+            redactionVersion: "v1",
+          };
+        }),
       });
       await transaction.portfolioSnapshot.create({
         data: {
@@ -587,9 +621,7 @@ export class PrismaPortfolioRepository {
               lastPrice: price.lastPrice,
               providerObservedAt: price.providerObservedAt,
               receivedAt: price.receivedAt,
-              ...(price.requestAttemptId
-                ? { requestAttempt: { connect: { id: price.requestAttemptId } } }
-                : {}),
+              requestAttempt: { connect: { id: price.requestAttemptId } },
             })),
           },
           marketCalendars: {
@@ -599,9 +631,7 @@ export class PrismaPortfolioRepository {
               calendar: calendar.calendar,
               calendarSha256: calendar.calendarSha256,
               receivedAt: calendar.receivedAt,
-              ...(calendar.requestAttemptId
-                ? { requestAttempt: { connect: { id: calendar.requestAttemptId } } }
-                : {}),
+              requestAttempt: { connect: { id: calendar.requestAttemptId } },
             })),
           },
           checks: {
@@ -611,6 +641,15 @@ export class PrismaPortfolioRepository {
                 outcome: CheckOutcome.PASSED,
                 detail: {
                   message: "토스 계좌·보유·매수 가능 금액 응답의 런타임 스키마를 검증했습니다.",
+                },
+                checkedAt: input.observedAt,
+              },
+              {
+                ruleCode: "BROKER_RESPONSE_PROVENANCE",
+                outcome: CheckOutcome.PASSED,
+                detail: {
+                  message:
+                    "가격·시장 캘린더가 같은 수집 실행의 성공 요청과 통과한 응답 검증을 참조합니다.",
                 },
                 checkedAt: input.observedAt,
               },
@@ -985,6 +1024,11 @@ function normalizedJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
+function canonicalJsonForStorage(value: unknown): Prisma.InputJsonValue {
+  const canonical = canonicalJsonValue(value);
+  return JSON.parse(JSON.stringify(canonical)) as Prisma.InputJsonValue;
+}
+
 function canonicalHoldingSnapshots(
   holdings: readonly StoredHoldingInput[],
 ): readonly StoredHoldingInput[] {
@@ -1028,6 +1072,7 @@ function canonicalPriceSnapshots(
 ): readonly StoredPriceSnapshotInput[] {
   const seen = new Set<string>();
   for (const price of prices) {
+    assertRequestAttemptId(price.requestAttemptId, "현재가");
     const instrument = assertCollectionTargetInstrument(price);
     const key = collectionInstrumentKey(instrument);
     if (seen.has(key)) {
@@ -1063,11 +1108,12 @@ function canonicalMarketCalendarSnapshots(
   readonly calendar: Prisma.InputJsonObject;
   readonly calendarSha256: string;
   readonly receivedAt: Date;
-  readonly requestAttemptId: string | null;
+  readonly requestAttemptId: string;
 }[] {
   const seenMarkets = new Set<"KR" | "US">();
   return calendars
     .map((input) => {
+      assertRequestAttemptId(input.requestAttemptId, "시장 캘린더");
       if (seenMarkets.has(input.marketCountry)) {
         throw invalidMarketEvidence(`${input.marketCountry} 시장 캘린더 증거가 중복되었습니다.`);
       }
@@ -1095,6 +1141,12 @@ function canonicalMarketCalendarSnapshots(
       };
     })
     .sort((left, right) => (left.marketCountry < right.marketCountry ? -1 : 1));
+}
+
+function assertRequestAttemptId(value: string, subject: string): void {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    throw invalidMarketEvidence(`${subject} 요청 감사 ID가 올바른 UUID가 아닙니다.`);
+  }
 }
 
 function normalizeIsoDate(value: string): string {

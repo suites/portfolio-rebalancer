@@ -5,7 +5,11 @@ import type { TossResponseMetadata } from "@portfolio-rebalancer/broker-toss";
 import { ENGINE_CONFIG } from "../../../../config/engine-config.token";
 import type { EngineConfig } from "../../../../config/engine.config";
 import { CollectionError } from "../../domain/collection.error";
-import { createTossReadSource, type TossReadSource } from "./toss-read-source.adapter";
+import {
+  createTossReadSource,
+  type TossReadSource,
+  type TossResponseValidationEvent,
+} from "./toss-read-source.adapter";
 import { TossRequestAuditContext } from "./toss-request-audit.context";
 import {
   PrismaPortfolioRepository,
@@ -47,6 +51,7 @@ export class TossRuntimeService {
         clientId: this.config.TOSSINVEST_CLIENT_ID,
         clientSecret: this.config.TOSSINVEST_CLIENT_SECRET,
         onResponseMetadata: (metadata) => this.appendRequestAttempt(metadata),
+        onResponseValidation: (event) => this.appendResponseValidation(event),
       }),
       accountReferenceKey:
         this.config.ACCOUNT_REFERENCE_KEY ?? this.config.TOSSINVEST_CLIENT_SECRET,
@@ -60,6 +65,17 @@ export class TossRuntimeService {
       toStoredAttempt(audit, metadata),
     );
     return attempt.id;
+  }
+
+  private async appendResponseValidation(event: TossResponseValidationEvent): Promise<void> {
+    const validatedAt = new Date(event.validatedAt);
+    if (!Number.isFinite(validatedAt.getTime())) {
+      throw new Error("토스증권 응답 검증 감사 시각이 올바르지 않습니다.");
+    }
+    await this.repository.appendBrokerResponseValidation({
+      ...event,
+      validatedAt,
+    });
   }
 }
 

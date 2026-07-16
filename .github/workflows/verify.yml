@@ -19,6 +19,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: portfolio
+          POSTGRES_PASSWORD: portfolio_test
+          POSTGRES_DB: portfolio_rebalancer_test_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U portfolio -d portfolio_rebalancer_test_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -35,5 +50,15 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Apply database migrations
+        run: pnpm --filter @portfolio-rebalancer/database db:migrate:deploy
+        env:
+          DATABASE_URL: postgresql://portfolio:portfolio_test@127.0.0.1:5432/portfolio_rebalancer_test_ci
+
       - name: Verify repository
         run: pnpm verify
+
+      - name: Verify PostgreSQL invariants
+        run: pnpm --filter @portfolio-rebalancer/database test:integration
+        env:
+          PORTFOLIO_REBALANCER_DATABASE_INTEGRATION_URL: postgresql://portfolio:portfolio_test@127.0.0.1:5432/portfolio_rebalancer_test_ci

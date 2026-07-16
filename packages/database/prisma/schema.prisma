@@ -38,6 +38,11 @@ enum BrokerRequestOutcome {
   SCHEMA_ERROR
 }
 
+enum BrokerResponseValidationOutcome {
+  PASSED
+  SCHEMA_ERROR
+}
+
 model BrokerAccount {
   id              String   @id @default(uuid()) @db.Uuid
   broker          String
@@ -257,7 +262,8 @@ model BrokerRequestAttempt {
   redactedRequestSummary Json                 @map("redacted_request_summary") @db.JsonB
   createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  collectionRun           CollectionRun?           @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
+  collectionRun           CollectionRun?            @relation(fields: [collectionRunId], references: [id], onDelete: Restrict)
+  responseValidation      BrokerResponseValidation?
   priceSnapshots          PriceSnapshot[]
   marketCalendarSnapshots MarketCalendarSnapshot[]
 
@@ -266,6 +272,21 @@ model BrokerRequestAttempt {
   @@index([collectionRunId, startedAt])
   @@index([requestId])
   @@map("broker_request_attempt")
+}
+
+model BrokerResponseValidation {
+  id               String                          @id @default(uuid()) @db.Uuid
+  requestAttemptId String                          @unique(map: "broker_response_validation_request_attempt_id_key") @map("request_attempt_id") @db.Uuid
+  operationId      String                          @map("operation_id")
+  outcome          BrokerResponseValidationOutcome
+  redactedBody     Json                            @map("redacted_body") @db.JsonB
+  bodySha256       String                          @map("body_sha256") @db.Char(64)
+  safeErrorCode    String?                         @map("safe_error_code")
+  validatedAt      DateTime                        @map("validated_at") @db.Timestamptz(6)
+
+  requestAttempt BrokerRequestAttempt @relation(fields: [requestAttemptId], references: [id], onDelete: Restrict)
+
+  @@map("broker_response_validation")
 }
 
 model PortfolioSnapshot {
@@ -334,7 +355,7 @@ model BuyingPowerSnapshot {
 model PriceSnapshot {
   id                 String    @id @default(uuid()) @db.Uuid
   snapshotId         String    @map("snapshot_id") @db.Uuid
-  requestAttemptId   String?   @map("request_attempt_id") @db.Uuid
+  requestAttemptId   String    @map("request_attempt_id") @db.Uuid
   marketCountry      String    @map("market_country")
   symbol             String
   currency           String
@@ -342,8 +363,8 @@ model PriceSnapshot {
   providerObservedAt DateTime? @map("provider_observed_at") @db.Timestamptz(6)
   receivedAt         DateTime  @map("received_at") @db.Timestamptz(6)
 
-  snapshot       PortfolioSnapshot     @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
-  requestAttempt BrokerRequestAttempt? @relation(fields: [requestAttemptId], references: [id], onDelete: Restrict)
+  snapshot       PortfolioSnapshot    @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  requestAttempt BrokerRequestAttempt @relation(fields: [requestAttemptId], references: [id], onDelete: Restrict)
 
   @@unique([snapshotId, marketCountry, symbol], map: "price_snapshot_snapshot_market_symbol_key")
   @@index([requestAttemptId])
@@ -353,15 +374,15 @@ model PriceSnapshot {
 model MarketCalendarSnapshot {
   id               String   @id @default(uuid()) @db.Uuid
   snapshotId       String   @map("snapshot_id") @db.Uuid
-  requestAttemptId String?  @map("request_attempt_id") @db.Uuid
+  requestAttemptId String   @map("request_attempt_id") @db.Uuid
   marketCountry    String   @map("market_country")
   requestedDate    DateTime @map("requested_date") @db.Date
   calendar         Json     @db.JsonB
   calendarSha256   String   @map("calendar_sha256") @db.Char(64)
   receivedAt       DateTime @map("received_at") @db.Timestamptz(6)
 
-  snapshot       PortfolioSnapshot     @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
-  requestAttempt BrokerRequestAttempt? @relation(fields: [requestAttemptId], references: [id], onDelete: Restrict)
+  snapshot       PortfolioSnapshot    @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  requestAttempt BrokerRequestAttempt @relation(fields: [requestAttemptId], references: [id], onDelete: Restrict)
 
   @@unique([snapshotId, marketCountry], map: "market_calendar_snapshot_snapshot_market_key")
   @@index([requestAttemptId])

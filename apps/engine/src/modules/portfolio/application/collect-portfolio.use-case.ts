@@ -356,7 +356,7 @@ function toStoredPriceSnapshots(
       providerObservedAt:
         quote.observedAt === null ? null : parseIsoDateTime(quote.observedAt, "시세 관측시각"),
       receivedAt: parseIsoDateTime(metadata.receivedAt, "시세 수신시각"),
-      requestAttemptId: metadata.auditReference ?? null,
+      requestAttemptId: requiredAuditReference(metadata.auditReference, "시세"),
     })),
   );
 }
@@ -369,8 +369,19 @@ function toStoredMarketCalendarSnapshots(
     requestedDate: value.today.date,
     calendar: value,
     receivedAt: parseIsoDateTime(metadata.receivedAt, "시장 캘린더 수신시각"),
-    requestAttemptId: metadata.auditReference ?? null,
+    requestAttemptId: requiredAuditReference(metadata.auditReference, "시장 캘린더"),
   }));
+}
+
+function requiredAuditReference(value: string | null | undefined, subject: string): string {
+  if (!value || value.trim().length === 0) {
+    throw new CollectionError(
+      "BROKER_FETCH_FAILED",
+      `${subject} 응답의 요청 감사 참조를 확인하지 못했습니다.`,
+      "요청 감사와 응답 검증 증거를 확인한 뒤 다시 수집하세요.",
+    );
+  }
+  return value;
 }
 
 function parseIsoDateTime(value: string, subject: string): Date {

@@ -46,6 +46,7 @@ import {
   type TossStocksResponse,
   type TossResponseMetadata,
 } from "@portfolio-rebalancer/broker-toss";
+import type { ZodType } from "zod";
 
 import { CollectionError } from "../../domain/collection.error";
 
@@ -57,6 +58,31 @@ export interface TossAccountReadReference {
 export interface TossNeutralReadResult<Value> extends BrokerReadResult<Value> {
   readonly redactedBody: unknown;
 }
+
+export type TossResponseValidationOutcome = "PASSED" | "SCHEMA_ERROR";
+
+interface TossResponseValidationEventBase {
+  readonly requestAttemptId: string;
+  readonly operationId: TossOperationId;
+  readonly redactedBody: unknown;
+  readonly validatedAt: string;
+}
+
+export type TossResponseValidationEvent = TossResponseValidationEventBase &
+  (
+    | {
+        readonly outcome: "PASSED";
+        readonly safeErrorCode: null;
+      }
+    | {
+        readonly outcome: "SCHEMA_ERROR";
+        readonly safeErrorCode: "TOSS_RESPONSE_SCHEMA_ERROR";
+      }
+  );
+
+export type TossResponseValidationCallback = (
+  event: TossResponseValidationEvent,
+) => void | Promise<void>;
 
 export interface TossReadSource {
   listAccounts(): Promise<readonly TossAccount[]>;
@@ -95,9 +121,24 @@ export function createTossReadSource(
     readonly onResponseMetadata?: (
       metadata: TossResponseMetadata,
     ) => string | null | void | Promise<string | null | void>;
+    readonly onResponseValidation?: TossResponseValidationCallback;
   },
   dependencies: TossReadSourceDependencies = {},
 ): TossReadSource {
+  const onResponseValidation = credentials.onResponseValidation;
+  const responseSensitiveValues = [credentials.clientId, credentials.clientSecret];
+  const validateResponse = <Value>(
+    response: TossBusinessResponse,
+    operationId: TossOperationId,
+    schema: ZodType<Value>,
+  ) =>
+    validateTossResponse(
+      response,
+      operationId,
+      schema,
+      onResponseValidation,
+      responseSensitiveValues,
+    );
   const client =
     dependencies.client ??
     new TossOpenApiClient(
@@ -115,7 +156,12 @@ export function createTossReadSource(
     async listAccounts() {
       try {
         const response = await client.read.getAccounts();
-        return TossAccountsResponseSchema.parse(response.data).result;
+        const validated = await validateResponse(
+          response,
+          "getAccounts",
+          TossAccountsResponseSchema,
+        );
+        return validated.value.result;
       } catch (error) {
         throw normalizeTossError(error, "계좌 목록");
       }
@@ -125,7 +171,7 @@ export function createTossReadSource(
         const response = await client.read.getHoldings({
           params: { header: { "X-Tossinvest-Account": accountSeq } },
         });
-        return TossHoldingsResponseSchema.parse(response.data);
+        return (await validateResponse(response, "getHoldings", TossHoldingsResponseSchema)).value;
       } catch (error) {
         throw normalizeTossError(error, "보유자산");
       }
@@ -138,7 +184,8 @@ export function createTossReadSource(
             query: { currency },
           },
         });
-        return TossBuyingPowerResponseSchema.parse(response.data);
+        return (await validateResponse(response, "getBuyingPower", TossBuyingPowerResponseSchema))
+          .value;
       } catch (error) {
         throw normalizeTossError(error, `${currency} 매수 가능 금액`);
       }
@@ -149,12 +196,12 @@ export function createTossReadSource(
         const response = await client.read.getPrices({
           params: { query: { symbols: instruments.map(({ symbol }) => symbol).join(",") } },
         });
-        const parsed = TossPricesResponseSchema.parse(response.data);
+        const validated = await validateResponse(response, "getPrices", TossPricesResponseSchema);
         return withBrokerMetadata(
           response.response,
           "getPrices",
-          normalizeTossPrices(parsed, instruments),
-          parsed,
+          normalizeTossPrices(validated.value, instruments),
+          validated.redactedBody,
         );
       } catch (error) {
         throw normalizeTossError(error, "현재가");
@@ -166,12 +213,16 @@ export function createTossReadSource(
         const response = await client.read.getOrderbook({
           params: { query: { symbol: instrument.symbol } },
         });
-        const parsed = TossOrderbookResponseSchema.parse(response.data);
+        const validated = await validateResponse(
+          response,
+          "getOrderbook",
+          TossOrderbookResponseSchema,
+        );
         return withBrokerMetadata(
           response.response,
           "getOrderbook",
-          normalizeTossOrderbook(parsed, instrument),
-          parsed,
+          normalizeTossOrderbook(validated.value, instrument),
+          validated.redactedBody,
         );
       } catch (error) {
         throw normalizeTossError(error, "호가");
@@ -183,12 +234,16 @@ export function createTossReadSource(
         const response = await client.read.getPriceLimit({
           params: { query: { symbol: instrument.symbol } },
         });
-        const parsed = TossPriceLimitResponseSchema.parse(response.data);
+        const validated = await validateResponse(
+          response,
+          "getPriceLimit",
+          TossPriceLimitResponseSchema,
+        );
         return withBrokerMetadata(
           response.response,
           "getPriceLimit",
-          normalizeTossPriceLimit(parsed, instrument),
-          parsed,
+          normalizeTossPriceLimit(validated.value, instrument),
+          validated.redactedBody,
         );
       } catch (error) {
         throw normalizeTossError(error, "가격 제한");
@@ -201,24 +256,32 @@ export function createTossReadSource(
           const response = await client.read.getKrMarketCalendar(
             date === undefined ? {} : { params: { query: { date } } },
           );
-          const parsed = TossKrMarketCalendarResponseSchema.parse(response.data);
+          const validated = await validateResponse(
+            response,
+            "getKrMarketCalendar",
+            TossKrMarketCalendarResponseSchema,
+          );
           return withBrokerMetadata(
             response.response,
             "getKrMarketCalendar",
-            normalizeTossKrMarketCalendar(parsed),
-            parsed,
+            normalizeTossKrMarketCalendar(validated.value),
+            validated.redactedBody,
           );
         }
         if (marketCountry === "US") {
           const response = await client.read.getUsMarketCalendar(
             date === undefined ? {} : { params: { query: { date } } },
           );
-          const parsed = TossUsMarketCalendarResponseSchema.parse(response.data);
+          const validated = await validateResponse(
+            response,
+            "getUsMarketCalendar",
+            TossUsMarketCalendarResponseSchema,
+          );
           return withBrokerMetadata(
             response.response,
             "getUsMarketCalendar",
-            normalizeTossUsMarketCalendar(parsed),
-            parsed,
+            normalizeTossUsMarketCalendar(validated.value),
+            validated.redactedBody,
           );
         }
         throw invalidRequest(
@@ -239,12 +302,16 @@ export function createTossReadSource(
             query: { symbol: instrument.symbol },
           },
         });
-        const parsed = TossSellableQuantityResponseSchema.parse(response.data);
+        const validated = await validateResponse(
+          response,
+          "getSellableQuantity",
+          TossSellableQuantityResponseSchema,
+        );
         return withBrokerMetadata(
           response.response,
           "getSellableQuantity",
-          normalizeTossSellableQuantity(parsed, account.accountId, instrument),
-          parsed,
+          normalizeTossSellableQuantity(validated.value, account.accountId, instrument),
+          validated.redactedBody,
         );
       } catch (error) {
         throw normalizeTossError(error, "매도 가능 수량");
@@ -256,12 +323,16 @@ export function createTossReadSource(
         const response = await client.read.getCommissions({
           params: { header: { "X-Tossinvest-Account": account.accountSeq } },
         });
-        const parsed = TossCommissionsResponseSchema.parse(response.data);
+        const validated = await validateResponse(
+          response,
+          "getCommissions",
+          TossCommissionsResponseSchema,
+        );
         return withBrokerMetadata(
           response.response,
           "getCommissions",
-          normalizeTossCommissions(parsed, account.accountId, requestedMarkets),
-          parsed,
+          normalizeTossCommissions(validated.value, account.accountId, requestedMarkets),
+          validated.redactedBody,
         );
       } catch (error) {
         throw normalizeTossError(error, "수수료 일정");
@@ -272,7 +343,8 @@ export function createTossReadSource(
         const response = await client.read.getExchangeRate({
           params: { query: { baseCurrency: "USD", quoteCurrency: "KRW" } },
         });
-        return TossExchangeRateResponseSchema.parse(response.data);
+        return (await validateResponse(response, "getExchangeRate", TossExchangeRateResponseSchema))
+          .value;
       } catch (error) {
         throw normalizeTossError(error, "원화 환율");
       }
@@ -293,7 +365,7 @@ export function createTossReadSource(
         const response = await client.read.getStocks({
           params: { query: { symbols: symbols.join(",") } },
         });
-        return TossStocksResponseSchema.parse(response.data);
+        return (await validateResponse(response, "getStocks", TossStocksResponseSchema)).value;
       } catch (error) {
         throw normalizeTossError(error, "종목 기본 정보");
       }
@@ -310,7 +382,9 @@ export function createTossReadSource(
         const response = await client.read.getStockWarnings({
           params: { path: { symbol } },
         });
-        return TossStockWarningsResponseSchema.parse(response.data);
+        return (
+          await validateResponse(response, "getStockWarnings", TossStockWarningsResponseSchema)
+        ).value;
       } catch (error) {
         throw normalizeTossError(error, "종목 유의사항");
       }
@@ -319,6 +393,178 @@ export function createTossReadSource(
 }
 
 const TOSS_BROKER_ID = "toss" as BrokerId;
+const REDACTED_VALUE = "[REDACTED]";
+const SENSITIVE_RESPONSE_KEY_PARTS = [
+  "token",
+  "secret",
+  "authorization",
+  "authentication",
+  "authheader",
+  "bearer",
+  "credential",
+  "password",
+  "apikey",
+] as const;
+const SENSITIVE_ACCOUNT_KEY_SUFFIXES = [
+  "account",
+  "accountno",
+  "accountnumber",
+  "accountseq",
+  "accountid",
+  "accountkey",
+  "accountref",
+  "accountreference",
+  "accountreferencekey",
+  "accountrefhmac",
+  "accountname",
+  "accountalias",
+] as const;
+
+interface TossBusinessResponse {
+  readonly data?: unknown;
+  readonly response: Response;
+}
+
+interface ValidatedTossResponse<Value> {
+  readonly value: Value;
+  readonly redactedBody: unknown;
+}
+
+async function validateTossResponse<Value>(
+  response: TossBusinessResponse,
+  operationId: TossOperationId,
+  schema: ZodType<Value>,
+  onResponseValidation: TossResponseValidationCallback | undefined,
+  sensitiveValues: readonly string[],
+): Promise<ValidatedTossResponse<Value>> {
+  const redactedBody = redactTossResponseBody(response.data, sensitiveValues);
+  const requestAttemptId = onResponseValidation
+    ? requireResponseAuditReference(response.response, operationId)
+    : null;
+  const parsed = schema.safeParse(response.data);
+  const validatedAt = new Date().toISOString();
+
+  if (!parsed.success) {
+    if (onResponseValidation && requestAttemptId) {
+      await emitResponseValidation(onResponseValidation, {
+        requestAttemptId,
+        operationId,
+        outcome: "SCHEMA_ERROR",
+        redactedBody,
+        safeErrorCode: "TOSS_RESPONSE_SCHEMA_ERROR",
+        validatedAt,
+      });
+    }
+    throw parsed.error;
+  }
+
+  if (onResponseValidation && requestAttemptId) {
+    await emitResponseValidation(onResponseValidation, {
+      requestAttemptId,
+      operationId,
+      outcome: "PASSED",
+      redactedBody,
+      safeErrorCode: null,
+      validatedAt,
+    });
+  }
+
+  return { value: parsed.data, redactedBody };
+}
+
+function requireResponseAuditReference(response: Response, operationId: TossOperationId): string {
+  const auditReference = getTossResponseAuditReference(response);
+  if (auditReference === null) {
+    throw new CollectionError(
+      "BROKER_FETCH_FAILED",
+      `토스증권 ${operationId} 응답에 요청 감사 참조가 없습니다.`,
+      "요청 감사 저장과 응답 검증 감사 연결을 확인한 뒤 다시 조회하세요.",
+    );
+  }
+  return auditReference;
+}
+
+async function emitResponseValidation(
+  callback: TossResponseValidationCallback,
+  event: TossResponseValidationEvent,
+): Promise<void> {
+  try {
+    await callback(event);
+  } catch (cause) {
+    throw new CollectionError(
+      "BROKER_FETCH_FAILED",
+      "토스증권 응답 검증 감사 기록을 저장하지 못했습니다.",
+      "감사 저장소 상태를 확인한 뒤 다시 조회하세요.",
+      { cause },
+    );
+  }
+}
+
+function redactTossResponseBody(value: unknown, sensitiveValues: readonly string[]): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactTossResponseBody(item, sensitiveValues));
+  }
+  if (typeof value === "string") {
+    return redactSensitiveString(value, sensitiveValues);
+  }
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+
+  const entries = Object.entries(value);
+  const namedSensitiveField = entries.some(
+    ([key, child]) =>
+      isDescriptorKey(key) && typeof child === "string" && isSensitiveResponseKey(child),
+  );
+  return Object.fromEntries(
+    entries.map(([key, child]) => [
+      key,
+      isSensitiveResponseKey(key) || (namedSensitiveField && !isDescriptorKey(key))
+        ? REDACTED_VALUE
+        : redactTossResponseBody(child, sensitiveValues),
+    ]),
+  );
+}
+
+function isSensitiveResponseKey(key: string): boolean {
+  const normalized = key.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
+  if (normalized === "accounttype" || normalized === "accounttypename") {
+    return false;
+  }
+  return (
+    /계좌|비밀번호|토큰|비밀/.test(key) ||
+    SENSITIVE_RESPONSE_KEY_PARTS.some((part) => normalized.includes(part)) ||
+    normalized.includes("account") ||
+    SENSITIVE_ACCOUNT_KEY_SUFFIXES.some((suffix) => normalized === suffix)
+  );
+}
+
+function isDescriptorKey(key: string): boolean {
+  const normalized = key.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
+  return normalized === "name" || normalized === "key" || normalized === "header";
+}
+
+function redactSensitiveString(value: string, sensitiveValues: readonly string[]): string {
+  let redacted = value;
+  for (const sensitiveValue of sensitiveValues) {
+    if (sensitiveValue.length >= 4) {
+      redacted = redacted.replaceAll(sensitiveValue, REDACTED_VALUE);
+    }
+  }
+  redacted = redacted
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED_VALUE}`)
+    .replace(/\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, REDACTED_VALUE)
+    .replace(/((?:authorization)\s*[:=]\s*)([^,;]+)/gi, `$1${REDACTED_VALUE}`)
+    .replace(
+      /((?:access[_\s-]?token|client[_\s-]?secret|api[_\s-]?key|credential|password|token|secret)\s*[:=]\s*)([^\s,;]+)/gi,
+      `$1${REDACTED_VALUE}`,
+    )
+    .replace(
+      /((?:account(?:id|identifier|number|no|seq|key|ref|hash)?|계좌(?:\s*번호)?)(?:\s*[:=#-]\s*|\s+))([A-Za-z0-9*][A-Za-z0-9*._-]{5,})/gi,
+      `$1${REDACTED_VALUE}`,
+    );
+  return redacted;
+}
 
 function withBrokerMetadata<Value>(
   response: Response,

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createTossManagedFetch,
@@ -17,6 +17,11 @@ vi.mock("./toss-read-source.adapter", () => ({
 }));
 
 import { TossRuntimeService } from "./toss-runtime.service";
+import type { TossResponseValidationEvent } from "./toss-read-source.adapter";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("TossRuntimeService request audit", () => {
   it("재시도와 병렬 동일 operation을 append-only ordinal/attempt로 저장한다", async () => {
@@ -176,6 +181,48 @@ describe("TossRuntimeService request audit", () => {
   });
 });
 
+describe("TossRuntimeService response validation audit", () => {
+  it("adapter 검증 이벤트의 시각을 Date로 변환해 append-only 저장소에 전달한다", async () => {
+    const appendBrokerResponseValidation = vi.fn().mockResolvedValue({
+      id: "validation-id",
+    });
+    mocks.createTossReadSource.mockReturnValue(sourceStub());
+    new TossRuntimeService(config(), {
+      appendBrokerResponseValidation,
+    } as unknown as PrismaPortfolioRepository).get();
+
+    await createdValidationCallback()(validationEvent());
+
+    expect(appendBrokerResponseValidation).toHaveBeenCalledExactlyOnceWith({
+      requestAttemptId: "11111111-1111-4111-8111-111111111111",
+      operationId: "getPrices",
+      outcome: "PASSED",
+      redactedBody: {
+        result: [{ symbol: "005930", providerExtension: { traceId: "kept" } }],
+      },
+      safeErrorCode: null,
+      validatedAt: new Date("2026-07-16T00:00:00.125Z"),
+    });
+  });
+
+  it("응답 검증 시각이 올바르지 않으면 repository 호출 전에 차단한다", async () => {
+    const appendBrokerResponseValidation = vi.fn();
+    mocks.createTossReadSource.mockReturnValue(sourceStub());
+    new TossRuntimeService(config(), {
+      appendBrokerResponseValidation,
+    } as unknown as PrismaPortfolioRepository).get();
+
+    await expect(
+      createdValidationCallback()({
+        ...validationEvent(),
+        validatedAt: "not-a-date",
+      }),
+    ).rejects.toThrow("검증 감사 시각");
+
+    expect(appendBrokerResponseValidation).not.toHaveBeenCalled();
+  });
+});
+
 function createdMetadataCallback(): (
   metadata: TossResponseMetadata,
 ) => Promise<string | null | void> {
@@ -189,6 +236,32 @@ function createdMetadataCallback(): (
   const callback = options?.onResponseMetadata;
   if (!callback) throw new Error("onResponseMetadata callback이 생성되지 않았습니다.");
   return async (metadata) => callback(metadata);
+}
+
+function createdValidationCallback(): (event: TossResponseValidationEvent) => Promise<void> {
+  const options = mocks.createTossReadSource.mock.calls.at(-1)?.[0] as
+    | {
+        readonly onResponseValidation?: (
+          event: TossResponseValidationEvent,
+        ) => void | Promise<void>;
+      }
+    | undefined;
+  const callback = options?.onResponseValidation;
+  if (!callback) throw new Error("onResponseValidation callback이 생성되지 않았습니다.");
+  return async (event) => callback(event);
+}
+
+function validationEvent(): TossResponseValidationEvent {
+  return {
+    requestAttemptId: "11111111-1111-4111-8111-111111111111",
+    operationId: "getPrices",
+    outcome: "PASSED",
+    redactedBody: {
+      result: [{ symbol: "005930", providerExtension: { traceId: "kept" } }],
+    },
+    safeErrorCode: null,
+    validatedAt: "2026-07-16T00:00:00.125Z",
+  };
 }
 
 function metadata(

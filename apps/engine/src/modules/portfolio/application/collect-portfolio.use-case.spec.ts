@@ -583,6 +583,10 @@ function brokerMetadata(operationId: string) {
     httpStatus: 200,
     rateLimitGroup: "MARKET_DATA",
     receivedAt: "2026-07-16T00:00:00.100Z",
+    auditReference:
+      operationId === "getPrices"
+        ? "11111111-1111-4111-8111-111111111111"
+        : "22222222-2222-4222-8222-222222222222",
   };
 }
 

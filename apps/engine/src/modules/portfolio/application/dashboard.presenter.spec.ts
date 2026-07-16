@@ -46,6 +46,26 @@ describe("dashboard presenter with snapshot-bound target", () => {
     expect(dashboard.conclusion).toBe("BLOCKED");
   });
 
+  it("snapshot 자체가 BLOCKED이면 목표와 관리 현금이 정상이어도 계획을 차단한다", async () => {
+    const state = dashboardState({ managedCashMinor: 0n });
+    const dashboard = await getDashboard(
+      repositoryWith({
+        ...state,
+        snapshot: {
+          ...state.snapshot,
+          validationStatus: "BLOCKED",
+        },
+      }),
+    );
+
+    expect(dashboard.state).toBe("BLOCKED");
+    expect(dashboard.conclusion).toBe("BLOCKED");
+    expect(dashboard.blockReason).toMatchObject({
+      code: "SNAPSHOT_EVIDENCE_UNVERIFIED",
+      protectiveAction: "실제 주문과 리밸런싱 계획 생성을 차단했습니다.",
+    });
+  });
+
   it("현금과 목표가 고정되면 bigint 교차 비교로 범위 이탈을 판정한다", async () => {
     const dashboard = await getDashboard(repositoryWith(dashboardState({ managedCashMinor: 0n })));
 
@@ -117,6 +137,7 @@ function dashboardState({ managedCashMinor }: { readonly managedCashMinor: bigin
       id: "33333333-3333-4333-8333-333333333333",
       accountId: "44444444-4444-4444-8444-444444444444",
       targetConfigVersionId: targetId,
+      validationStatus: "VERIFIED",
       observedAt: new Date("2026-07-16T03:00:00.000Z"),
       securitiesValueMinor: 1_000_000n,
       totalValueMinor: 1_000_000n,
