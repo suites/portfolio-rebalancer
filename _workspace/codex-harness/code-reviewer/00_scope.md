@@ -1,6 +1,6 @@
 # Review Scope
 
-- 대상: `README.md`, `docs/SPEC.md`, `docs/TODO.md`, `AGENTS.md`
-- 목적: 초보 사용자 사용성, MVP 오버스펙, 실제 구현 가능성 검토
-- 모드: 아키텍처·정확성·사용성 중심의 문서 리뷰
-- 제외: 문서 수정, 구현, 투자 종목 추천
+- 대상: 루트 및 앱별 환경변수 로딩 경로, Vercel 프로젝트별 권한 경계
+- 검토 파일: `.env.example`, `.gitignore`, `apps/engine/src/config/engine.config.ts`, `apps/web/src/server/engine-dashboard.ts`, `packages/database/prisma.config.ts`
+- 목적: 로컬 개발과 Vercel 운영에서 비밀정보 최소 권한, 설정 일관성, 실패 안전성 검토
+- 제외: 실제 `.env` 값 열람, 환경변수 재배치 구현, Vercel 설정 변경

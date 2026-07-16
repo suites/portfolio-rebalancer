@@ -1,15 +1,12 @@
 # Review Summary
 
-- V0 calculator: 구현 가능
-- V1 read-only shadow: 구현 가능
-- V2 simple paper: 구현 가능
-- 현재 TODO 96개 전체: 가능하지만 초보 MVP로 과도함
-- 완전 자동 live: 현금 source와 모호한 주문 복구를 실계좌로 검증하기 전에는 준비 미완료
+현재 루트 `.env` 하나는 초기 로컬 개발에는 편하지만 실제 로딩 방식과 Vercel의 최소 권한 모델에 맞지 않는다.
 
-우선 수정 권고:
+권고:
 
-1. MVP를 calculator, shadow, basic paper, live hardening으로 다시 정의한다.
-2. README 현금 예시를 실행 가능하게 고친다.
-3. Quick Start와 demo fixture를 Phase 0으로 올린다.
-4. 상태 모델과 함께 status, explain, recover UX를 구현한다.
-5. 종목·비중 변경 전 config diff와 plan preview를 제공한다.
+1. Web, Engine, migration의 3개 스코프로 분리한다.
+2. Web에는 Engine URL과 서비스 토큰만 둔다.
+3. Engine에는 runtime secret과 pooled DB URL만 둔다.
+4. Direct DB URL은 migration CI에만 둔다.
+5. Preview에는 운영 Toss/DB credential을 주입하지 않는다.
+6. 분리 구현 시 빈 문자열 처리, Engine origin 검증, production 필수값 검증을 함께 보강한다.
