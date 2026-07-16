@@ -9,6 +9,7 @@ import {
   buildEditableInstruments,
   buildInitialCompositionModes,
   candidateToEditableInstrument,
+  targetPercentInputsForProfile,
 } from "./target-settings-editor-state";
 
 describe("target settings editor state", () => {
@@ -190,5 +191,15 @@ describe("target settings editor state", () => {
       isHolding: false,
       assetClass: "SATELLITE",
     });
+  });
+
+  it("현금 포함 여부에 따라 세 가지 예시 합계를 정확히 100%로 만든다", () => {
+    for (const cashMode of ["", "FIXED_KRW", "EXCLUDED"] as const) {
+      for (const profile of ["CONSERVATIVE", "BALANCED", "GROWTH"] as const) {
+        const targets = targetPercentInputsForProfile(profile, cashMode);
+        expect(Object.values(targets).reduce((sum, value) => sum + Number(value), 0)).toBe(100);
+        expect(targets.CASH === "0").toBe(cashMode === "EXCLUDED");
+      }
+    }
   });
 });

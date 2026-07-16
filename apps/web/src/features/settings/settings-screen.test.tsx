@@ -118,6 +118,10 @@ describe("SettingsScreen", () => {
     expect(html).toContain("핵심 공격자산");
     expect(html).toContain("위성 공격자산");
     expect(html).toContain("계산 전");
+    expect(html).toContain("안정형 예시");
+    expect(html).toContain("균형형 예시");
+    expect(html).toContain("성장형 예시");
+    expect(html).toContain("개인 맞춤 추천");
 
     const firstFormStart = html.indexOf("<form");
     const firstFormEnd = html.indexOf("</form>", firstFormStart);

@@ -5,6 +5,8 @@ import type {
 
 export type EditableAssetClass = "SAFE" | "CORE" | "SATELLITE";
 export type CompositionMode = "PRESERVE_CURRENT" | "EQUAL";
+export type AllocationProfile = "CONSERVATIVE" | "BALANCED" | "GROWTH";
+export type TargetPercentInputs = Record<"SAFE" | "CORE" | "SATELLITE" | "CASH", string>;
 
 export type EditableInstrument = {
   readonly instrumentKey: string;
@@ -87,6 +89,26 @@ export function candidateToEditableInstrument(
     isHolding: false,
     assetClass,
   };
+}
+
+export function targetPercentInputsForProfile(
+  profile: AllocationProfile,
+  cashMode: "" | "FIXED_KRW" | "EXCLUDED",
+): TargetPercentInputs {
+  const cashIncluded = cashMode !== "EXCLUDED";
+  if (profile === "CONSERVATIVE") {
+    return cashIncluded
+      ? { SAFE: "60", CORE: "30", SATELLITE: "0", CASH: "10" }
+      : { SAFE: "65", CORE: "30", SATELLITE: "5", CASH: "0" };
+  }
+  if (profile === "BALANCED") {
+    return cashIncluded
+      ? { SAFE: "40", CORE: "50", SATELLITE: "5", CASH: "5" }
+      : { SAFE: "40", CORE: "55", SATELLITE: "5", CASH: "0" };
+  }
+  return cashIncluded
+    ? { SAFE: "20", CORE: "65", SATELLITE: "10", CASH: "5" }
+    : { SAFE: "20", CORE: "70", SATELLITE: "10", CASH: "0" };
 }
 
 export function isEditableAssetClass(value: string): value is EditableAssetClass {

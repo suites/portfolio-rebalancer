@@ -23,6 +23,8 @@ import {
   buildInitialCompositionModes,
   candidateToEditableInstrument,
   isEditableAssetClass,
+  targetPercentInputsForProfile,
+  type AllocationProfile,
   type CompositionMode,
   type EditableAssetClass,
   type EditableInstrument,
@@ -118,6 +120,13 @@ export function TargetSettingsEditor({
 
   const hasUnheldInClass = (assetClass: EditableAssetClass) =>
     instruments.some((instrument) => !instrument.isHolding && instrument.assetClass === assetClass);
+
+  const applyAllocationProfile = (profile: AllocationProfile) => {
+    setTargetPercents(targetPercentInputsForProfile(profile, cashMode));
+    setPolicyNotice(
+      `${allocationProfileLabel(profile)} 예시를 입력했습니다. 개인 맞춤 추천이 아니므로 투자기간, 손실 감내도와 실제 자산 성격을 확인한 뒤 저장하세요.`,
+    );
+  };
 
   return (
     <div className={styles.settingsForm}>
@@ -228,6 +237,42 @@ export function TargetSettingsEditor({
       ) : null}
 
       <form className={styles.settingsForm} action={saveAction}>
+        <fieldset className={styles.allocationFieldset}>
+          <legend>목표 비중 예시</legend>
+          <p className={styles.fieldDescription}>
+            자산배분은 투자기간과 손실 감내도에 따라 달라지므로 하나의 정답이 없습니다. 아래 값은
+            입력을 시작하기 위한 예시일 뿐 개인 맞춤 추천이 아니며 자동 저장되지 않습니다.
+            안전자산·핵심 공격자산·위성 공격자산에 어떤 종목을 넣었는지도 함께 확인하세요.
+          </p>
+          <div className={styles.buttonRow}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => applyAllocationProfile("CONSERVATIVE")}
+            >
+              안정형 예시
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => applyAllocationProfile("BALANCED")}
+            >
+              균형형 예시
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => applyAllocationProfile("GROWTH")}
+            >
+              성장형 예시
+            </Button>
+          </div>
+          <p className={styles.fieldDescription}>
+            관리 현금을 평가에서 제외하면 CASH는 0%로 두고 나머지 자산군 합계를 100%로 자동
+            조정합니다.
+          </p>
+        </fieldset>
+
         <fieldset className={styles.allocationFieldset}>
           <legend>관리 현금 기준</legend>
           <p className={styles.fieldDescription}>
@@ -450,6 +495,12 @@ function assetClassLabel(assetClass: EditableAssetClass): string {
   if (assetClass === "SAFE") return "안전자산";
   if (assetClass === "CORE") return "핵심 공격자산";
   return "위성 공격자산";
+}
+
+function allocationProfileLabel(profile: AllocationProfile): string {
+  if (profile === "CONSERVATIVE") return "안정형";
+  if (profile === "BALANCED") return "균형형";
+  return "성장형";
 }
 
 function basisPointsInput(value: number): string {
