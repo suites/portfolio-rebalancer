@@ -164,6 +164,7 @@ Production engine에는 Supabase Integration의 `POSTGRES_PRISMA_URL`, `POSTGRES
 - [토스증권 API 연동](docs/API_TOSS.md)
 - [아키텍처 결정 기록](docs/adr/0001-typescript-hexagonal-monorepo.md)
 - [NestJS engine 결정 기록](docs/adr/0002-nestjs-engine-on-vercel.md)
+- [한국 시장 첫 live 범위 결정 기록](docs/adr/0003-korean-market-first-live-scope.md)
 - [에이전트 작업 지침](AGENTS.md)
 
 ## 개발 단계
