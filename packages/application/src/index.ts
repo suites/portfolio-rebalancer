@@ -4,6 +4,7 @@ export * from "./dashboard";
 export * from "./execution-risk-gate";
 export * from "./market-readiness";
 export * from "./order-state";
+export * from "./order-reservation";
 export * from "./paper-order-executor";
 export * from "./price-movement";
 export * from "./risk-limits";
