@@ -37,7 +37,7 @@ export function loadEngineConfig(environment: NodeJS.ProcessEnv): EngineConfig {
 
 export function loadEngineConfigFromProcess(): EngineConfig {
   if (process.env.VERCEL !== "1") {
-    loadDotenv({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
+    loadDotenv({ path: fileURLToPath(new URL("../../../../.env", import.meta.url)) });
   }
   return loadEngineConfig(process.env);
 }

@@ -1,4 +1,4 @@
-import { CollectionError } from "./errors";
+import { CollectionError } from "../domain/collection.error";
 
 export interface SafeErrorMetadata {
   readonly code: string;

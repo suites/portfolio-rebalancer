@@ -9,5 +9,6 @@
 - DB append-only trigger와 lease 해제
 - 실제 read-only 수집 smoke test
 - NestJS Controller의 health, service auth, Cron auth, 503 차단 계약
+- 실제 AppModule과 PrismaModule provider graph bootstrap
 - dashboard와 refresh의 `cache-control: no-store`
 - format, lint, typecheck, unit tests, production build

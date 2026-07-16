@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { assertVercelEgressConfigured, loadEngineConfig } from "./config";
+import { assertVercelEgressConfigured, loadEngineConfig } from "./engine.config";
 
 describe("engine configuration", () => {
   it("로컬에서는 PostgreSQL 기본 URL을 제공한다", () => {

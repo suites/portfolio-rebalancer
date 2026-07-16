@@ -84,6 +84,23 @@ packages/
 
 의존성은 도메인 안쪽을 향합니다. 브라우저와 Next.js는 토스증권 자격증명이나 Prisma에 접근하지 않고, engine이 만든 검증된 계약만 받습니다. 다른 증권사는 `packages/broker`의 capability와 포트를 구현하는 별도 어댑터로 추가합니다. 자세한 결정은 [아키텍처 결정 기록](docs/adr/0001-typescript-hexagonal-monorepo.md)에 있습니다.
 
+engine은 NestJS의 feature module 구조를 따릅니다.
+
+```text
+apps/engine/src/
+├── main.ts, bootstrap.ts, app.module.ts
+├── common/auth/guards/              service/Cron 인증
+├── config/                          Zod 환경설정과 Config Module
+├── infrastructure/prisma/           Prisma Module과 singleton PrismaService
+└── modules/
+    ├── system/                      health endpoint
+    └── portfolio/
+        ├── presentation/            Controller
+        ├── application/             Service, 수집 use case, presenter
+        ├── domain/                  오류와 bigint 평가 로직
+        └── infrastructure/          Toss adapter와 Prisma repository
+```
+
 ## Vercel 운영
 
 같은 Git 저장소에서 `apps/web`과 `apps/engine`을 각각 Vercel Project로 가져옵니다. PostgreSQL은 Vercel Marketplace의 Neon을 기본 운영 경로로 사용하며 pooled `DATABASE_URL`은 runtime, direct `DATABASE_DIRECT_URL`은 Prisma migration에 사용합니다.

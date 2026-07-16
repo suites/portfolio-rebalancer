@@ -28,7 +28,7 @@ export interface RedactedResponseInput {
   readonly body: Prisma.InputJsonValue;
 }
 
-export class PortfolioRepository {
+export class PrismaPortfolioRepository {
   constructor(private readonly database: DatabaseClient) {}
 
   async acquireCollectionLease(owner: string): Promise<boolean> {

@@ -1,6 +1,6 @@
-import { ENGINE_CONFIG } from "./application.tokens";
 import { createEngineApplication } from "./bootstrap";
-import type { EngineConfig } from "./config";
+import { ENGINE_CONFIG } from "./config/engine-config.token";
+import type { EngineConfig } from "./config/engine.config";
 
 const app = await createEngineApplication();
 const config = app.get<EngineConfig>(ENGINE_CONFIG);

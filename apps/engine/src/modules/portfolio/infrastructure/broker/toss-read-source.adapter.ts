@@ -8,7 +8,7 @@ import {
   type TossHoldingsResponse,
 } from "@portfolio-rebalancer/broker-toss";
 
-import { CollectionError } from "./errors";
+import { CollectionError } from "../../domain/collection.error";
 
 export interface TossReadSource {
   listAccounts(): Promise<readonly TossAccount[]>;

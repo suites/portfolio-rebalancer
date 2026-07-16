@@ -10,7 +10,9 @@
 
 ## 결정
 
-- engine은 `EngineConfigModule`, `InfrastructureModule`, `PortfolioModule`로 나누고 HTTP 계층은 NestJS 11의 Controller, Guard와 singleton Provider로 구성합니다.
+- root에는 `main.ts`, `bootstrap.ts`, `AppModule`만 두고 `common`, `config`, `infrastructure/prisma`, `modules/system`, `modules/portfolio`의 feature-first 구조를 사용합니다.
+- DB client 생성과 종료는 singleton `PrismaService`가 관리하고 `PrismaModule`이 이를 내보냅니다. 스키마, Client 생성과 migration의 기준은 `packages/database/prisma`입니다.
+- portfolio 내부는 `presentation`, `application`, `domain`, `infrastructure`로 나누고 HTTP 계층은 NestJS 11의 Controller, Guard와 singleton Provider로 구성합니다.
 - HTTP adapter는 Fastify 5를 유지합니다.
 - Vercel이 자동 감지하는 `src/main.ts`에서 Nest 애플리케이션을 시작합니다.
 - 토스 클라이언트는 첫 수집 시 lazy singleton으로 생성해 OAuth 캐시를 warm instance에서 재사용합니다.

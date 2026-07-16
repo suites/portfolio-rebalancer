@@ -4,10 +4,10 @@ import {
   type DashboardSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
 
-import type { PortfolioRepository } from "./repository";
+import type { PrismaPortfolioRepository } from "../infrastructure/persistence/prisma-portfolio.repository";
 
 export async function getDashboard(
-  repository: PortfolioRepository,
+  repository: PrismaPortfolioRepository,
 ): Promise<DashboardSnapshotContract> {
   const snapshot = await repository.latestSnapshot();
   if (!snapshot) return blockedDashboard("NO_SNAPSHOT");

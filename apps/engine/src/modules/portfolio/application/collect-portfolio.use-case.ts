@@ -6,14 +6,17 @@ import {
   type TossHoldingItem,
 } from "@portfolio-rebalancer/broker-toss";
 
-import { CollectionError } from "./errors";
-import type { PortfolioRepository, StoredHoldingInput } from "./repository";
-import type { TossReadSource } from "./toss-source";
-import { krwAmountToMinor, usdAmountToKrwMinor } from "./valuation";
+import type {
+  PrismaPortfolioRepository,
+  StoredHoldingInput,
+} from "../infrastructure/persistence/prisma-portfolio.repository";
+import type { TossReadSource } from "../infrastructure/broker/toss-read-source.adapter";
+import { CollectionError } from "../domain/collection.error";
+import { krwAmountToMinor, usdAmountToKrwMinor } from "../domain/valuation";
 
 export interface CollectPortfolioOptions {
   readonly source: TossReadSource;
-  readonly repository: PortfolioRepository;
+  readonly repository: PrismaPortfolioRepository;
   readonly selectedAccountSeq?: number | undefined;
   readonly accountReferenceKey: string;
   readonly now?: () => Date;

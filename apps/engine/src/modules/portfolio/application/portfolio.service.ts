@@ -6,14 +6,14 @@ import {
   type DashboardSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
 
-import { ENGINE_CONFIG } from "./application.tokens";
-import { collectPortfolio } from "./collector";
-import { assertVercelEgressConfigured, type EngineConfig } from "./config";
-import { blockedDashboard, getDashboard } from "./dashboard";
-import { CollectionError } from "./errors";
-import { PortfolioRepository } from "./repository";
+import { ENGINE_CONFIG } from "../../../config/engine-config.token";
+import { assertVercelEgressConfigured, type EngineConfig } from "../../../config/engine.config";
+import { collectPortfolio } from "./collect-portfolio.use-case";
+import { blockedDashboard, getDashboard } from "./dashboard.presenter";
 import { safeErrorMetadata } from "./safe-error-metadata";
-import { createTossReadSource, type TossReadSource } from "./toss-source";
+import { CollectionError } from "../domain/collection.error";
+import { TossRuntimeService } from "../infrastructure/broker/toss-runtime.service";
+import { PrismaPortfolioRepository } from "../infrastructure/persistence/prisma-portfolio.repository";
 
 type BlockCode = DashboardBlockReasonContract["code"];
 
@@ -24,19 +24,15 @@ export type DashboardResult =
 export type CollectionResult =
   { readonly ok: true } | { readonly ok: false; readonly code: BlockCode };
 
-interface TossRuntime {
-  readonly source: TossReadSource;
-  readonly accountReferenceKey: string;
-}
-
 @Injectable()
 export class PortfolioService {
   private readonly logger = new Logger(PortfolioService.name);
-  private tossRuntime: TossRuntime | undefined;
 
   constructor(
     @Inject(ENGINE_CONFIG) private readonly config: EngineConfig,
-    @Inject(PortfolioRepository) private readonly repository: PortfolioRepository,
+    @Inject(PrismaPortfolioRepository)
+    private readonly repository: PrismaPortfolioRepository,
+    @Inject(TossRuntimeService) private readonly tossRuntime: TossRuntimeService,
   ) {}
 
   async dashboard(): Promise<DashboardResult> {
@@ -65,7 +61,7 @@ export class PortfolioService {
   private async collect(event: string): Promise<CollectionResult> {
     try {
       assertVercelEgressConfigured(this.config);
-      const runtime = this.getTossRuntime();
+      const runtime = this.tossRuntime.get();
       await collectPortfolio({
         source: runtime.source,
         repository: this.repository,
@@ -78,29 +74,6 @@ export class PortfolioService {
       this.logger.warn({ event, ...safeErrorMetadata(error), code });
       return { ok: false, code };
     }
-  }
-
-  private getTossRuntime(): TossRuntime {
-    this.tossRuntime ??= this.createTossRuntime();
-    return this.tossRuntime;
-  }
-
-  private createTossRuntime(): TossRuntime {
-    if (!this.config.TOSSINVEST_CLIENT_ID || !this.config.TOSSINVEST_CLIENT_SECRET) {
-      throw new CollectionError(
-        "CREDENTIALS_MISSING",
-        "토스증권 API 자격증명이 설정되지 않았습니다.",
-        "engine 프로젝트의 환경변수에 토스증권 자격증명을 설정하세요.",
-      );
-    }
-    return {
-      source: createTossReadSource({
-        clientId: this.config.TOSSINVEST_CLIENT_ID,
-        clientSecret: this.config.TOSSINVEST_CLIENT_SECRET,
-      }),
-      accountReferenceKey:
-        this.config.ACCOUNT_REFERENCE_KEY ?? this.config.TOSSINVEST_CLIENT_SECRET,
-    };
   }
 }
 

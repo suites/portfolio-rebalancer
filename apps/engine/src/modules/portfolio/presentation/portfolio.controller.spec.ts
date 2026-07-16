@@ -5,12 +5,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DashboardSnapshotSchema } from "@portfolio-rebalancer/contracts";
 
-import { ENGINE_CONFIG } from "./application.tokens";
-import { CronTokenGuard, ServiceTokenGuard } from "./auth.guards";
-import { loadEngineConfig, type EngineConfig } from "./config";
-import { blockedDashboard } from "./dashboard";
-import { EngineController } from "./engine.controller";
-import { PortfolioService } from "./portfolio.service";
+import { CronTokenGuard } from "../../../common/auth/guards/cron-token.guard";
+import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
+import { ENGINE_CONFIG } from "../../../config/engine-config.token";
+import { loadEngineConfig, type EngineConfig } from "../../../config/engine.config";
+import { blockedDashboard } from "../application/dashboard.presenter";
+import { PortfolioService } from "../application/portfolio.service";
+import { PortfolioController } from "./portfolio.controller";
 
 const SERVICE_TOKEN = "service-token-that-is-at-least-32-characters";
 const CRON_TOKEN = "cron-token-at-least-16-characters";
@@ -21,16 +22,6 @@ describe("NestJS engine HTTP contract", () => {
   afterEach(async () => {
     await app?.close();
     app = undefined;
-  });
-
-  it("health는 인증 없이 실거래 비활성 상태를 반환한다", async () => {
-    const harness = await createHarness({ VERCEL: "1" });
-    app = harness.app;
-
-    const response = await harness.fastify.inject({ method: "GET", url: "/internal/v1/health" });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: "ok", liveOrdersEnabled: false });
   });
 
   it("service token을 정확히 검증하고 dashboard를 no-store로 반환한다", async () => {
@@ -125,7 +116,7 @@ async function createHarness(environment: NodeJS.ProcessEnv) {
     collectFromCron: vi.fn().mockResolvedValue({ ok: true }),
   };
   const testingModule = await Test.createTestingModule({
-    controllers: [EngineController],
+    controllers: [PortfolioController],
     providers: [
       { provide: ENGINE_CONFIG, useValue: config satisfies EngineConfig },
       { provide: PortfolioService, useValue: portfolio },

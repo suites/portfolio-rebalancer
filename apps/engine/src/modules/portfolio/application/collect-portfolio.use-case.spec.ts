@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { CollectionError } from "./errors";
-import { collectPortfolio, createAccountReference, maskAccountNumber } from "./collector";
+import type { CollectionError } from "../domain/collection.error";
+import {
+  collectPortfolio,
+  createAccountReference,
+  maskAccountNumber,
+} from "./collect-portfolio.use-case";
 
 describe("collectPortfolio", () => {
   it("여러 계좌를 임의 선택하지 않고 보유 조회 전에 차단한다", async () => {

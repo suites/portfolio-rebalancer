@@ -1,17 +1,13 @@
 import { Controller, Get, Header, HttpCode, Inject, Post, Res, UseGuards } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 
-import { CronTokenGuard, ServiceTokenGuard } from "./auth.guards";
-import { PortfolioService } from "./portfolio.service";
+import { CronTokenGuard } from "../../../common/auth/guards/cron-token.guard";
+import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
+import { PortfolioService } from "../application/portfolio.service";
 
 @Controller("internal/v1")
-export class EngineController {
+export class PortfolioController {
   constructor(@Inject(PortfolioService) private readonly portfolio: PortfolioService) {}
-
-  @Get("health")
-  health() {
-    return { status: "ok" as const, liveOrdersEnabled: false as const };
-  }
 
   @Get("dashboard")
   @UseGuards(ServiceTokenGuard)
