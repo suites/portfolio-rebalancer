@@ -36,7 +36,9 @@ describe("TossRuntimeService request audit", () => {
         correlationId: "11111111-1111-4111-8111-111111111111",
       },
       async () => {
-        await callback(metadata("getAccounts", 0, 1, "SUCCESS", 200));
+        await expect(callback(metadata("getAccounts", 0, 1, "SUCCESS", 200))).resolves.toBe(
+          "attempt",
+        );
         runtime.requestAuditContext.attachCollectionRunId("22222222-2222-4222-8222-222222222222");
         await Promise.all([
           callback(metadata("getBuyingPower", 10, 1, "HTTP_ERROR", 429)),
@@ -174,17 +176,19 @@ describe("TossRuntimeService request audit", () => {
   });
 });
 
-function createdMetadataCallback(): (metadata: TossResponseMetadata) => Promise<void> {
+function createdMetadataCallback(): (
+  metadata: TossResponseMetadata,
+) => Promise<string | null | void> {
   const options = mocks.createTossReadSource.mock.calls.at(-1)?.[0] as
     | {
-        readonly onResponseMetadata?: (metadata: TossResponseMetadata) => void | Promise<void>;
+        readonly onResponseMetadata?: (
+          metadata: TossResponseMetadata,
+        ) => string | null | void | Promise<string | null | void>;
       }
     | undefined;
   const callback = options?.onResponseMetadata;
   if (!callback) throw new Error("onResponseMetadata callback이 생성되지 않았습니다.");
-  return async (metadata) => {
-    await callback(metadata);
-  };
+  return async (metadata) => callback(metadata);
 }
 
 function metadata(

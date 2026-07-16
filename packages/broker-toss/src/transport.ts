@@ -32,7 +32,9 @@ export interface TossManagedFetchOptions {
   readonly random?: () => number;
   readonly maxRetryAfterMs?: number;
   readonly retryJitterMaxMs?: number;
-  readonly onResponseMetadata?: (metadata: TossResponseMetadata) => void | Promise<void>;
+  readonly onResponseMetadata?: (
+    metadata: TossResponseMetadata,
+  ) => string | null | void | Promise<string | null | void>;
 }
 
 export class TossTransportError extends Error {
@@ -106,6 +108,7 @@ export class TossRequestAuditError extends Error {
 }
 
 const responseMetadata = new WeakMap<Response, TossResponseMetadata>();
+const responseAuditReferences = new WeakMap<Response, string>();
 const groupQueueTails = new Map<string, Promise<void>>();
 const operationMatchers = TOSS_OPERATIONS.map((operation) => ({
   operation,
@@ -118,6 +121,10 @@ export function assertTossResponse(response: Response): void {
 
 export function getTossResponseMetadata(response: Response): TossResponseMetadata | null {
   return responseMetadata.get(response) ?? null;
+}
+
+export function getTossResponseAuditReference(response: Response): string | null {
+  return responseAuditReferences.get(response) ?? null;
 }
 
 export function createTimedFetch(
@@ -238,7 +245,10 @@ async function executeManagedRequest(
       options.now(),
     );
     responseMetadata.set(response, metadata);
-    await emitMetadata(options.onResponseMetadata, metadata);
+    const auditReference = await emitMetadata(options.onResponseMetadata, metadata);
+    if (auditReference !== null) {
+      responseAuditReferences.set(response, auditReference);
+    }
 
     const retryDelayMs = getReadRateLimitRetryDelayMs(
       response,
@@ -347,10 +357,15 @@ function operationPathPattern(path: string): RegExp {
 async function emitMetadata(
   callback: TossManagedFetchOptions["onResponseMetadata"],
   metadata: TossResponseMetadata,
-): Promise<void> {
-  if (!callback) return;
+): Promise<string | null> {
+  if (!callback) return null;
   try {
-    await callback(metadata);
+    const reference = await callback(metadata);
+    if (reference === undefined || reference === null) return null;
+    if (reference.trim().length === 0) {
+      throw new Error("토스증권 요청 감사 참조가 비어 있습니다.");
+    }
+    return reference;
   } catch (cause) {
     throw new TossRequestAuditError({ cause });
   }

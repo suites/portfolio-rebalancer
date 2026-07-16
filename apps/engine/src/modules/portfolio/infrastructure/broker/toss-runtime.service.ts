@@ -54,9 +54,12 @@ export class TossRuntimeService {
     };
   }
 
-  private async appendRequestAttempt(metadata: TossResponseMetadata): Promise<void> {
+  private async appendRequestAttempt(metadata: TossResponseMetadata): Promise<string> {
     const audit = this.requestAuditContext.resolve(metadata);
-    await this.repository.appendBrokerRequestAttempt(toStoredAttempt(audit, metadata));
+    const attempt = await this.repository.appendBrokerRequestAttempt(
+      toStoredAttempt(audit, metadata),
+    );
+    return attempt.id;
   }
 }
 

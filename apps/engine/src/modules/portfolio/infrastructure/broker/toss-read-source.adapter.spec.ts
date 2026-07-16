@@ -78,7 +78,9 @@ describe("TossReadSource neutral market reads", () => {
       httpStatus: 200,
       rateLimitGroup: "MARKET_DATA",
       receivedAt: "2026-07-16T00:00:00.125Z",
+      auditReference: null,
     });
+    expect(result.redactedBody).toEqual(business.data);
     expect(getTossResponseMetadata(business.response)?.receivedAt).toBe("2026-07-16T00:00:00.125Z");
   });
 

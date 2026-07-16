@@ -4,6 +4,7 @@ import {
   assertTossResponse,
   createTimedFetch,
   createTossManagedFetch,
+  getTossResponseAuditReference,
   getTossResponseMetadata,
 } from "./transport";
 
@@ -42,7 +43,10 @@ describe("createTossManagedFetch", () => {
           },
         }),
       ),
-      { now },
+      {
+        now,
+        onResponseMetadata: () => "11111111-1111-4111-8111-111111111111",
+      },
     );
 
     const response = await managedFetch(
@@ -57,6 +61,8 @@ describe("createTossManagedFetch", () => {
       requestId: "official-request-id",
       receivedAt: "2026-07-16T00:00:00.125Z",
     });
+    expect(getTossResponseAuditReference(response)).toBe("11111111-1111-4111-8111-111111111111");
+    expect(getTossResponseAuditReference(new Response())).toBeNull();
     expect(getTossResponseMetadata(new Response())).toBeNull();
   });
 

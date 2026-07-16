@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { CollectionError } from "../domain/collection.error";
 import { TossRequestAuditContext } from "../infrastructure/broker/toss-request-audit.context";
+import type { TossReadSource } from "../infrastructure/broker/toss-read-source.adapter";
 import {
   collectPortfolio,
   createAccountReference,
@@ -30,6 +31,7 @@ describe("collectPortfolio", () => {
     };
     const repository = {
       acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      collectionTargetScope: vi.fn().mockResolvedValue(emptyTargetScope()),
       releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
     };
 
@@ -69,6 +71,7 @@ describe("collectPortfolio", () => {
     const completeCollection = vi.fn().mockResolvedValue(true);
     const repository = {
       acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      collectionTargetScope: vi.fn().mockResolvedValue(emptyTargetScope()),
       heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
       releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
       upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
@@ -151,6 +154,7 @@ describe("collectPortfolio", () => {
     };
     const repository = {
       acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      collectionTargetScope: vi.fn().mockResolvedValue(emptyTargetScope()),
       heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
       releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
       upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
@@ -213,6 +217,7 @@ describe("collectPortfolio", () => {
     const completeCollection = vi.fn().mockResolvedValue(true);
     const repository = {
       acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      collectionTargetScope: vi.fn().mockResolvedValue(emptyTargetScope()),
       heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
       releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
       upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
@@ -246,6 +251,146 @@ describe("collectPortfolio", () => {
     });
   });
 
+  it("보유·목표 종목 전체 시세와 캘린더를 감사 참조에 묶고 현재가로 평가한다", async () => {
+    const getPrices = vi.fn().mockResolvedValue({
+      value: [
+        {
+          marketCountry: "KR",
+          symbol: "000660",
+          price: "120000",
+          currency: "KRW",
+          observedAt: "2026-07-16T09:00:00.000+09:00",
+        },
+        {
+          marketCountry: "KR",
+          symbol: "005930",
+          price: "72000",
+          currency: "KRW",
+          observedAt: "2026-07-16T09:00:00.000+09:00",
+        },
+      ],
+      metadata: {
+        ...brokerMetadata("getPrices"),
+        requestId: "prices-request",
+        auditReference: "11111111-1111-4111-8111-111111111111",
+      },
+      redactedBody: { result: [{ symbol: "000660" }, { symbol: "005930" }] },
+    });
+    const getMarketCalendar = vi.fn().mockResolvedValue({
+      value: {
+        marketCountry: "KR",
+        today: { date: "2026-07-16", sessions: [] },
+        previousBusinessDay: { date: "2026-07-15", sessions: [] },
+        nextBusinessDay: { date: "2026-07-17", sessions: [] },
+      },
+      metadata: {
+        ...brokerMetadata("getKrMarketCalendar"),
+        requestId: "calendar-request",
+        auditReference: "22222222-2222-4222-8222-222222222222",
+      },
+      redactedBody: { result: { marketCountry: "KR" } },
+    });
+    const source = {
+      listAccounts: vi
+        .fn()
+        .mockResolvedValue([{ accountNo: "12345678901", accountSeq: 1, accountType: "BROKERAGE" }]),
+      getHoldings: vi.fn().mockResolvedValue(krHoldingsResponse()),
+      getBuyingPower: vi.fn().mockResolvedValue({
+        result: { currency: "KRW", cashBuyingPower: "0" },
+      }),
+      getUsdKrwRate: vi.fn(),
+      getStocks: vi.fn(),
+      getStockWarnings: vi.fn(),
+      ...neutralReadSourceStubs(),
+      getPrices,
+      getMarketCalendar,
+    } as unknown as TossReadSource;
+    const completeCollection = vi.fn().mockResolvedValue(true);
+    const repository = {
+      acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      collectionTargetScope: vi.fn().mockResolvedValue({
+        targetConfigVersionId: "target-1",
+        instruments: [
+          { marketCountry: "KR", symbol: "005930", currency: "KRW" },
+          { marketCountry: "KR", symbol: "000660", currency: "KRW" },
+        ],
+      }),
+      heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
+      releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
+      upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
+      startCollection: vi.fn().mockResolvedValue({ id: "run-1" }),
+      completeCollection,
+      failCollection: vi.fn(),
+    };
+
+    await collectPortfolio({
+      source,
+      repository: repository as never,
+      requestAuditContext,
+      accountReferenceKey: "a".repeat(32),
+    });
+
+    expect(getPrices).toHaveBeenCalledWith([
+      { marketCountry: "KR", symbol: "000660" },
+      { marketCountry: "KR", symbol: "005930" },
+    ]);
+    expect(getMarketCalendar).toHaveBeenCalledWith("KR");
+    const stored = completeCollection.mock.calls[0]?.[0] as
+      | {
+          expectedTargetConfigVersionId: string | null;
+          securitiesValueMinor: bigint;
+          holdings: readonly { symbol: string; lastPrice: string; marketValueKrwMinor: bigint }[];
+          prices: readonly { symbol: string; requestAttemptId: string | null }[];
+          marketCalendars: readonly { requestAttemptId: string | null }[];
+          rawResponses: readonly {
+            operationId: string;
+            requestId?: string | null;
+            httpStatus?: number;
+          }[];
+        }
+      | undefined;
+    expect(stored).toMatchObject({
+      expectedTargetConfigVersionId: "target-1",
+      securitiesValueMinor: 144_000n,
+      holdings: [
+        {
+          symbol: "005930",
+          lastPrice: "72000",
+          marketValueKrwMinor: 144_000n,
+        },
+      ],
+    });
+    expect(stored?.prices).toEqual([
+      expect.objectContaining({
+        symbol: "000660",
+        requestAttemptId: "11111111-1111-4111-8111-111111111111",
+      }),
+      expect.objectContaining({
+        symbol: "005930",
+        requestAttemptId: "11111111-1111-4111-8111-111111111111",
+      }),
+    ]);
+    expect(stored?.marketCalendars).toEqual([
+      expect.objectContaining({
+        requestAttemptId: "22222222-2222-4222-8222-222222222222",
+      }),
+    ]);
+    expect(stored?.rawResponses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operationId: "getPrices",
+          requestId: "prices-request",
+          httpStatus: 200,
+        }),
+        expect.objectContaining({
+          operationId: "getKrMarketCalendar",
+          requestId: "calendar-request",
+          httpStatus: 200,
+        }),
+      ]),
+    );
+  });
+
   it("요청 통화와 다른 매수 가능 금액 응답은 저장하지 않고 차단한다", async () => {
     const source = {
       listAccounts: vi
@@ -269,6 +414,7 @@ describe("collectPortfolio", () => {
     const failCollection = vi.fn().mockResolvedValue(undefined);
     const repository = {
       acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      collectionTargetScope: vi.fn().mockResolvedValue(emptyTargetScope()),
       heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
       releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
       upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
@@ -303,6 +449,7 @@ describe("collectPortfolio", () => {
     };
     const repository = {
       acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      collectionTargetScope: vi.fn().mockResolvedValue(emptyTargetScope()),
       heartbeatCollectionLease: vi.fn().mockResolvedValue(false),
       releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
       upsertAccount: vi.fn(),
@@ -340,6 +487,7 @@ describe("collectPortfolio", () => {
     const failCollection = vi.fn().mockResolvedValue(undefined);
     const repository = {
       acquireCollectionLease: vi.fn().mockResolvedValue(collectionLease),
+      collectionTargetScope: vi.fn().mockResolvedValue(emptyTargetScope()),
       heartbeatCollectionLease: vi.fn().mockResolvedValue(true),
       releaseCollectionLease: vi.fn().mockResolvedValue(undefined),
       upsertAccount: vi.fn().mockResolvedValue({ id: "account-1" }),
@@ -368,14 +516,80 @@ describe("collectPortfolio", () => {
   });
 });
 
-function neutralReadSourceStubs() {
+function neutralReadSourceStubs(): Pick<
+  TossReadSource,
+  | "getPrices"
+  | "getOrderBook"
+  | "getPriceLimit"
+  | "getMarketCalendar"
+  | "getSellableQuantity"
+  | "getCommissionSchedule"
+> {
   return {
-    getPrices: vi.fn(),
+    getPrices: vi.fn((instruments: readonly { marketCountry: "KR" | "US"; symbol: string }[]) =>
+      Promise.resolve({
+        value: instruments.map(({ marketCountry, symbol }) => ({
+          marketCountry,
+          symbol,
+          price: "1",
+          currency: marketCountry === "KR" ? ("KRW" as const) : ("USD" as const),
+          observedAt: "2026-07-16T00:00:00.000Z",
+        })),
+        metadata: brokerMetadata("getPrices"),
+        redactedBody: {
+          result: instruments.map(({ marketCountry, symbol }) => ({
+            symbol,
+            lastPrice: "1",
+            currency: marketCountry === "KR" ? "KRW" : "USD",
+            timestamp: "2026-07-16T00:00:00.000Z",
+          })),
+        },
+      }),
+    ),
     getOrderBook: vi.fn(),
     getPriceLimit: vi.fn(),
-    getMarketCalendar: vi.fn(),
+    getMarketCalendar: vi.fn((marketCountry: "KR" | "US") =>
+      Promise.resolve({
+        value: {
+          marketCountry,
+          today: { date: "2026-07-16", sessions: [] },
+          previousBusinessDay: { date: "2026-07-15", sessions: [] },
+          nextBusinessDay: { date: "2026-07-17", sessions: [] },
+        },
+        metadata: brokerMetadata(
+          marketCountry === "KR" ? "getKrMarketCalendar" : "getUsMarketCalendar",
+        ),
+        redactedBody: { result: { marketCountry } },
+      }),
+    ),
     getSellableQuantity: vi.fn(),
     getCommissionSchedule: vi.fn(),
+  } as unknown as Pick<
+    TossReadSource,
+    | "getPrices"
+    | "getOrderBook"
+    | "getPriceLimit"
+    | "getMarketCalendar"
+    | "getSellableQuantity"
+    | "getCommissionSchedule"
+  >;
+}
+
+function brokerMetadata(operationId: string) {
+  return {
+    brokerId: "toss",
+    operationId,
+    requestId: null,
+    httpStatus: 200,
+    rateLimitGroup: "MARKET_DATA",
+    receivedAt: "2026-07-16T00:00:00.100Z",
+  };
+}
+
+function emptyTargetScope() {
+  return {
+    targetConfigVersionId: null,
+    instruments: [],
   };
 }
 
@@ -421,6 +635,45 @@ function usdHoldingsResponse() {
             purchaseAmount: "1",
             amount: "1",
             amountAfterCost: "1",
+          },
+          profitLoss: {
+            amount: "0",
+            amountAfterCost: "0",
+            rate: "0",
+            rateAfterCost: "0",
+          },
+          dailyProfitLoss: {
+            amount: "0",
+            rate: "0",
+          },
+          cost: {
+            commission: "0",
+            tax: "0",
+          },
+        },
+      ],
+    },
+  };
+}
+
+function krHoldingsResponse() {
+  const response = emptyHoldingsResponse();
+  return {
+    result: {
+      ...response.result,
+      items: [
+        {
+          symbol: "005930",
+          name: "삼성전자",
+          marketCountry: "KR",
+          currency: "KRW",
+          quantity: "2",
+          lastPrice: "1",
+          averagePurchasePrice: "70000",
+          marketValue: {
+            purchaseAmount: "140000",
+            amount: "999",
+            amountAfterCost: "999",
           },
           profitLoss: {
             amount: "0",

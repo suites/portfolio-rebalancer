@@ -23,6 +23,7 @@ export interface BrokerObservationMetadata {
   readonly httpStatus: number;
   readonly rateLimitGroup: string | null;
   readonly receivedAt: IsoDateTime;
+  readonly auditReference?: string | null;
 }
 
 export interface BrokerReadResult<Value> {

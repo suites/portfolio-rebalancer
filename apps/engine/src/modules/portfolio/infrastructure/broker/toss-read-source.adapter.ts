@@ -28,6 +28,7 @@ import {
   TossStockWarningsResponseSchema,
   TossStocksResponseSchema,
   TossUsMarketCalendarResponseSchema,
+  getTossResponseAuditReference,
   getTossResponseMetadata,
   normalizeTossCommissions,
   normalizeTossKrMarketCalendar,
@@ -53,27 +54,31 @@ export interface TossAccountReadReference {
   readonly accountId: AccountId;
 }
 
+export interface TossNeutralReadResult<Value> extends BrokerReadResult<Value> {
+  readonly redactedBody: unknown;
+}
+
 export interface TossReadSource {
   listAccounts(): Promise<readonly TossAccount[]>;
   getHoldings(accountSeq: number): Promise<TossHoldingsResponse>;
   getBuyingPower(accountSeq: number, currency: "KRW" | "USD"): Promise<TossBuyingPowerResponse>;
   getPrices(
     instruments: readonly InstrumentIdentifier[],
-  ): Promise<BrokerReadResult<readonly PriceQuote[]>>;
-  getOrderBook(instrument: InstrumentIdentifier): Promise<BrokerReadResult<OrderBookSnapshot>>;
-  getPriceLimit(instrument: InstrumentIdentifier): Promise<BrokerReadResult<PriceLimitQuote>>;
+  ): Promise<TossNeutralReadResult<readonly PriceQuote[]>>;
+  getOrderBook(instrument: InstrumentIdentifier): Promise<TossNeutralReadResult<OrderBookSnapshot>>;
+  getPriceLimit(instrument: InstrumentIdentifier): Promise<TossNeutralReadResult<PriceLimitQuote>>;
   getMarketCalendar(
     marketCountry: MarketCountry,
     date?: IsoDate,
-  ): Promise<BrokerReadResult<MarketCalendar>>;
+  ): Promise<TossNeutralReadResult<MarketCalendar>>;
   getSellableQuantity(
     account: TossAccountReadReference,
     instrument: InstrumentIdentifier,
-  ): Promise<BrokerReadResult<SellableQuantityQuote>>;
+  ): Promise<TossNeutralReadResult<SellableQuantityQuote>>;
   getCommissionSchedule(
     account: TossAccountReadReference,
     requestedMarkets: readonly MarketCountry[],
-  ): Promise<BrokerReadResult<CommissionRateSchedule>>;
+  ): Promise<TossNeutralReadResult<CommissionRateSchedule>>;
   getUsdKrwRate(): Promise<TossExchangeRateResponse>;
   getStocks(symbols: readonly string[]): Promise<TossStocksResponse>;
   getStockWarnings(symbol: string): Promise<TossStockWarningsResponse>;
@@ -87,7 +92,9 @@ export function createTossReadSource(
   credentials: {
     readonly clientId: string;
     readonly clientSecret: string;
-    readonly onResponseMetadata?: (metadata: TossResponseMetadata) => void | Promise<void>;
+    readonly onResponseMetadata?: (
+      metadata: TossResponseMetadata,
+    ) => string | null | void | Promise<string | null | void>;
   },
   dependencies: TossReadSourceDependencies = {},
 ): TossReadSource {
@@ -147,6 +154,7 @@ export function createTossReadSource(
           response.response,
           "getPrices",
           normalizeTossPrices(parsed, instruments),
+          parsed,
         );
       } catch (error) {
         throw normalizeTossError(error, "현재가");
@@ -163,6 +171,7 @@ export function createTossReadSource(
           response.response,
           "getOrderbook",
           normalizeTossOrderbook(parsed, instrument),
+          parsed,
         );
       } catch (error) {
         throw normalizeTossError(error, "호가");
@@ -179,6 +188,7 @@ export function createTossReadSource(
           response.response,
           "getPriceLimit",
           normalizeTossPriceLimit(parsed, instrument),
+          parsed,
         );
       } catch (error) {
         throw normalizeTossError(error, "가격 제한");
@@ -196,6 +206,7 @@ export function createTossReadSource(
             response.response,
             "getKrMarketCalendar",
             normalizeTossKrMarketCalendar(parsed),
+            parsed,
           );
         }
         if (marketCountry === "US") {
@@ -207,6 +218,7 @@ export function createTossReadSource(
             response.response,
             "getUsMarketCalendar",
             normalizeTossUsMarketCalendar(parsed),
+            parsed,
           );
         }
         throw invalidRequest(
@@ -232,6 +244,7 @@ export function createTossReadSource(
           response.response,
           "getSellableQuantity",
           normalizeTossSellableQuantity(parsed, account.accountId, instrument),
+          parsed,
         );
       } catch (error) {
         throw normalizeTossError(error, "매도 가능 수량");
@@ -248,6 +261,7 @@ export function createTossReadSource(
           response.response,
           "getCommissions",
           normalizeTossCommissions(parsed, account.accountId, requestedMarkets),
+          parsed,
         );
       } catch (error) {
         throw normalizeTossError(error, "수수료 일정");
@@ -310,7 +324,8 @@ function withBrokerMetadata<Value>(
   response: Response,
   expectedOperationId: TossOperationId,
   value: Value,
-): BrokerReadResult<Value> {
+  redactedBody: unknown,
+): TossNeutralReadResult<Value> {
   const metadata = getTossResponseMetadata(response);
   if (
     !metadata ||
@@ -336,7 +351,9 @@ function withBrokerMetadata<Value>(
       httpStatus: metadata.httpStatus,
       rateLimitGroup: metadata.staticRateLimitGroup,
       receivedAt: metadata.receivedAt as IsoDateTime,
+      auditReference: getTossResponseAuditReference(response),
     },
+    redactedBody,
   };
 }
 
