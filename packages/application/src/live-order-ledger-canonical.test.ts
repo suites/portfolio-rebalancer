@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ORDER_CANCEL_DISPATCH_CLAIM_VERSION,
   ORDER_DISPATCH_CLAIM_VERSION,
   ORDER_SUBMISSION_AUTHORIZATION_VERSION,
+  createOrderCancelDispatchClaimCanonical,
   createOrderDispatchClaimCanonical,
   createOrderSubmissionAuthorizationCanonical,
 } from "./live-order-ledger-canonical";
@@ -90,6 +92,52 @@ describe("Live order ledger canonical envelopes", () => {
     expect(result.claimEnvelopeDigest).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("취소 HTTP 직전 원 주문과 운영자 승인을 묶은 일회성 claim을 만든다", () => {
+    const result = createOrderCancelDispatchClaimCanonical({
+      cancelDispatchClaimId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      cancelOperatorAuthorizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      authorizationId: "cancel-authorization-1",
+      planId: common.planId,
+      planVersion: common.planVersion,
+      planOrderId: common.planOrderId,
+      logicalOrderId: common.logicalOrderId,
+      accountId: common.accountId,
+      clientOrderId: common.clientOrderId,
+      canonicalIntentSha256: common.canonicalIntentSha256,
+      authorizedRequestDigest: common.authorizedRequestDigest,
+      brokerAccountReferenceHmac: common.brokerAccountReferenceHmac,
+      brokerOrderId: "broker-order-1",
+      ledgerState: "PARTIAL_FILLED",
+      operatorAuthorizationDigest: "e".repeat(64),
+      authorizationIssuedAt: new Date("2026-07-17T00:00:10.000Z"),
+      authorizationExpiresAt: new Date("2026-07-17T00:00:25.000Z"),
+    });
+
+    expect(result.canonicalRequest).toBe(
+      JSON.stringify({
+        version: ORDER_CANCEL_DISPATCH_CLAIM_VERSION,
+        cancelDispatchClaimId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        cancelOperatorAuthorizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        authorizationId: "cancel-authorization-1",
+        planId: common.planId,
+        planVersion: common.planVersion,
+        planOrderId: common.planOrderId,
+        logicalOrderId: common.logicalOrderId,
+        accountId: common.accountId,
+        clientOrderId: common.clientOrderId,
+        canonicalIntentSha256: common.canonicalIntentSha256,
+        authorizedRequestDigest: common.authorizedRequestDigest,
+        brokerAccountReferenceHmac: common.brokerAccountReferenceHmac,
+        brokerOrderId: "broker-order-1",
+        ledgerState: "PARTIAL_FILLED",
+        operatorAuthorizationDigest: "e".repeat(64),
+        authorizationIssuedAt: "2026-07-17T00:00:10.000Z",
+        authorizationExpiresAt: "2026-07-17T00:00:25.000Z",
+      }),
+    );
+    expect(result.claimEnvelopeDigest).toMatch(/^[a-f0-9]{64}$/);
+  });
+
   it("브로커 권한 digest와 DB 증거 참조가 바뀌면 봉투 digest도 바뀐다", () => {
     const base = {
       ...common,
@@ -145,6 +193,27 @@ describe("Live order ledger canonical envelopes", () => {
         dispatchClaimId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         submissionAuthorizationId: "99999999-9999-4999-8999-999999999999",
         authorizationId: "live-authorization-1",
+        authorizationIssuedAt: new Date("2026-07-17T00:00:10.000Z"),
+        authorizationExpiresAt: new Date("2026-07-17T00:00:40.001Z"),
+      }),
+    ).toThrow("30초");
+    expect(() =>
+      createOrderCancelDispatchClaimCanonical({
+        cancelDispatchClaimId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        cancelOperatorAuthorizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        authorizationId: "cancel-authorization-1",
+        planId: common.planId,
+        planVersion: common.planVersion,
+        planOrderId: common.planOrderId,
+        logicalOrderId: common.logicalOrderId,
+        accountId: common.accountId,
+        clientOrderId: common.clientOrderId,
+        canonicalIntentSha256: common.canonicalIntentSha256,
+        authorizedRequestDigest: common.authorizedRequestDigest,
+        brokerAccountReferenceHmac: common.brokerAccountReferenceHmac,
+        brokerOrderId: "broker-order-1",
+        ledgerState: "PENDING",
+        operatorAuthorizationDigest: "e".repeat(64),
         authorizationIssuedAt: new Date("2026-07-17T00:00:10.000Z"),
         authorizationExpiresAt: new Date("2026-07-17T00:00:40.001Z"),
       }),

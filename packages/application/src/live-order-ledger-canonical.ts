@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 export const ORDER_SUBMISSION_AUTHORIZATION_VERSION = "ORDER_SUBMISSION_AUTHORIZATION_V1" as const;
 export const ORDER_DISPATCH_CLAIM_VERSION = "ORDER_DISPATCH_CLAIM_V1" as const;
+export const ORDER_CANCEL_DISPATCH_CLAIM_VERSION = "ORDER_CANCEL_DISPATCH_CLAIM_V1" as const;
 
 interface LiveOrderLedgerBinding {
   readonly planId: string;
@@ -32,12 +33,37 @@ export interface OrderDispatchClaimCanonicalInput extends LiveOrderLedgerBinding
   readonly authorizationExpiresAt: Date;
 }
 
+export interface OrderCancelDispatchClaimCanonicalInput {
+  readonly cancelDispatchClaimId: string;
+  readonly cancelOperatorAuthorizationId: string;
+  readonly authorizationId: string;
+  readonly planId: string;
+  readonly planVersion: number;
+  readonly planOrderId: string;
+  readonly logicalOrderId: string;
+  readonly accountId: string;
+  readonly clientOrderId: string;
+  readonly canonicalIntentSha256: string;
+  readonly authorizedRequestDigest: string;
+  readonly brokerAccountReferenceHmac: string;
+  readonly brokerOrderId: string;
+  readonly ledgerState: "PENDING" | "PARTIAL_FILLED";
+  readonly operatorAuthorizationDigest: string;
+  readonly authorizationIssuedAt: Date;
+  readonly authorizationExpiresAt: Date;
+}
+
 export interface OrderSubmissionAuthorizationCanonical {
   readonly canonicalPreparation: string;
   readonly canonicalPreparationDigest: string;
 }
 
 export interface OrderDispatchClaimCanonical {
+  readonly canonicalRequest: string;
+  readonly claimEnvelopeDigest: string;
+}
+
+export interface OrderCancelDispatchClaimCanonical {
   readonly canonicalRequest: string;
   readonly claimEnvelopeDigest: string;
 }
@@ -104,6 +130,72 @@ export function createOrderDispatchClaimCanonical(
     preSubmitEvidenceId: input.preSubmitEvidenceId,
     reservationId: input.reservationId,
     approvalId: input.approvalId,
+    authorizationIssuedAt: input.authorizationIssuedAt.toISOString(),
+    authorizationExpiresAt: input.authorizationExpiresAt.toISOString(),
+  });
+  return {
+    canonicalRequest,
+    claimEnvelopeDigest: sha256(canonicalRequest),
+  };
+}
+
+export function createOrderCancelDispatchClaimCanonical(
+  input: OrderCancelDispatchClaimCanonicalInput,
+): OrderCancelDispatchClaimCanonical {
+  const uuidFields: readonly (readonly [string, string])[] = [
+    ["cancelDispatchClaimId", input.cancelDispatchClaimId],
+    ["cancelOperatorAuthorizationId", input.cancelOperatorAuthorizationId],
+    ["planId", input.planId],
+    ["planOrderId", input.planOrderId],
+    ["logicalOrderId", input.logicalOrderId],
+    ["accountId", input.accountId],
+  ];
+  uuidFields.forEach(([name, value]) => assertUuid(value, name));
+  if (!Number.isSafeInteger(input.planVersion) || input.planVersion < 1) {
+    throw new Error("planVersion이 Live 취소 원장 canonical 규칙을 만족하지 않습니다.");
+  }
+  if (input.authorizationId.trim().length === 0 || input.authorizationId.length > 200) {
+    throw new Error("authorizationId가 Live 취소 dispatch claim 규칙을 만족하지 않습니다.");
+  }
+  if (!/^pr1_[A-Za-z0-9_-]{32}$/.test(input.clientOrderId)) {
+    throw new Error("clientOrderId가 Live 취소 원장 canonical 규칙을 만족하지 않습니다.");
+  }
+  if (input.brokerOrderId.trim().length === 0 || input.brokerOrderId.length > 500) {
+    throw new Error("brokerOrderId가 Live 취소 원장 canonical 규칙을 만족하지 않습니다.");
+  }
+  if (input.ledgerState !== "PENDING" && input.ledgerState !== "PARTIAL_FILLED") {
+    throw new Error("ledgerState가 Live 취소 가능 상태가 아닙니다.");
+  }
+  const digestFields: readonly (readonly [string, string])[] = [
+    ["canonicalIntentSha256", input.canonicalIntentSha256],
+    ["authorizedRequestDigest", input.authorizedRequestDigest],
+    ["brokerAccountReferenceHmac", input.brokerAccountReferenceHmac],
+    ["operatorAuthorizationDigest", input.operatorAuthorizationDigest],
+  ];
+  digestFields.forEach(([name, value]) => assertSha256(value, name));
+  const issuedAtMs = assertFiniteDate(input.authorizationIssuedAt, "authorizationIssuedAt");
+  const expiresAtMs = assertFiniteDate(input.authorizationExpiresAt, "authorizationExpiresAt");
+  if (expiresAtMs <= issuedAtMs || expiresAtMs - issuedAtMs > 30_000) {
+    throw new Error("Live 취소 dispatch 권한 만료시간은 발급 후 30초 이하여야 합니다.");
+  }
+
+  const canonicalRequest = JSON.stringify({
+    version: ORDER_CANCEL_DISPATCH_CLAIM_VERSION,
+    cancelDispatchClaimId: input.cancelDispatchClaimId,
+    cancelOperatorAuthorizationId: input.cancelOperatorAuthorizationId,
+    authorizationId: input.authorizationId,
+    planId: input.planId,
+    planVersion: input.planVersion,
+    planOrderId: input.planOrderId,
+    logicalOrderId: input.logicalOrderId,
+    accountId: input.accountId,
+    clientOrderId: input.clientOrderId,
+    canonicalIntentSha256: input.canonicalIntentSha256,
+    authorizedRequestDigest: input.authorizedRequestDigest,
+    brokerAccountReferenceHmac: input.brokerAccountReferenceHmac,
+    brokerOrderId: input.brokerOrderId,
+    ledgerState: input.ledgerState,
+    operatorAuthorizationDigest: input.operatorAuthorizationDigest,
     authorizationIssuedAt: input.authorizationIssuedAt.toISOString(),
     authorizationExpiresAt: input.authorizationExpiresAt.toISOString(),
   });

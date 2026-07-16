@@ -5,6 +5,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
+  createCancelOperatorAuthorizationCanonical,
   createCancelOperatorAuthorizationDigest,
   createCancelRequestDigest,
   evaluateCancelRiskGate,
@@ -85,6 +86,25 @@ const baseInput: CancelRiskGateInput = {
 };
 
 describe("evaluateCancelRiskGate", () => {
+  it("운영자 승인 canonical에는 원문 브로커 계좌 참조를 남기지 않는다", () => {
+    const authorization = createAuthorization();
+    const canonical = createCancelOperatorAuthorizationCanonical({
+      authorizationId: authorization.authorizationId,
+      actor: authorization.actor,
+      action: authorization.action,
+      orderIdentity: authorization.orderIdentity,
+      canonicalRequestDigest: authorization.canonicalRequestDigest,
+      authorizedAt: authorization.authorizedAt,
+      expiresAt: authorization.expiresAt,
+      evidenceReference: authorization.evidenceReference,
+    });
+
+    expect(canonical.canonicalContent).not.toContain(
+      authorization.orderIdentity.brokerAccountReference,
+    );
+    expect(canonical.authorizationDigest).toBe(authorization.authorizationDigest);
+  });
+
   it("운영 설정 입력 없이 취소 전용 검사만 통과시키고 브로커 READY 계약을 만든다", () => {
     const result = evaluateCancelRiskGate(baseInput);
 

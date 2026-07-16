@@ -10,6 +10,8 @@ import {
   type ReadyLiveOrderRiskDecision,
 } from "@portfolio-rebalancer/broker";
 
+export const CANCEL_OPERATOR_AUTHORIZATION_VERSION = "CANCEL_OPERATOR_AUTHORIZATION_V1" as const;
+
 export type CancelOrderLedgerState =
   | "PLANNED"
   | "SUBMITTING"
@@ -50,6 +52,11 @@ export interface CancelOperatorAuthorizationEvidence {
   readonly expiresAt: Date;
   readonly consumedAt: Date | null;
   readonly evidenceReference: string;
+}
+
+export interface CancelOperatorAuthorizationCanonical {
+  readonly canonicalContent: string;
+  readonly authorizationDigest: string;
 }
 
 export interface CancelRiskCheck {
@@ -180,8 +187,14 @@ export function createCancelRequestDigest(request: CancelOrderIdentity): string 
 export function createCancelOperatorAuthorizationDigest(
   evidence: Omit<CancelOperatorAuthorizationEvidence, "authorizationDigest" | "consumedAt">,
 ): string {
-  const canonical = JSON.stringify({
-    version: "CANCEL_OPERATOR_AUTHORIZATION_V1",
+  return createCancelOperatorAuthorizationCanonical(evidence).authorizationDigest;
+}
+
+export function createCancelOperatorAuthorizationCanonical(
+  evidence: Omit<CancelOperatorAuthorizationEvidence, "authorizationDigest" | "consumedAt">,
+): CancelOperatorAuthorizationCanonical {
+  const canonicalContent = JSON.stringify({
+    version: CANCEL_OPERATOR_AUTHORIZATION_VERSION,
     authorizationId: evidence.authorizationId,
     actor: evidence.actor,
     action: evidence.action,
@@ -190,7 +203,6 @@ export function createCancelOperatorAuthorizationDigest(
       planOrderId: evidence.orderIdentity.planOrderId,
       logicalOrderId: evidence.orderIdentity.logicalOrderId,
       accountId: evidence.orderIdentity.accountId,
-      brokerAccountReference: evidence.orderIdentity.brokerAccountReference,
       clientOrderId: evidence.orderIdentity.clientOrderId,
       brokerOrderId: evidence.orderIdentity.brokerOrderId,
     },
@@ -199,7 +211,10 @@ export function createCancelOperatorAuthorizationDigest(
     expiresAt: evidence.expiresAt.toISOString(),
     evidenceReference: evidence.evidenceReference,
   });
-  return createHash("sha256").update(canonical).digest("hex");
+  return {
+    canonicalContent,
+    authorizationDigest: createHash("sha256").update(canonicalContent).digest("hex"),
+  };
 }
 
 function evaluateOperatorAuthorization(
