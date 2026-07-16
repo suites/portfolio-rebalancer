@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "pnpm -r run build",
+    "build:engine-deps": "pnpm --filter @portfolio-rebalancer/domain build && pnpm --filter @portfolio-rebalancer/broker build && pnpm --filter @portfolio-rebalancer/broker-toss build && pnpm --filter @portfolio-rebalancer/contracts build && pnpm --filter @portfolio-rebalancer/database build",
     "dev": "pnpm --parallel --filter @portfolio-rebalancer/engine --filter @portfolio-rebalancer/web dev",
     "dev:web": "pnpm --filter @portfolio-rebalancer/web dev",
     "dev:engine": "pnpm --filter @portfolio-rebalancer/engine dev",

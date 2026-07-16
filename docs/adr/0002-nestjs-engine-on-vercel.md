@@ -19,6 +19,7 @@
 - platform `PORT`를 `ENGINE_PORT`보다 항상 우선합니다. host 기본값은 로컬 `127.0.0.1`, Vercel `0.0.0.0`으로 config에서 해석하여 bootstrap 분기를 만들지 않습니다.
 - Fluid Compute의 Function 실행 시간과 메모리는 `vercel.json`이 아니라 Vercel Dashboard의 Functions 설정에서 관리합니다.
 - engine build는 Nest CLI와 workspace alias를 지정한 webpack으로 내부 TypeScript 패키지를 포함한 CommonJS bundle을 만들고 외부 npm 패키지는 runtime dependency로 유지합니다. `start:prod`는 Node로 이 산출물을 직접 실행합니다.
+- Vercel zero-config의 Node file trace가 workspace의 TypeScript source export에 의존하지 않도록 engine runtime 패키지는 build 전에 CommonJS `dist`를 만들고 production export가 이를 가리키게 합니다. 개발과 타입 해석은 명시적인 development/types 조건으로 source를 사용합니다.
 - engine package는 CommonJS runtime 경계를 명시하되 TypeScript는 workspace source export에 맞는 Bundler resolution을 유지합니다. `verbatimModuleSyntax`를 끄고 Vercel과 production build가 import 문을 CommonJS로 변환할 수 있게 합니다.
 - 토스 클라이언트는 첫 수집 시 lazy singleton으로 생성해 OAuth 캐시를 warm instance에서 재사용합니다.
 - Prisma client와 repository는 애플리케이션 singleton이며 요청 종료 시 disconnect하지 않습니다.
