@@ -1,6 +1,7 @@
 import type {
   AccountId,
   BrokerId,
+  BrokerOrderSummary,
   BrokerReadResult,
   BuyingPowerQuote,
   CommissionRateSchedule,
@@ -23,6 +24,7 @@ import {
   TossKrMarketCalendarResponseSchema,
   TossOpenApiClient,
   TossOrderbookResponseSchema,
+  TossOpenOrdersResponseSchema,
   TossPriceLimitResponseSchema,
   TossPricesResponseSchema,
   TossSellableQuantityResponseSchema,
@@ -35,6 +37,7 @@ import {
   normalizeTossBuyingPower,
   normalizeTossKrMarketCalendar,
   normalizeTossOrderbook,
+  normalizeTossOpenOrderSummaries,
   normalizeTossPriceLimit,
   normalizeTossPrices,
   normalizeTossSellableQuantity,
@@ -122,6 +125,9 @@ export interface TossPretradeReadSource extends TossReadSource {
   getStockWarningsEvidence(
     symbol: string,
   ): Promise<TossNeutralReadResult<TossStockWarningsResponse>>;
+  listOpenOrdersEvidence(
+    account: TossAccountReadReference,
+  ): Promise<TossNeutralReadResult<readonly BrokerOrderSummary[]>>;
 }
 
 export interface TossReadSourceDependencies {
@@ -457,6 +463,31 @@ export function createTossReadSource(
         );
       } catch (error) {
         throw normalizeTossError(error, "종목 유의사항");
+      }
+    },
+    async listOpenOrdersEvidence(account) {
+      assertAccountReference(account);
+      try {
+        const response = await client.read.getOrders({
+          params: {
+            header: { "X-Tossinvest-Account": account.accountSeq },
+            query: { status: "OPEN" },
+          },
+        });
+        const validated = await validateResponse(
+          response,
+          "getOrders",
+          TossOpenOrdersResponseSchema,
+        );
+        return withBrokerMetadata(
+          response.response,
+          "getOrders",
+          normalizeTossOpenOrderSummaries(validated.value),
+          validated.redactedBody,
+          validated.responseValidationId,
+        );
+      } catch (error) {
+        throw normalizeTossError(error, "미체결 주문");
       }
     },
   };

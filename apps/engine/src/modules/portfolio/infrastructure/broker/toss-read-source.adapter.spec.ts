@@ -32,6 +32,7 @@ const mocks = {
     getExchangeRate: vi.fn(),
     getStocks: vi.fn(),
     getStockWarnings: vi.fn(),
+    getOrders: vi.fn(),
   },
 };
 const responseValidationId = "55555555-5555-4555-8555-555555555555";
@@ -212,6 +213,68 @@ describe("TossReadSource neutral account reads", () => {
       currency: "KRW",
       cashBuyingPower: "5000000",
     });
+    expect(result.responseValidationId).toBe(responseValidationId);
+  });
+
+  it("미체결 주문 evidence는 OPEN 전량 응답과 검증 ID를 보존한다", async () => {
+    mocks.read.getOrders.mockResolvedValue(
+      await reply(
+        "getOrders",
+        {
+          result: {
+            orders: [
+              {
+                orderId: "broker-order-1",
+                symbol: "005930",
+                side: "BUY",
+                orderType: "LIMIT",
+                timeInForce: "DAY",
+                status: "PENDING",
+                price: "70000",
+                quantity: "1",
+                currency: "KRW",
+                orderedAt: "2026-07-16T10:00:00+09:00",
+                canceledAt: null,
+                execution: {
+                  filledQuantity: "0",
+                  averageFilledPrice: null,
+                  filledAmount: null,
+                  commission: null,
+                  tax: null,
+                  filledAt: null,
+                  settlementDate: null,
+                },
+              },
+            ],
+            nextCursor: null,
+            hasNext: false,
+          },
+        },
+        { auditReference: "11111111-1111-4111-8111-111111111111" },
+      ),
+    );
+    const source = createSource(
+      vi.fn<TossResponseValidationCallback>().mockResolvedValue(responseValidationId),
+    );
+
+    const result = await source.listOpenOrdersEvidence(accountReference);
+
+    expect(mocks.read.getOrders).toHaveBeenCalledExactlyOnceWith({
+      params: {
+        header: { "X-Tossinvest-Account": 17 },
+        query: { status: "OPEN" },
+      },
+    });
+    expect(result.value).toEqual([
+      {
+        brokerOrderId: "broker-order-1",
+        marketCountry: "KR",
+        symbol: "005930",
+        side: "BUY",
+        status: "PENDING",
+        quantity: "1",
+      },
+    ]);
     expect(result.responseValidationId).toBe(responseValidationId);
   });
 
@@ -693,6 +756,8 @@ function operationUrl(operationId: TossOperationId): string {
       return `${origin}/api/v1/stocks?symbols=005930`;
     case "getStockWarnings":
       return `${origin}/api/v1/stocks/005930/warnings`;
+    case "getOrders":
+      return `${origin}/api/v1/orders?status=OPEN`;
     default:
       throw new Error(`테스트 business operation URL이 없습니다: ${operationId}`);
   }

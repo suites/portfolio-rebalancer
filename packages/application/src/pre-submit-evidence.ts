@@ -208,18 +208,15 @@ export function evaluatePreSubmitOrderEvidence(input: {
     futureToleranceMs: input.futureToleranceMs,
   });
   checks.push(openOrdersFreshness.check);
-  const conflictingOrder = input.brokerOpenOrders.value.find(
-    (order) =>
-      order.marketCountry === input.order.marketCountry && order.symbol === input.order.symbol,
-  );
+  const conflictingOrder = input.brokerOpenOrders.value[0];
   checks.push(
     check(
       conflictingOrder === undefined,
       "NO_CONFLICTING_BROKER_OPEN_ORDER",
       "CONFLICTING_BROKER_OPEN_ORDER_EXISTS",
-      "브로커에 현재 종목의 충돌 가능한 미체결 주문이 없습니다.",
+      "브로커 계좌에 충돌 가능한 미체결 주문이 없습니다.",
       conflictingOrder
-        ? `${conflictingOrder.brokerOrderId} 미체결 주문이 있어 신규 주문을 차단합니다.`
+        ? `${conflictingOrder.brokerOrderId} 미체결 주문이 있어 계좌의 신규 주문을 차단합니다.`
         : "브로커 미체결 주문 충돌 여부를 확인할 수 없습니다.",
     ),
   );

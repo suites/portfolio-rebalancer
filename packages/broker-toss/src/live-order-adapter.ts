@@ -9,6 +9,7 @@ import {
   type BrokerOrderLookup,
   type BrokerOrderObservation,
   type BrokerOrderReadResult,
+  type BrokerOrderSummary,
   type BrokerOrderSubmissionResult,
   type KrwLimitDayOrderRequest,
   type LiveOrderAuthorization,
@@ -17,6 +18,7 @@ import {
   TOSS_CANONICAL_CLIENT_ORDER_ID_PATTERN,
 } from "@portfolio-rebalancer/broker";
 import type { BrokerId, IsoDateTime, SymbolCode } from "@portfolio-rebalancer/broker";
+import type { DecimalString } from "@portfolio-rebalancer/domain";
 import type { PathBasedClient } from "openapi-fetch";
 import { z } from "zod";
 
@@ -147,6 +149,40 @@ export interface TossLiveOrderTransport {
 
 export interface TossLiveOrderAdapterOptions {
   readonly now?: () => Date;
+}
+
+export class TossOpenOrdersNormalizationError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+    this.name = "TossOpenOrdersNormalizationError";
+  }
+}
+
+export function normalizeTossOpenOrderSummaries(
+  response: z.infer<typeof TossOpenOrdersResponseSchema>,
+): readonly BrokerOrderSummary[] {
+  if (response.result.hasNext || response.result.nextCursor !== null) {
+    throw new TossOpenOrdersNormalizationError("TOSS_OPEN_ORDERS_PAGINATION_UNEXPECTED");
+  }
+  return response.result.orders.map((order) => {
+    const semanticIssue = orderSemanticIssue(order);
+    if (semanticIssue !== null) throw new TossOpenOrdersNormalizationError(semanticIssue);
+    if (
+      !/^\d{6}$/.test(order.symbol) ||
+      order.currency !== "KRW" ||
+      (order.side !== "BUY" && order.side !== "SELL")
+    ) {
+      throw new TossOpenOrdersNormalizationError("TOSS_OPEN_ORDER_IDENTITY_UNSUPPORTED");
+    }
+    return {
+      brokerOrderId: order.orderId,
+      marketCountry: "KR",
+      symbol: order.symbol as SymbolCode,
+      side: order.side,
+      status: order.status,
+      quantity: order.quantity as DecimalString,
+    };
+  });
 }
 
 export class TossLiveOrderAdapter implements BrokerLiveOrderPort {
@@ -297,7 +333,7 @@ export class TossLiveOrderAdapter implements BrokerLiveOrderPort {
         };
       }
       const parsed = TossOpenOrdersResponseSchema.safeParse(response.rawPayload);
-      if (!parsed.success || parsed.data.result.hasNext || parsed.data.result.nextCursor !== null) {
+      if (!parsed.success) {
         return {
           outcome: "INTEGRITY_BLOCKED",
           value: null,
@@ -306,14 +342,16 @@ export class TossLiveOrderAdapter implements BrokerLiveOrderPort {
           rawPayload: response.rawPayload,
         };
       }
-      const semanticIssue = parsed.data.result.orders
-        .map(orderSemanticIssue)
-        .find((issue) => issue !== null);
-      if (semanticIssue !== undefined) {
+      try {
+        normalizeTossOpenOrderSummaries(parsed.data);
+      } catch (error) {
         return {
           outcome: "INTEGRITY_BLOCKED",
           value: null,
-          reasonCode: semanticIssue,
+          reasonCode:
+            error instanceof TossOpenOrdersNormalizationError
+              ? error.code
+              : "TOSS_OPEN_ORDERS_NORMALIZATION_FAILED",
           metadata,
           rawPayload: response.rawPayload,
         };
