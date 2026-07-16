@@ -4,6 +4,7 @@ export * from "./cancel-risk-gate";
 export * from "./dashboard";
 export * from "./execution-risk-gate";
 export * from "./live-order-approval";
+export * from "./live-order-ledger-canonical";
 export * from "./live-submit-risk-decision";
 export * from "./market-readiness";
 export * from "./order-state";
