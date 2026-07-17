@@ -29,16 +29,15 @@ import {
   validateEngineInstrument,
 } from "@/server/engine-console";
 import { refreshEngineDashboard } from "@/server/engine-dashboard";
-import {
 import { targetSettingsInputFromFormData } from "@/server/target-settings-input";
 
-export async function refreshPortfolioAction(formData: FormData) {
+export async function refreshPortfolioAction(_formData: FormData) {
   await refreshEngineDashboard();
   revalidatePath("/", "layout");
   redirect("/troubleshooting");
 }
 
-export async function createShadowPlanAction(formData: FormData) {
+export async function createShadowPlanAction(_formData: FormData) {
   return createRebalancePlan("SHADOW");
 }
 
@@ -430,15 +429,15 @@ export async function recoverUnknownOrderAction(formData: FormData) {
   } else {
     try {
       await recoverEngineUnknownOrder({
-          orderId,
-          resolvedState: resolvedState as
-            "PENDING" | "PARTIAL_FILLED" | "FILLED" | "CANCELED" | "REJECTED",
-          brokerEvidenceReference: stringField(formData, "brokerEvidenceReference"),
-          brokerOrderId: stringField(formData, "brokerOrderId"),
-          limitPriceMinor: positiveIntegerField(formData, "limitPriceWon"),
-          filledQuantity: nonNegativeIntegerField(formData, "filledQuantity"),
-          filledGrossMinor: nonNegativeIntegerField(formData, "filledGrossWon"),
-          feeMinor: nonNegativeIntegerField(formData, "feeWon"),
+        orderId,
+        resolvedState: resolvedState as
+          "PENDING" | "PARTIAL_FILLED" | "FILLED" | "CANCELED" | "REJECTED",
+        brokerEvidenceReference: stringField(formData, "brokerEvidenceReference"),
+        brokerOrderId: stringField(formData, "brokerOrderId"),
+        limitPriceMinor: positiveIntegerField(formData, "limitPriceWon"),
+        filledQuantity: nonNegativeIntegerField(formData, "filledQuantity"),
+        filledGrossMinor: nonNegativeIntegerField(formData, "filledGrossWon"),
+        feeMinor: nonNegativeIntegerField(formData, "feeWon"),
       });
     } catch (error) {
       status =
