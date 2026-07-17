@@ -151,11 +151,7 @@ export function RebalancingScreen({
           </Surface>
         </div>
 
-        <PlanSurface
-          snapshot={snapshot}
-          plan={plan}
-          operational={operational}
-        />
+        <PlanSurface snapshot={snapshot} plan={plan} operational={operational} />
       </div>
     </>
   );
@@ -639,8 +635,6 @@ function actionFeedback(status: string): {
     "live-execute-unavailable":
       "Live dispatch claim 또는 브로커 결과를 안전하게 기록하지 못해 추가 전송을 차단했습니다.",
     "order-input-invalid": "주문 실행 입력을 확인하지 못했습니다.",
-    "operator-security-blocked":
-      "Tailscale 내부 콘솔 경계를 확인하지 못해 엔진을 호출하지 않았습니다.",
   };
   return {
     title: "리밸런싱 작업을 완료하지 못했습니다.",

@@ -1,7 +1,5 @@
 import { Module } from "@nestjs/common";
 
-import { ServiceTokenGuard } from "../../common/auth/guards/service-token.guard";
-import { EngineConfigModule } from "../../config/engine-config.module";
 import { PrismaModule } from "../../infrastructure/prisma/prisma.module";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
 import { OperationalConfigService } from "./application/operational-config.service";
@@ -9,7 +7,7 @@ import { PrismaOperationalConfigRepository } from "./infrastructure/persistence/
 import { OperationalConfigController } from "./presentation/operational-config.controller";
 
 @Module({
-  imports: [EngineConfigModule, PrismaModule],
+  imports: [PrismaModule],
   controllers: [OperationalConfigController],
   providers: [
     {
@@ -18,7 +16,6 @@ import { OperationalConfigController } from "./presentation/operational-config.c
       inject: [PrismaService],
     },
     OperationalConfigService,
-    ServiceTokenGuard,
   ],
   exports: [OperationalConfigService, PrismaOperationalConfigRepository],
 })

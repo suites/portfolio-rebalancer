@@ -279,11 +279,5 @@ function feedbackFor(
       description: "아무 권한도 완화하지 않았습니다. 연결 상태를 확인한 뒤 다시 시도하세요.",
       tone: "blocked",
     };
-  if (status === "operator-security-blocked")
-    return {
-      title: "운영자 보안 검증에서 요청을 차단했습니다.",
-      description: "Tailscale 내부 콘솔 경계를 확인하지 못해 설정 엔진을 호출하지 않았습니다.",
-      tone: "blocked",
-    };
   return null;
 }

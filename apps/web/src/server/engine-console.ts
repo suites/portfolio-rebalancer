@@ -45,9 +45,6 @@ export class EngineConsoleRequestError extends Error {
   }
 }
 
-export type OperatorAuditContext = { readonly actor: "tailscale-operator" };
-export const TAILSCALE_OPERATOR: OperatorAuditContext = { actor: "tailscale-operator" };
-
 export const getEngineRecords = cache(async (): Promise<ConsoleRecordsSnapshotContract> => {
   try {
     return ConsoleRecordsSnapshotSchema.parse(await requestEngine("/internal/v1/records", "GET"));
@@ -171,13 +168,11 @@ export async function saveEngineLivePromotion(
   );
 }
 
-export async function createEngineLivePlanApproval(
-  input: {
-    readonly planId: string;
-    readonly planHash: string;
-    readonly confirmation: "LIVE 주문 계획과 금액을 확인했습니다";
-  },
-): Promise<LivePlanApprovalReceiptContract> {
+export async function createEngineLivePlanApproval(input: {
+  readonly planId: string;
+  readonly planHash: string;
+  readonly confirmation: "LIVE 주문 계획과 금액을 확인했습니다";
+}): Promise<LivePlanApprovalReceiptContract> {
   const receipt = LivePlanApprovalReceiptSchema.parse(
     await requestEngine(
       `/internal/v1/rebalance-plans/${input.planId}/live-approvals`,
@@ -191,19 +186,13 @@ export async function createEngineLivePlanApproval(
   return receipt;
 }
 
-export async function executeEngineRebalancePlan(
-  input: {
-    readonly planId: string;
-    readonly mode: "PAPER" | "LIVE";
-    readonly approvalIds: readonly string[];
-  },
-): Promise<ExecuteRebalancePlanReceiptContract> {
+export async function executeEngineRebalancePlan(input: {
+  readonly planId: string;
+  readonly mode: "PAPER" | "LIVE";
+  readonly approvalIds: readonly string[];
+}): Promise<ExecuteRebalancePlanReceiptContract> {
   const receipt = ExecuteRebalancePlanReceiptSchema.parse(
-    await requestEngine(
-      `/internal/v1/rebalance-plans/${input.planId}/execute`,
-      "POST",
-      input,
-    ),
+    await requestEngine(`/internal/v1/rebalance-plans/${input.planId}/execute`, "POST", input),
   );
   if (receipt.planId !== input.planId || receipt.mode !== input.mode) {
     throw new EngineConsoleRequestError(502, "ENGINE_RECEIPT_MISMATCH");
@@ -214,9 +203,7 @@ export async function executeEngineRebalancePlan(
 export async function setEngineKillSwitch(
   input: KillSwitchCommandContract,
 ): Promise<OrdersSnapshotContract> {
-  return OrdersSnapshotSchema.parse(
-    await requestEngine("/internal/v1/kill-switch", "POST", input),
-  );
+  return OrdersSnapshotSchema.parse(await requestEngine("/internal/v1/kill-switch", "POST", input));
 }
 
 export async function cancelEngineOrder(
@@ -231,9 +218,7 @@ export async function cancelEngineOrder(
   return receipt;
 }
 
-export async function reconcileEngineOrder(
-  orderId: string,
-): Promise<StoredOrderReceiptContract> {
+export async function reconcileEngineOrder(orderId: string): Promise<StoredOrderReceiptContract> {
   const receipt = StoredOrderReceiptSchema.parse(
     await requestEngine(`/internal/v1/orders/${orderId}/reconcile`, "POST"),
   );
@@ -255,18 +240,10 @@ export async function recoverEngineUnknownOrder(
   return receipt;
 }
 
-async function requestEngine(
-  path: string,
-  method: "GET" | "POST",
-  body?: unknown,
-) {
-  const serviceToken = process.env.ENGINE_SERVICE_TOKEN;
+async function requestEngine(path: string, method: "GET" | "POST", body?: unknown) {
   const response = await fetch(new URL(path, ENGINE_INTERNAL_URL), {
     method,
-    headers: {
-      ...(serviceToken ? { authorization: `Bearer ${serviceToken}` } : {}),
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
-    },
+    ...(body === undefined ? {} : { headers: { "content-type": "application/json" } }),
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     cache: "no-store",
     signal: AbortSignal.timeout(15_000),

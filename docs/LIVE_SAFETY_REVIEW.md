@@ -1,6 +1,6 @@
 # 제한형 Live 코드 안전 리뷰
 
-검토일: 2026-07-16
+검토일: 2026-07-17
 
 ## 결론
 
@@ -23,7 +23,7 @@
 - exact 브로커 증거를 요구하는 운영자 복구
 - 취소 요청의 일회성 dispatch와 원 주문 조회 기반 최종 상태 확정
 - 계좌 번호와 `accountSeq` 불일치, 오래된 설정·승격·킬 스위치 상태
-- Tailscale 내부망, Caddy TLS와 Web→Engine 서비스 토큰 경계
+- Tailscale 내부망, Caddy TLS와 engine loopback 경계
 - JSON 문자열과 이스케이프된 upstream 오류의 계좌·토큰 redaction
 - migration owner와 제한된 runtime 역할의 권한 분리
 
@@ -32,8 +32,8 @@
 - 엔진, Web, 도메인, 계약, 브로커와 DB 단위 테스트
 - PostgreSQL 17의 새 데이터베이스에 전체 migration 적용 후 주문·권한 통합 테스트
 - 타입 검사, ESLint, Prettier, Next.js production build
-- 로컬 `tsx` 엔진에서 health·운영 설정·주문 API와 인증 차단을 실제 HTTP로 확인
-- 로그인 전 리디렉션과 로그인 후 설정·리밸런싱·주문 화면 렌더링 확인
+- 로컬 `tsx` 엔진에서 일반 내부 route의 무인증 호출과 Cron route의 인증 차단을 실제 HTTP로 확인
+- Tailscale 전용 `stock.fredly.dev`에서 설정·리밸런싱·주문 화면 렌더링 확인
 
 ## 운영 승격과의 경계
 

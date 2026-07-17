@@ -25,7 +25,6 @@ import {
 } from "@portfolio-rebalancer/contracts";
 
 import { CronTokenGuard } from "../../../common/auth/guards/cron-token.guard";
-import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
 import { PortfolioService } from "../application/portfolio.service";
 import { RebalancePlanError } from "../domain/rebalance-plan.error";
 import { TargetSettingsError } from "../domain/target-settings.error";
@@ -35,7 +34,6 @@ export class PortfolioController {
   constructor(@Inject(PortfolioService) private readonly portfolio: PortfolioService) {}
 
   @Get("dashboard")
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async dashboard(@Res({ passthrough: true }) reply: FastifyReply) {
     const result = await this.portfolio.dashboard();
@@ -45,7 +43,6 @@ export class PortfolioController {
 
   @Post("portfolio/refresh")
   @HttpCode(200)
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async refresh(@Res({ passthrough: true }) reply: FastifyReply) {
     const result = await this.portfolio.refresh();
@@ -54,7 +51,6 @@ export class PortfolioController {
   }
 
   @Get("records")
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async records(@Res({ passthrough: true }) reply: FastifyReply) {
     const result = await this.portfolio.records();
@@ -63,7 +59,6 @@ export class PortfolioController {
   }
 
   @Get("target-settings")
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async targetSettings() {
     try {
@@ -74,7 +69,6 @@ export class PortfolioController {
   }
 
   @Get("rebalance-plans/latest")
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async rebalancePlan(@Res({ passthrough: true }) reply: FastifyReply) {
     const result = await this.portfolio.rebalancePlan();
@@ -84,7 +78,6 @@ export class PortfolioController {
 
   @Post("rebalance-plans")
   @HttpCode(200)
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async createRebalancePlan(@Body() body: unknown) {
     const parsed = CreateRebalancePlanInputSchema.safeParse(body);
@@ -102,7 +95,6 @@ export class PortfolioController {
   }
 
   @Get("instruments/search")
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async searchInstruments(@Query("query") query: unknown) {
     const parsed = InstrumentSearchInputSchema.safeParse({ query });
@@ -124,7 +116,6 @@ export class PortfolioController {
 
   @Post("instrument-validations")
   @HttpCode(200)
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async validateInstrument(@Body() body: unknown) {
     const parsed = InstrumentValidationInputSchema.safeParse(body);
@@ -143,7 +134,6 @@ export class PortfolioController {
 
   @Post("target-settings/drafts")
   @HttpCode(200)
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async createTargetDraft(@Body() body: unknown) {
     const parsed = TargetSettingsDraftInputSchema.safeParse(body);
@@ -162,7 +152,6 @@ export class PortfolioController {
 
   @Post("target-settings/drafts/:version/activate")
   @HttpCode(200)
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async activateTargetDraft(@Param("version", ParseIntPipe) version: number) {
     try {

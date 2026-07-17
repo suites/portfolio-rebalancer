@@ -11,7 +11,6 @@ import {
   Param,
   Post,
   ServiceUnavailableException,
-  UseGuards,
 } from "@nestjs/common";
 
 import {
@@ -22,13 +21,11 @@ import {
   RecoverUnknownOrderInputSchema,
 } from "@portfolio-rebalancer/contracts";
 
-import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
-import { tailscaleOperatorAuditContext } from "../../../common/auth/operator-audit-context";
+import { localConsoleAuditContext } from "../../../common/audit/operator-audit-context";
 import { OrdersService } from "../application/orders.service";
 import { OrderExecutionError } from "../domain/order-execution.error";
 
 @Controller("internal/v1")
-@UseGuards(ServiceTokenGuard)
 export class OrdersController {
   constructor(@Inject(OrdersService) private readonly orders: OrdersService) {}
 
@@ -41,10 +38,7 @@ export class OrdersController {
   @Post("rebalance-plans/:planId/live-approvals")
   @HttpCode(200)
   @Header("cache-control", "no-store")
-  async createLivePlanApproval(
-    @Param("planId") planId: string,
-    @Body() body: unknown,
-  ) {
+  async createLivePlanApproval(@Param("planId") planId: string, @Body() body: unknown) {
     const parsed = CreateLivePlanApprovalInputSchema.safeParse(body);
     if (!parsed.success || parsed.data.planId !== planId) {
       throw new BadRequestException({
@@ -56,10 +50,7 @@ export class OrdersController {
       });
     }
     try {
-      return await this.orders.createLivePlanApproval(
-        parsed.data,
-        tailscaleOperatorAuditContext(),
-      );
+      return await this.orders.createLivePlanApproval(parsed.data, localConsoleAuditContext());
     } catch (error) {
       throwOrderHttpError(error);
     }
@@ -68,10 +59,7 @@ export class OrdersController {
   @Post("rebalance-plans/:planId/execute")
   @HttpCode(200)
   @Header("cache-control", "no-store")
-  async execute(
-    @Param("planId") planId: string,
-    @Body() body: unknown,
-  ) {
+  async execute(@Param("planId") planId: string, @Body() body: unknown) {
     const parsed = ExecuteRebalancePlanInputSchema.safeParse(body);
     if (!parsed.success || parsed.data.planId !== planId) {
       throw new BadRequestException({
@@ -85,9 +73,7 @@ export class OrdersController {
     try {
       return await this.orders.execute(
         parsed.data,
-        parsed.data.mode === "LIVE"
-          ? tailscaleOperatorAuditContext()
-          : undefined,
+        parsed.data.mode === "LIVE" ? localConsoleAuditContext() : undefined,
       );
     } catch (error) {
       throwOrderHttpError(error);
@@ -97,9 +83,7 @@ export class OrdersController {
   @Post("kill-switch")
   @HttpCode(200)
   @Header("cache-control", "no-store")
-  async setKillSwitch(
-    @Body() body: unknown,
-  ) {
+  async setKillSwitch(@Body() body: unknown) {
     const parsed = KillSwitchCommandSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException({
@@ -108,10 +92,7 @@ export class OrdersController {
       });
     }
     try {
-      return await this.orders.setKillSwitch(
-        parsed.data,
-        tailscaleOperatorAuditContext(),
-      );
+      return await this.orders.setKillSwitch(parsed.data, localConsoleAuditContext());
     } catch (error) {
       throwOrderHttpError(error);
     }
@@ -120,10 +101,7 @@ export class OrdersController {
   @Post("orders/:orderId/cancel")
   @HttpCode(200)
   @Header("cache-control", "no-store")
-  async cancel(
-    @Param("orderId") orderId: string,
-    @Body() body: unknown,
-  ) {
+  async cancel(@Param("orderId") orderId: string, @Body() body: unknown) {
     const parsed = CancelOrderInputSchema.safeParse(body);
     if (!parsed.success || parsed.data.orderId !== orderId) {
       throw new BadRequestException({
@@ -135,10 +113,7 @@ export class OrdersController {
       });
     }
     try {
-      return await this.orders.cancel(
-        parsed.data,
-        tailscaleOperatorAuditContext(),
-      );
+      return await this.orders.cancel(parsed.data, localConsoleAuditContext());
     } catch (error) {
       throwOrderHttpError(error);
     }
@@ -147,10 +122,7 @@ export class OrdersController {
   @Post("orders/:orderId/recover")
   @HttpCode(200)
   @Header("cache-control", "no-store")
-  async recover(
-    @Param("orderId") orderId: string,
-    @Body() body: unknown,
-  ) {
+  async recover(@Param("orderId") orderId: string, @Body() body: unknown) {
     const parsed = RecoverUnknownOrderInputSchema.safeParse(body);
     if (!parsed.success || parsed.data.orderId !== orderId) {
       throw new BadRequestException({
@@ -162,10 +134,7 @@ export class OrdersController {
       });
     }
     try {
-      return await this.orders.recoverUnknown(
-        parsed.data,
-        tailscaleOperatorAuditContext(),
-      );
+      return await this.orders.recoverUnknown(parsed.data, localConsoleAuditContext());
     } catch (error) {
       throwOrderHttpError(error);
     }

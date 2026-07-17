@@ -55,9 +55,9 @@ Browser -> apps/web (Next.js, Vercel)
                   -> packages/database -> Neon PostgreSQL
 ```
 
-- web은 `ENGINE_INTERNAL_URL`과 service token만 소유한다.
+- web은 `ENGINE_INTERNAL_URL`만 소유한다.
 - engine은 Toss 자격증명, Prisma, 수집 lease와 Cron을 소유한다.
-- service token과 Cron secret은 별도 Guard로 검증하고 provider는 Vercel warm instance에서 재사용한다.
+- 일반 engine route는 host-run loopback 또는 Vercel Deployment Protection 경계 안에서만 제공하고, Cron route만 `CRON_SECRET` Guard로 검증한다. provider는 Vercel warm instance에서 재사용한다.
 - engine root에는 main/bootstrap/AppModule만 두고 common, config, Prisma infrastructure, system/portfolio feature module로 구성한다.
 - PostgreSQL client lifecycle은 singleton PrismaService가 관리하고 portfolio persistence adapter는 Prisma repository로 구현한다.
 - PostgreSQL snapshot과 buying-power 관측은 append-only trigger로 UPDATE/DELETE를 거부한다.

@@ -207,9 +207,9 @@ exact 복구만 허용합니다. 모호한 주문은 원 주문의
 
 ## 8. 현재 engine 및 Web API
 
-NestJS 11 engine은 Fastify adapter로 다음 내부 route를 제공합니다. 상태 확인용
-`GET /internal/v1/health`만 무인증이며 설정·계획·주문·수집 route는
-`ENGINE_SERVICE_TOKEN` Guard, Cron은 별도 `CRON_SECRET` Guard로 보호합니다.
+NestJS 11 engine은 Fastify adapter로 다음 내부 route를 제공합니다. 일반 설정·계획·주문·수집
+route는 애플리케이션 인증 없이 host-run loopback 경계 안에서만 호출합니다. Vercel Cron 진입점만
+Vercel이 공식 `Authorization` 헤더로 전달하는 `CRON_SECRET` Guard로 검증합니다.
 
 - `GET /internal/v1/health`
 - `GET /internal/v1/dashboard`
@@ -240,11 +240,11 @@ Web BFF는 다음 route를 제공합니다.
 - `GET /api/v1/system/health`: 실제 운영 모드, 킬 스위치, 승격과 Live 허용 상태
 - `GET /api/v1/brokers`: engine 연결, 마지막 관측 시각과 `live_gated_ready/blocked`
 
-Web의 Server Action/BFF는 위 내부 API를 호출할 수 있지만 브라우저에 service token,
-계좌 HMAC, 승인 ID나 Toss 비밀정보를 전달하지 않습니다. 모든 응답은 공유 Zod 계약으로
-재검증합니다. 콘솔은 Tailscale 내부망과 Web→Engine 서비스 토큰 경계 안에서만 제공합니다. Live
-승인·실행, Live 승격, 킬 스위치 해제, 취소와 exact 복구는 최근 5분 이내 재인증
-증거를 engine 감사 헤더에 함께 전달하며, engine도 이 시간 경계를 다시 확인합니다.
+Web의 Server Action/BFF는 위 내부 API를 호출할 수 있지만 브라우저에 계좌 HMAC, 승인 ID나
+Toss 비밀정보를 전달하지 않습니다. 모든 응답은 공유 Zod 계약으로 재검증합니다. Host-run 콘솔은
+Tailscale 내부망·Caddy와 engine loopback 경계 안에서만 제공합니다. Live 승인·실행, Live 승격,
+킬 스위치 해제, 취소와 exact 복구는 정확한 확인 문구, 만료되는 주문별 승인, append-only 원장과
+서버 Risk Gate를 통과해야 하며 별도 사용자 인증 헤더를 만들지 않습니다.
 
 Vercel의 기본 출구 IP는 동적입니다. Production engine은 Pro Static IPs 또는 Enterprise Secure Compute를 활성화하고 해당 IP를 토스증권에 allowlist한 뒤 `TOSS_EGRESS_ALLOWLIST_CONFIRMED=true`를 설정해야 합니다. Preview에는 운영 토스 자격증명을 주입하지 않습니다.
 

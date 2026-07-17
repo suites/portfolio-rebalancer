@@ -65,7 +65,7 @@ import { ENGINE_CONFIG } from "../../../config/engine-config.token";
 import {
   operatorAuditActor,
   type EngineOperatorAuditContext,
-} from "../../../common/auth/operator-audit-context";
+} from "../../../common/audit/operator-audit-context";
 import { assertVercelEgressConfigured, type EngineConfig } from "../../../config/engine.config";
 import { createAccountReference } from "../../portfolio/application/collect-portfolio.use-case";
 import {

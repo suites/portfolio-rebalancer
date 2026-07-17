@@ -5,15 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OperationalConfigSnapshotSchema } from "@portfolio-rebalancer/contracts";
 
-import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
-import { ENGINE_CONFIG } from "../../../config/engine-config.token";
-import { loadEngineConfig } from "../../../config/engine.config";
 import { OperationalConfigService } from "../application/operational-config.service";
 import { OperationalConfigError } from "../domain/operational-config.error";
 import { liveConfig } from "../testing/operational-config.fixture";
 import { OperationalConfigController } from "./operational-config.controller";
-
-const SERVICE_TOKEN = "service-token-that-is-at-least-32-characters";
 
 describe("OperationalConfigController", () => {
   let app: INestApplication | undefined;
@@ -23,33 +18,25 @@ describe("OperationalConfigController", () => {
     app = undefined;
   });
 
-  it("GET current snapshot을 service token과 no-store 경계로 제공한다", async () => {
+  it("GET current snapshot을 사설 no-store 경계로 제공한다", async () => {
     const harness = await createHarness();
     app = harness.app;
 
-    const unauthorized = await harness.fastify.inject({
+    const response = await harness.fastify.inject({
       method: "GET",
       url: "/internal/v1/operational-config",
-    });
-    const authorized = await harness.fastify.inject({
-      method: "GET",
-      url: "/internal/v1/operational-config",
-      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
     });
 
-    expect(unauthorized.statusCode).toBe(401);
-    expect(authorized.statusCode).toBe(200);
-    expect(authorized.headers["cache-control"]).toBe("no-store");
-    expect(OperationalConfigSnapshotSchema.safeParse(authorized.json()).success).toBe(true);
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(OperationalConfigSnapshotSchema.safeParse(response.json()).success).toBe(true);
   });
 
   it("draft save, exact activation과 별도 live promotion route를 분리한다", async () => {
     const harness = await createHarness();
     app = harness.app;
     const headers = {
-      authorization: `Bearer ${SERVICE_TOKEN}`,
       "content-type": "application/json",
-      ...operatorHeaders(),
     };
 
     const draft = await harness.fastify.inject({
@@ -112,7 +99,7 @@ describe("OperationalConfigController", () => {
         reason: "Paper 검증과 현재 계좌를 다시 확인했습니다.",
         confirmation: "극소액 Live 승격",
       },
-      expect.stringContaining("operator=fred"),
+      "local-console",
     );
   });
 
@@ -123,9 +110,7 @@ describe("OperationalConfigController", () => {
       method: "POST",
       url: "/internal/v1/operational-config/drafts/activate",
       headers: {
-        authorization: `Bearer ${SERVICE_TOKEN}`,
         "content-type": "application/json",
-        ...operatorHeaders(),
       },
       payload: { version: 2, contentHash: "b".repeat(64), confirmation: "적용" },
     });
@@ -150,9 +135,7 @@ describe("OperationalConfigController", () => {
       method: "POST",
       url: "/internal/v1/live-promotion",
       headers: {
-        authorization: `Bearer ${SERVICE_TOKEN}`,
         "content-type": "application/json",
-        ...operatorHeaders(),
       },
       payload: {
         state: "GRANTED",
@@ -180,18 +163,7 @@ async function createHarness() {
   };
   const testingModule = await Test.createTestingModule({
     controllers: [OperationalConfigController],
-    providers: [
-      ServiceTokenGuard,
-      { provide: OperationalConfigService, useValue: service },
-      {
-        provide: ENGINE_CONFIG,
-        useValue: loadEngineConfig({
-          DATABASE_RUNTIME_URL: "postgresql://test_runtime:test@localhost:5432/test",
-          ENGINE_SERVICE_TOKEN: SERVICE_TOKEN,
-          VERCEL: "1",
-        }),
-      },
-    ],
+    providers: [{ provide: OperationalConfigService, useValue: service }],
   }).compile();
   const nestApp = testingModule.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
   await nestApp.init();
@@ -199,18 +171,6 @@ async function createHarness() {
     app: nestApp as INestApplication,
     fastify: nestApp.getHttpAdapter().getInstance(),
     service,
-  };
-}
-
-function operatorHeaders() {
-  const reauthenticatedAt = new Date();
-  return {
-    "x-portfolio-operator-id": "fred",
-    "x-portfolio-operator-session-id": "10000000-0000-4000-8000-000000000099",
-    "x-portfolio-operator-authenticated-at": new Date(
-      reauthenticatedAt.getTime() - 60_000,
-    ).toISOString(),
-    "x-portfolio-operator-reauthenticated-at": reauthenticatedAt.toISOString(),
   };
 }
 

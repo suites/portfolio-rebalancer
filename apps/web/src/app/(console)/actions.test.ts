@@ -16,15 +16,6 @@ const engineMocks = vi.hoisted(() => ({
   setEngineKillSwitch: vi.fn(),
   validateEngineInstrument: vi.fn(),
 }));
-const operator = {
-  operatorId: "fred",
-  sessionId: "10000000-0000-4000-8000-000000000099",
-  authenticatedAt: "2026-07-16T03:00:00.000Z",
-  reauthenticatedAt: "2026-07-16T03:59:00.000Z",
-};
-const authMocks = vi.hoisted(() => ({
-  requireOperatorMutation: vi.fn(),
-}));
 const navigationMocks = vi.hoisted(() => ({
   redirect: vi.fn(() => {
     throw new Error("REDIRECT");
@@ -34,14 +25,6 @@ const navigationMocks = vi.hoisted(() => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => navigationMocks);
 vi.mock("@/server/engine-dashboard", () => ({ refreshEngineDashboard: vi.fn() }));
-vi.mock("@/server/operator-auth", () => ({
-  requireOperatorMutation: authMocks.requireOperatorMutation,
-  OperatorAuthError: class OperatorAuthError extends Error {
-    constructor(readonly code: string) {
-      super(code);
-    }
-  },
-}));
 vi.mock("@/server/engine-console", () => ({
   activateEngineTargetDraft: vi.fn(),
   activateEngineOperationalDraft: engineMocks.activateEngineOperationalDraft,
@@ -100,7 +83,6 @@ const initialSaveState: SaveTargetDraftActionState = {
 describe("settings server actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    authMocks.requireOperatorMutation.mockResolvedValue(operator);
   });
 
   it("같은 영문 입력도 사용자가 선택한 로컬 이름 검색 intent를 따른다", async () => {
@@ -218,14 +200,11 @@ describe("settings server actions", () => {
 
     await expect(executePaperPlanAction(formData)).rejects.toThrow("REDIRECT");
 
-    expect(engineMocks.executeEngineRebalancePlan).toHaveBeenCalledWith(
-      {
-        planId: "10000000-0000-4000-8000-000000000001",
-        mode: "PAPER",
-        approvalIds: [],
-      },
-      operator,
-    );
+    expect(engineMocks.executeEngineRebalancePlan).toHaveBeenCalledWith({
+      planId: "10000000-0000-4000-8000-000000000001",
+      mode: "PAPER",
+      approvalIds: [],
+    });
     expect(engineMocks.createEngineLivePlanApproval).not.toHaveBeenCalled();
   });
 
@@ -256,24 +235,15 @@ describe("settings server actions", () => {
 
     await expect(executeLivePlanAction(formData)).rejects.toThrow("REDIRECT");
 
-    expect(engineMocks.createEngineLivePlanApproval).toHaveBeenCalledWith(
-      {
-        planId: "10000000-0000-4000-8000-000000000001",
-        planHash: "a".repeat(64),
-        confirmation: "LIVE 주문 계획과 금액을 확인했습니다",
-      },
-      operator,
-    );
-    expect(engineMocks.executeEngineRebalancePlan).toHaveBeenCalledWith(
-      {
-        planId: "10000000-0000-4000-8000-000000000001",
-        mode: "LIVE",
-        approvalIds: ["10000000-0000-4000-8000-000000000002"],
-      },
-      operator,
-    );
-    expect(authMocks.requireOperatorMutation).toHaveBeenCalledWith(formData, {
-      recentReauthentication: true,
+    expect(engineMocks.createEngineLivePlanApproval).toHaveBeenCalledWith({
+      planId: "10000000-0000-4000-8000-000000000001",
+      planHash: "a".repeat(64),
+      confirmation: "LIVE 주문 계획과 금액을 확인했습니다",
+    });
+    expect(engineMocks.executeEngineRebalancePlan).toHaveBeenCalledWith({
+      planId: "10000000-0000-4000-8000-000000000001",
+      mode: "LIVE",
+      approvalIds: ["10000000-0000-4000-8000-000000000002"],
     });
   });
 
@@ -310,21 +280,15 @@ describe("settings server actions", () => {
 
     await expect(cancelOrderAction(formData)).rejects.toThrow("REDIRECT");
 
-    expect(engineMocks.cancelEngineOrder).toHaveBeenCalledWith(
-      {
-        orderId: "10000000-0000-4000-8000-000000000001",
-        reason: "현재 미체결 주문을 중단합니다.",
-        confirmation: "미체결 주문 취소를 요청합니다",
-      },
-      operator,
-    );
-    expect(authMocks.requireOperatorMutation).toHaveBeenCalledWith(formData, {
-      recentReauthentication: true,
+    expect(engineMocks.cancelEngineOrder).toHaveBeenCalledWith({
+      orderId: "10000000-0000-4000-8000-000000000001",
+      reason: "현재 미체결 주문을 중단합니다.",
+      confirmation: "미체결 주문 취소를 요청합니다",
     });
     expect(navigationMocks.redirect).toHaveBeenLastCalledWith("/orders?status=cancel-unknown");
   });
 
-  it("킬 스위치 해제와 Live 승격만 최근 재인증을 추가 요구한다", async () => {
+  it("킬 스위치와 Live 승격은 별도 인증 없이 명시적 확인값을 전달한다", async () => {
     engineMocks.setEngineKillSwitch.mockImplementation(({ state }: { state: string }) =>
       Promise.resolve({ killSwitch: state }),
     );
@@ -337,8 +301,10 @@ describe("settings server actions", () => {
       formData.set("state", state);
       formData.set("reason", "안전 상태를 다시 확인했습니다.");
       await expect(setKillSwitchAction(formData)).rejects.toThrow("REDIRECT");
-      expect(authMocks.requireOperatorMutation).toHaveBeenLastCalledWith(formData, {
-        recentReauthentication: state === "DISENGAGED",
+      expect(engineMocks.setEngineKillSwitch).toHaveBeenLastCalledWith({
+        state,
+        reason: "안전 상태를 다시 확인했습니다.",
+        confirmation: state === "ENGAGED" ? "킬 스위치 작동" : "킬 스위치 해제",
       });
     }
 
@@ -347,8 +313,10 @@ describe("settings server actions", () => {
       formData.set("state", state);
       formData.set("reason", "안전 상태를 다시 확인했습니다.");
       await expect(setLivePromotionAction(formData)).rejects.toThrow("REDIRECT");
-      expect(authMocks.requireOperatorMutation).toHaveBeenLastCalledWith(formData, {
-        recentReauthentication: state === "GRANTED",
+      expect(engineMocks.saveEngineLivePromotion).toHaveBeenLastCalledWith({
+        state,
+        reason: "안전 상태를 다시 확인했습니다.",
+        confirmation: state === "GRANTED" ? "극소액 Live 승격" : "Live 권한 회수",
       });
     }
   });

@@ -28,7 +28,7 @@
 - 실제 호가·호가잔량·수수료를 사용하는 한국 지정가 `DAY` Paper 모의 체결과 보수적 부분체결
 - 킬 스위치, 일일·단일·회전율·종목·자산군·위험자산 비중, stale quote, 장 상태, 거래 제한과 기존 미체결 주문을 차단하는 Risk Gate
 - 운영 설정 DRAFT 저장과 별도 적용, 현재 계좌 서버 봉인, 별도 Live 승격과 주문별 최종 확인
-- Tailscale 내부망과 Caddy 경계, Web→Engine 서비스 토큰
+- Tailscale 내부망과 Caddy 경계, loopback 전용 Web→Engine 내부 통신
 - Live 주문 전 A 승인과 B dispatch claim의 일회성 봉인, 브로커 결과 대사, 안전한 취소와 `UNKNOWN_BLOCKED` exact 복구
 - A 뒤 B가 전혀 없음을 DB가 증명한 경우에만 `REJECTED`로 종료하고 예약을 해제하는 비전송 복구
 - B 뒤 응답 저장 중단은 외부 주문을 자동 귀속하지 않고 no-ID `UNKNOWN_BLOCKED`와 운영자 exact 복구로 처리
@@ -71,7 +71,7 @@ pnpm db:migrate:deploy
 pnpm dev
 ```
 
-`apps/engine/.env.example`, `apps/web/.env.example`, `packages/database/.env.example`을 각각 같은 위치의 `.env.local`로 복사하고 로컬 값을 설정합니다. `DATABASE_URL`은 migration owner 전용이고 engine은 `DATABASE_RUNTIME_URL` 제한 역할로만 연결합니다. `db:migrate:deploy`는 migration 뒤 runtime role bootstrap을 실행하며, engine은 시작 시 owner·superuser·DDL·TRUNCATE·migration ledger 접근이 없는지 다시 검사합니다. engine과 Web에는 같은 32자 이상 무작위 `ENGINE_SERVICE_TOKEN`을 넣습니다. 토스 자격증명은 engine에만 두고 브라우저에서 `http://127.0.0.1:13000`을 엽니다.
+`apps/engine/.env.example`, `apps/web/.env.example`, `packages/database/.env.example`을 각각 같은 위치의 `.env.local`로 복사하고 로컬 값을 설정합니다. `DATABASE_URL`은 migration owner 전용이고 engine은 `DATABASE_RUNTIME_URL` 제한 역할로만 연결합니다. `db:migrate:deploy`는 migration 뒤 runtime role bootstrap을 실행하며, engine은 시작 시 owner·superuser·DDL·TRUNCATE·migration ledger 접근이 없는지 다시 검사합니다. Web에는 loopback engine 주소인 `ENGINE_INTERNAL_URL`만 설정하고, 토스 자격증명은 engine에만 둡니다. 두 프로세스는 `127.0.0.1`에만 bind하며 브라우저에서 `http://127.0.0.1:13000`을 엽니다.
 
 첫 화면은 저장된 스냅샷이 없을 때 한 번 실제 계좌 수집을 시도합니다. 설정에서 관리 현금을 고정 원화 금액으로 포함하거나 평가에서 제외하고, 모든 보유종목을 안전자산·핵심 공격자산·위성 공격자산 중 한 곳에 배치한 뒤 네 자산군 목표 합계를 100%로 맞춥니다. 미보유 종목은 로컬 검증 카탈로그 이름 검색 또는 국내 코드·미국 티커의 Toss 정확 검증으로 추가합니다. 목표와 운영 설정은 모두 초안 저장과 적용을 분리합니다.
 
@@ -124,7 +124,8 @@ engine은 NestJS의 feature module 구조를 따릅니다.
 ```text
 apps/engine/src/
 ├── main.ts, app.module.ts
-├── common/auth/guards/              service/Cron 인증
+├── common/audit/                    로컬 콘솔 감사 주체
+├── common/auth/guards/              Vercel Cron 호출 검증
 ├── config/                          Zod 환경설정과 Config Module
 ├── infrastructure/prisma/           Prisma Module과 singleton PrismaService
 └── modules/
@@ -148,7 +149,7 @@ engine은 별도 webpack 번들을 만들지 않습니다. 로컬에서는 `tsx`
 
 토스증권은 허용 IP를 요구하므로 engine 프로젝트에서 Vercel Pro Static IPs 또는 Enterprise Secure Compute를 활성화해야 합니다. 해당 IP를 토스증권에 등록한 뒤에만 `TOSS_EGRESS_ALLOWLIST_CONFIRMED=true`를 설정하세요. 일반 Vercel 동적 출구 IP에서는 실제 수집이 코드에서 차단됩니다.
 
-Production migration 환경에는 owner `DATABASE_URL`을, engine에는 제한 `DATABASE_RUNTIME_URL`, `TOSSINVEST_CLIENT_ID`, `TOSSINVEST_CLIENT_SECRET`, `ACCOUNT_REFERENCE_KEY`, `ENGINE_SERVICE_TOKEN`, `CRON_SECRET`을 민감 환경변수로 설정합니다. Web에는 `ENGINE_INTERNAL_URL`과 같은 `ENGINE_SERVICE_TOKEN`을 설정하고, 접근은 Tailscale 내부망과 Caddy에서 제한합니다. Preview에는 운영 토스 키를 주입하지 않는 것을 기본으로 합니다.
+Production migration 환경에는 owner `DATABASE_URL`을, engine에는 제한 `DATABASE_RUNTIME_URL`, `TOSSINVEST_CLIENT_ID`, `TOSSINVEST_CLIENT_SECRET`, `ACCOUNT_REFERENCE_KEY`, `CRON_SECRET`을 민감 환경변수로 설정합니다. Web에는 `ENGINE_INTERNAL_URL`만 설정합니다. Host-run production에서는 engine을 `127.0.0.1`에만 bind하고 Tailscale 내부망과 Caddy가 Web 진입점만 제공합니다. 일반 engine route에는 애플리케이션 토큰이 없으므로 보호되지 않은 공개 URL로 배포하지 않습니다. Vercel 배포 시 두 Project에 Deployment Protection을 적용해야 하며, 보호된 Web→Engine 통신은 운영 사용 전에 별도로 검증해야 합니다. `CRON_SECRET`은 Vercel Cron이 공식 `Authorization` 헤더로 전달하는 호출 검증 값입니다. Preview에는 운영 토스 키를 주입하지 않는 것을 기본으로 합니다.
 
 로컬 환경변수도 같은 권한 경계를 사용합니다. Web은 `apps/web/.env.local`, engine은 `apps/engine/.env.local`, Prisma migration은 `packages/database/.env.local`을 읽습니다. `.env.local`은 Git에 포함하지 않으며, `vercel env pull`은 파일을 덮어쓰므로 앱별 파일에 수동 override와 Vercel pull 결과를 섞지 않습니다.
 

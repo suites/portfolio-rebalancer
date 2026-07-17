@@ -15,11 +15,5 @@ export default async function OrdersPage({
     getEngineRecords(),
     getEngineOrders(),
   ]);
-  return (
-    <OrdersScreen
-      records={records}
-      orders={orders}
-      actionStatus={status}
-    />
-  );
+  return <OrdersScreen records={records} orders={orders} actionStatus={status} />;
 }

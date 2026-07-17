@@ -2,7 +2,7 @@
 
 ## 상태
 
-승인됨 — 2026-07-16
+승인됨 — 2026-07-16, 접근 경계 개정 — 2026-07-17
 
 ## 배경
 
@@ -22,7 +22,7 @@
 - Vercel zero-config의 Node file trace가 workspace의 TypeScript source export에 의존하지 않도록 engine runtime 패키지는 build 전에 CommonJS `dist`를 만들고 production export가 이를 가리키게 합니다. 개발과 타입 해석은 명시적인 development/types 조건으로 source를 사용합니다.
 - 토스 클라이언트는 첫 수집 시 lazy singleton으로 생성해 OAuth 캐시를 warm instance에서 재사용합니다.
 - Prisma client와 repository는 애플리케이션 singleton이며 요청 종료 시 disconnect하지 않습니다.
-- service token과 Cron secret은 서로 다른 Guard로 검증합니다.
+- 일반 내부 route는 애플리케이션 토큰을 사용하지 않고 host-run loopback 또는 플랫폼 보호 경계 안에서만 제공합니다. Vercel Cron route만 공식 `CRON_SECRET` Guard로 검증합니다.
 - 수집기, 평가 로직과 repository는 NestJS에 의존하지 않는 기존 순수 경계를 유지합니다.
 - Preview에서 토스 자격증명이 없어도 health와 저장된 dashboard 조회가 기동할 수 있어야 합니다.
 

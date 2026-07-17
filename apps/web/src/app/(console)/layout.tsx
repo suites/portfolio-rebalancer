@@ -10,5 +10,9 @@ export default async function ConsoleLayout({ children }: { readonly children: R
     getEngineDashboard(),
     getEngineOperationalConfig(),
   ]);
-  return <AppShell snapshot={snapshot} operational={operational}>{children}</AppShell>;
+  return (
+    <AppShell snapshot={snapshot} operational={operational}>
+      {children}
+    </AppShell>
+  );
 }

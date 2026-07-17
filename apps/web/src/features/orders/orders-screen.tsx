@@ -150,11 +150,7 @@ export function OrdersScreen({
   );
 }
 
-function OrderCard({
-  order,
-}: {
-  readonly order: StoredOrderReceiptContract;
-}) {
+function OrderCard({ order }: { readonly order: StoredOrderReceiptContract }) {
   const current = order.timeline.at(-1);
   const canCancel =
     order.mode === "LIVE" &&
@@ -249,13 +245,13 @@ function OrderCard({
                 />
                 미체결 주문 취소를 요청합니다
               </label>
-              <p className={styles.fieldDescription}>Tailscale 내부 콘솔과 취소 안전 조건이 필요합니다.</p>
+              <p className={styles.fieldDescription}>
+                Tailscale 내부 콘솔과 취소 안전 조건이 필요합니다.
+              </p>
               <Button type="submit">취소 요청 1회 전송</Button>
             </form>
           ) : null}
-          {order.currentState === "UNKNOWN_BLOCKED" ? (
-            <UnknownRecoveryForm order={order} />
-          ) : null}
+          {order.currentState === "UNKNOWN_BLOCKED" ? <UnknownRecoveryForm order={order} /> : null}
         </div>
       ) : (
         <p className={styles.fieldDescription}>
@@ -267,11 +263,7 @@ function OrderCard({
   );
 }
 
-function UnknownRecoveryForm({
-  order,
-}: {
-  readonly order: StoredOrderReceiptContract;
-}) {
+function UnknownRecoveryForm({ order }: { readonly order: StoredOrderReceiptContract }) {
   const latest = order.timeline.at(-1);
   return (
     <details className={styles.recoveryPanel}>
@@ -282,7 +274,9 @@ function UnknownRecoveryForm({
           토스 주문 조회 결과와 아래 값이 정확히 일치할 때만 상태를 추가합니다. 일치하지 않으면
           복구하지 않으며 주문을 재제출하지 않습니다.
         </p>
-        <p className={styles.fieldDescription}>Tailscale 내부 콘솔과 복구 안전 조건이 필요합니다.</p>
+        <p className={styles.fieldDescription}>
+          Tailscale 내부 콘솔과 복구 안전 조건이 필요합니다.
+        </p>
         <div className={styles.fieldGrid}>
           <label>
             확인된 상태
@@ -459,11 +453,6 @@ function orderFeedback(status: string | undefined): {
     "recover-unavailable": {
       title: "복구 검증을 완료하지 못했습니다.",
       description: "원장 상태는 변경하지 않았습니다.",
-      tone: "blocked",
-    },
-    "operator-security-blocked": {
-      title: "운영자 보안 검증에서 요청을 차단했습니다.",
-      description: "Tailscale 내부 콘솔 경계를 확인하지 못해 엔진을 호출하지 않았습니다.",
       tone: "blocked",
     },
   };

@@ -11,7 +11,6 @@ const EnvironmentSchema = z.object({
   TOSSINVEST_CLIENT_SECRET: z.string().min(1).optional(),
   TOSSINVEST_ACCOUNT_SEQ: z.coerce.number().int().safe().positive().optional(),
   ACCOUNT_REFERENCE_KEY: z.string().min(32).optional(),
-  ENGINE_SERVICE_TOKEN: z.string().min(32).optional(),
   CRON_SECRET: z.string().min(16).optional(),
   TOSS_EGRESS_ALLOWLIST_CONFIRMED: z.enum(["true", "false"]).default("false"),
   VERCEL: z.string().optional(),

@@ -70,7 +70,6 @@ describe("OrdersScreen", () => {
           ],
         })}
         actionStatus={undefined}
-        csrfToken={"c".repeat(64)}
       />,
     );
 
@@ -79,7 +78,6 @@ describe("OrdersScreen", () => {
     expect(html).toContain("취소 요청 1회 전송");
     expect(html).toContain("미체결 주문 취소를 요청합니다");
     expect(html).toContain("상태 이력 2건");
-    expect(html).toContain('name="_csrf"');
   });
 
   it("원장 조회 실패 시 상태를 추정하지 않고 모든 작업을 숨긴다", () => {
@@ -93,7 +91,6 @@ describe("OrdersScreen", () => {
           liveOrdersEnabled: false,
         })}
         actionStatus={undefined}
-        csrfToken={"c".repeat(64)}
       />,
     );
 
@@ -145,7 +142,6 @@ describe("OrdersScreen", () => {
           ],
         })}
         actionStatus={undefined}
-        csrfToken={"c".repeat(64)}
       />,
     );
 

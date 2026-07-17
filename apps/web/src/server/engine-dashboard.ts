@@ -61,10 +61,8 @@ function engineUnavailableDashboard(): DashboardSnapshotContract {
 }
 
 async function requestDashboard(path: string, method: "GET" | "POST") {
-  const serviceToken = process.env.ENGINE_SERVICE_TOKEN;
   const response = await fetch(new URL(path, ENGINE_INTERNAL_URL), {
     method,
-    ...(serviceToken ? { headers: { authorization: `Bearer ${serviceToken}` } } : {}),
     cache: "no-store",
     signal: AbortSignal.timeout(15_000),
   });

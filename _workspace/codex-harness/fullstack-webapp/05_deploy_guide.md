@@ -4,10 +4,10 @@
 2. Marketplace Neon을 engine에 연결한다.
 3. direct URL로 `pnpm db:migrate:deploy`를 실행한다.
 4. Vercel이 `apps/engine/src/main.ts`의 NestJS 서버를 감지하고 Prisma `postinstall` 생성이 성공하는지 확인한다.
-5. engine Production에 Toss keys, DB URLs, service token, Cron secret을 설정한다.
+5. engine Production에 Toss keys, DB URLs와 Cron secret을 설정한다.
 6. engine의 `icn1` Static IPs 또는 Secure Compute를 활성화하고 Toss allowlist에 등록한다.
 7. 확인 후에만 `TOSS_EGRESS_ALLOWLIST_CONFIRMED=true`를 설정한다.
-8. web에 engine production URL과 같은 service token을 설정한다.
+8. web에는 engine production URL만 설정하고 두 Project에 Vercel Deployment Protection을 적용한다. 보호된 Web→Engine 서버 통신을 검증하기 전에는 production으로 사용하지 않는다.
 9. Preview에는 운영 Toss keys를 주입하지 않는다.
 10. 배포 후 `/`, `/portfolio`, `/rebalancing`, `/orders`, `/troubleshooting`, `/settings`가 모두 열리는지 확인한다.
 11. 목표 초안 저장과 적용 사이 snapshot이 바뀌면 적용이 차단되는지 확인하고, 적용 뒤 read-only 수집을 새로 실행해 snapshot에 설정 버전이 고정되는지 확인한다.

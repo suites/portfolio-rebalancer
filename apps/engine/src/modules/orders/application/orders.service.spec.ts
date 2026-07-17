@@ -51,10 +51,7 @@ const TOSS_CLIENT_SECRET = "synthetic-client-secret";
 const PLAN_HASH = "b".repeat(64);
 const CONFIG_HASH = "c".repeat(64);
 const TEST_OPERATOR = {
-  operatorId: "fred",
-  sessionId: "10000000-0000-4000-8000-000000000098",
-  authenticatedAt: "2026-07-16T00:00:00.000Z",
-  reauthenticatedAt: "2026-07-16T00:59:00.000Z",
+  actor: "local-console",
 } as const;
 const RESPONSE_VALIDATION_IDS = Array.from(
   { length: 8 },
@@ -131,9 +128,9 @@ describe("OrdersService", () => {
         expect.objectContaining({ planOrderId: PLAN_ORDER_2, planHash: PLAN_HASH }),
       ]),
     );
-    expect(
-      approvalCall[2].find(({ planOrderId }) => planOrderId === PLAN_ORDER_1)?.actor,
-    ).toContain("operator=fred");
+    expect(approvalCall[2].find(({ planOrderId }) => planOrderId === PLAN_ORDER_1)?.actor).toBe(
+      "local-console",
+    );
 
     await expect(
       harness.service.createLivePlanApproval(
@@ -422,7 +419,7 @@ describe("OrdersService", () => {
     harness.repository.ordersSnapshot.mockResolvedValue([original]);
     harness.repository.createCancelOperatorAuthorization.mockImplementation(
       (input: CreateCancelOperatorAuthorizationInput) => {
-        events.push("operator-auth");
+        events.push("cancel-authorization");
         return Promise.resolve({
           id: input.id,
           authorizationId: input.authorizationId,
@@ -486,7 +483,7 @@ describe("OrdersService", () => {
     expect(harness.runtime.liveOrders.cancelOrder).toHaveBeenCalledOnce();
     expect(harness.runtime.liveOrders.getOrder).toHaveBeenCalledOnce();
     expect(events).toEqual([
-      "operator-auth",
+      "cancel-authorization",
       "cancel-claim",
       "cancel",
       "accepted-action",

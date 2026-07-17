@@ -11,7 +11,6 @@ import {
   Post,
   Res,
   ServiceUnavailableException,
-  UseGuards,
 } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 
@@ -22,11 +21,10 @@ import {
   SaveOperationalConfigDraftInputSchema,
 } from "@portfolio-rebalancer/contracts";
 
-import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
 import {
+  localConsoleAuditContext,
   operatorAuditActor,
-  tailscaleOperatorAuditContext,
-} from "../../../common/auth/operator-audit-context";
+} from "../../../common/audit/operator-audit-context";
 import { OperationalConfigService } from "../application/operational-config.service";
 import { OperationalConfigError } from "../domain/operational-config.error";
 
@@ -38,7 +36,6 @@ export class OperationalConfigController {
   ) {}
 
   @Get("operational-config")
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async current(@Res({ passthrough: true }) reply: FastifyReply) {
     const snapshot = await this.operationalConfig.current();
@@ -48,7 +45,6 @@ export class OperationalConfigController {
 
   @Post("operational-config/drafts")
   @HttpCode(200)
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async saveDraft(@Body() body: unknown) {
     const parsed = SaveOperationalConfigDraftInputSchema.safeParse(body);
@@ -67,7 +63,6 @@ export class OperationalConfigController {
 
   @Post("operational-config/drafts/current-account")
   @HttpCode(200)
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async saveCurrentAccountDraft(@Body() body: unknown) {
     const parsed = SaveCurrentAccountOperationalConfigDraftInputSchema.safeParse(body);
@@ -86,7 +81,6 @@ export class OperationalConfigController {
 
   @Post("operational-config/drafts/activate")
   @HttpCode(200)
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
   async activateDraft(@Body() body: unknown) {
     const parsed = ActivateOperationalConfigDraftInputSchema.safeParse(body);
@@ -105,11 +99,8 @@ export class OperationalConfigController {
 
   @Post("live-promotion")
   @HttpCode(200)
-  @UseGuards(ServiceTokenGuard)
   @Header("cache-control", "no-store")
-  async saveLivePromotion(
-    @Body() body: unknown,
-  ) {
+  async saveLivePromotion(@Body() body: unknown) {
     const parsed = LivePromotionCommandSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException({
@@ -120,7 +111,7 @@ export class OperationalConfigController {
     try {
       return await this.operationalConfig.saveLivePromotion(
         parsed.data,
-        operatorAuditActor(tailscaleOperatorAuditContext()),
+        operatorAuditActor(localConsoleAuditContext()),
       );
     } catch (error) {
       throwOperationalConfigHttpError(error);

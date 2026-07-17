@@ -1,9 +1,9 @@
 export interface EngineOperatorAuditContext {
-  readonly actor: "tailscale-operator";
+  readonly actor: "local-console";
 }
 
-export function tailscaleOperatorAuditContext(): EngineOperatorAuditContext {
-  return { actor: "tailscale-operator" };
+export function localConsoleAuditContext(): EngineOperatorAuditContext {
+  return { actor: "local-console" };
 }
 
 export function operatorAuditActor(context: EngineOperatorAuditContext): string {

@@ -1,7 +1,6 @@
 import { Module } from "@nestjs/common";
 
 import { CronTokenGuard } from "../../common/auth/guards/cron-token.guard";
-import { ServiceTokenGuard } from "../../common/auth/guards/service-token.guard";
 import { EngineConfigModule } from "../../config/engine-config.module";
 import { PrismaModule } from "../../infrastructure/prisma/prisma.module";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service";
@@ -21,7 +20,6 @@ import { PortfolioController } from "./presentation/portfolio.controller";
     },
     TossRuntimeService,
     PortfolioService,
-    ServiceTokenGuard,
     CronTokenGuard,
   ],
   exports: [PrismaPortfolioRepository, TossRuntimeService],

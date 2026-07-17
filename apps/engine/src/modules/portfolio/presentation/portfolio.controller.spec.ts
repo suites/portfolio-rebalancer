@@ -13,14 +13,12 @@ import {
 } from "@portfolio-rebalancer/contracts";
 
 import { CronTokenGuard } from "../../../common/auth/guards/cron-token.guard";
-import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
 import { ENGINE_CONFIG } from "../../../config/engine-config.token";
 import { loadEngineConfig, type EngineConfig } from "../../../config/engine.config";
 import { blockedDashboard } from "../application/dashboard.presenter";
 import { PortfolioService } from "../application/portfolio.service";
 import { PortfolioController } from "./portfolio.controller";
 
-const SERVICE_TOKEN = "service-token-that-is-at-least-32-characters";
 const CRON_TOKEN = "cron-token-at-least-16-characters";
 
 describe("NestJS engine HTTP contract", () => {
@@ -31,33 +29,23 @@ describe("NestJS engine HTTP contract", () => {
     app = undefined;
   });
 
-  it("service token을 정확히 검증하고 dashboard를 no-store로 반환한다", async () => {
-    const harness = await createHarness({
-      VERCEL: "1",
-      ENGINE_SERVICE_TOKEN: SERVICE_TOKEN,
-    });
+  it("사설 engine dashboard를 인증 없이 no-store로 반환한다", async () => {
+    const harness = await createHarness();
     app = harness.app;
 
-    const unauthorized = await harness.fastify.inject({
+    const response = await harness.fastify.inject({
       method: "GET",
       url: "/internal/v1/dashboard",
-    });
-    const authorized = await harness.fastify.inject({
-      method: "GET",
-      url: "/internal/v1/dashboard",
-      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
     });
 
-    expect(unauthorized.statusCode).toBe(401);
-    expect(unauthorized.json()).toEqual({ error: "unauthorized" });
-    expect(authorized.statusCode).toBe(200);
-    expect(authorized.headers["cache-control"]).toBe("no-store");
-    expect(DashboardSnapshotSchema.safeParse(authorized.json()).success).toBe(true);
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(DashboardSnapshotSchema.safeParse(response.json()).success).toBe(true);
     expect(harness.portfolio.dashboard).toHaveBeenCalledOnce();
   });
 
   it("refresh 실패도 503과 검증 가능한 차단 계약으로 반환한다", async () => {
-    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+    const harness = await createHarness();
     app = harness.app;
     harness.portfolio.refresh.mockResolvedValue({
       ok: false,
@@ -67,7 +55,6 @@ describe("NestJS engine HTTP contract", () => {
     const response = await harness.fastify.inject({
       method: "POST",
       url: "/internal/v1/portfolio/refresh",
-      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
     });
 
     expect(response.statusCode).toBe(503);
@@ -77,21 +64,17 @@ describe("NestJS engine HTTP contract", () => {
     expect(body).toMatchObject({ blockReason: { code: "EGRESS_NOT_CONFIRMED" } });
   });
 
-  it("cron secret은 service token과 분리하고 실패 코드를 보존한다", async () => {
-    const harness = await createHarness({
-      ENGINE_SERVICE_TOKEN: SERVICE_TOKEN,
-      CRON_SECRET: CRON_TOKEN,
-    });
+  it("Vercel Cron secret을 검증하고 수집 실패 코드를 보존한다", async () => {
+    const harness = await createHarness({ CRON_SECRET: CRON_TOKEN });
     app = harness.app;
     harness.portfolio.collectFromCron.mockResolvedValue({
       ok: false,
       code: "COLLECTION_IN_PROGRESS",
     });
 
-    const wrongToken = await harness.fastify.inject({
+    const unauthorized = await harness.fastify.inject({
       method: "GET",
       url: "/internal/v1/cron/portfolio",
-      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
     });
     const cron = await harness.fastify.inject({
       method: "GET",
@@ -99,25 +82,23 @@ describe("NestJS engine HTTP contract", () => {
       headers: { authorization: `Bearer ${CRON_TOKEN}` },
     });
 
-    expect(wrongToken.statusCode).toBe(401);
-    expect(wrongToken.json()).toEqual({ error: "unauthorized" });
+    expect(unauthorized.statusCode).toBe(401);
+    expect(unauthorized.json()).toEqual({ error: "unauthorized" });
     expect(cron.statusCode).toBe(503);
     expect(cron.json()).toEqual({ ok: false, code: "COLLECTION_IN_PROGRESS" });
   });
 
-  it("records와 target settings도 service token과 no-store 경계를 사용한다", async () => {
-    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+  it("records와 target settings도 사설 no-store 경계를 사용한다", async () => {
+    const harness = await createHarness();
     app = harness.app;
 
     const records = await harness.fastify.inject({
       method: "GET",
       url: "/internal/v1/records",
-      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
     });
     const settings = await harness.fastify.inject({
       method: "GET",
       url: "/internal/v1/target-settings",
-      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
     });
 
     expect(records.statusCode).toBe(200);
@@ -129,14 +110,13 @@ describe("NestJS engine HTTP contract", () => {
   });
 
   it("잘못된 목표 합계는 service 호출 전에 400으로 거부한다", async () => {
-    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+    const harness = await createHarness();
     app = harness.app;
 
     const response = await harness.fastify.inject({
       method: "POST",
       url: "/internal/v1/target-settings/drafts",
       headers: {
-        authorization: `Bearer ${SERVICE_TOKEN}`,
         "content-type": "application/json",
       },
       payload: {
@@ -177,7 +157,7 @@ describe("NestJS engine HTTP contract", () => {
   });
 
   it("로컬 종목 검색과 Toss 정확 심볼 검증을 별도 endpoint로 제공한다", async () => {
-    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+    const harness = await createHarness();
     app = harness.app;
     const candidate = instrumentCandidate();
     harness.portfolio.searchInstrumentCatalog.mockResolvedValue(
@@ -194,13 +174,11 @@ describe("NestJS engine HTTP contract", () => {
     const searched = await harness.fastify.inject({
       method: "GET",
       url: "/internal/v1/instruments/search?query=%EC%95%A0%ED%94%8C",
-      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
     });
     const validated = await harness.fastify.inject({
       method: "POST",
       url: "/internal/v1/instrument-validations",
       headers: {
-        authorization: `Bearer ${SERVICE_TOKEN}`,
         "content-type": "application/json",
       },
       payload: { query: "US:AAPL" },
@@ -219,14 +197,13 @@ describe("NestJS engine HTTP contract", () => {
   });
 
   it("정확 심볼이 아닌 검증 입력은 Toss service 호출 전에 거부한다", async () => {
-    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+    const harness = await createHarness();
     app = harness.app;
 
     const response = await harness.fastify.inject({
       method: "POST",
       url: "/internal/v1/instrument-validations",
       headers: {
-        authorization: `Bearer ${SERVICE_TOKEN}`,
         "content-type": "application/json",
       },
       payload: { query: "삼성전자" },
@@ -236,21 +213,19 @@ describe("NestJS engine HTTP contract", () => {
     expect(harness.portfolio.validateInstrument).not.toHaveBeenCalled();
   });
 
-  it("Shadow 계획 조회·생성은 service token, no-store와 공유 계약을 사용한다", async () => {
-    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+  it("Shadow 계획 조회·생성은 사설 no-store 계약을 사용한다", async () => {
+    const harness = await createHarness();
     app = harness.app;
     harness.portfolio.createRebalancePlan.mockResolvedValue(rebalancePlanSnapshot());
 
     const latest = await harness.fastify.inject({
       method: "GET",
       url: "/internal/v1/rebalance-plans/latest",
-      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
     });
     const created = await harness.fastify.inject({
       method: "POST",
       url: "/internal/v1/rebalance-plans",
       headers: {
-        authorization: `Bearer ${SERVICE_TOKEN}`,
         "content-type": "application/json",
       },
       payload: { mode: "SHADOW" },
@@ -266,7 +241,7 @@ describe("NestJS engine HTTP contract", () => {
   });
 
   it("PAPER와 LIVE 계획 모드도 같은 검증된 service 경계로 전달한다", async () => {
-    const harness = await createHarness({ ENGINE_SERVICE_TOKEN: SERVICE_TOKEN });
+    const harness = await createHarness();
     app = harness.app;
     harness.portfolio.createRebalancePlan.mockResolvedValue(rebalancePlanSnapshot());
 
@@ -275,7 +250,6 @@ describe("NestJS engine HTTP contract", () => {
         method: "POST",
         url: "/internal/v1/rebalance-plans",
         headers: {
-          authorization: `Bearer ${SERVICE_TOKEN}`,
           "content-type": "application/json",
         },
         payload: { mode },
@@ -287,7 +261,7 @@ describe("NestJS engine HTTP contract", () => {
   });
 });
 
-async function createHarness(environment: NodeJS.ProcessEnv) {
+async function createHarness(environment: NodeJS.ProcessEnv = {}) {
   const config = loadEngineConfig({
     DATABASE_RUNTIME_URL: "postgresql://local_runtime:local@127.0.0.1:15432/local",
     ...environment,
@@ -338,7 +312,6 @@ async function createHarness(environment: NodeJS.ProcessEnv) {
     providers: [
       { provide: ENGINE_CONFIG, useValue: config satisfies EngineConfig },
       { provide: PortfolioService, useValue: portfolio },
-      ServiceTokenGuard,
       CronTokenGuard,
     ],
   }).compile();

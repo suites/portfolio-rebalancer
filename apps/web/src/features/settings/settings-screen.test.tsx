@@ -33,12 +33,7 @@ describe("SettingsScreen", () => {
     });
 
     const html = renderToStaticMarkup(
-      <SettingsScreen
-        settings={settings}
-        operational={operational()}
-        status="activated"
-        csrfToken={"c".repeat(64)}
-      />,
+      <SettingsScreen settings={settings} operational={operational()} status="activated" />,
     );
 
     expect(html).not.toContain("목표 설정을 적용했습니다.");
@@ -58,12 +53,7 @@ describe("SettingsScreen", () => {
     });
 
     const html = renderToStaticMarkup(
-      <SettingsScreen
-        settings={settings}
-        operational={operational()}
-        status="invalid"
-        csrfToken={"c".repeat(64)}
-      />,
+      <SettingsScreen settings={settings} operational={operational()} status="invalid" />,
     );
 
     expect(html).toContain("설정 정보를 불러올 수 없습니다.");
@@ -116,12 +106,7 @@ describe("SettingsScreen", () => {
     });
 
     const html = renderToStaticMarkup(
-      <SettingsScreen
-        settings={settings}
-        operational={operational()}
-        status={undefined}
-        csrfToken={"c".repeat(64)}
-      />,
+      <SettingsScreen settings={settings} operational={operational()} status={undefined} />,
     );
 
     expect(html).toContain('name="targetPercent"');
@@ -152,7 +137,6 @@ describe("SettingsScreen", () => {
     expect(html).toContain('name="liveEnabled"');
     expect(html).toContain("킬 스위치");
     expect(html).toContain("Live 승격");
-    expect(html).toContain('name="_csrf"');
 
     const firstFormStart = html.indexOf("<form");
     const firstFormEnd = html.indexOf("</form>", firstFormStart);
@@ -179,7 +163,6 @@ describe("SettingsScreen", () => {
         settings={settings}
         operational={operationalWithDraft(hash)}
         status={undefined}
-        csrfToken={"c".repeat(64)}
       />,
     );
 

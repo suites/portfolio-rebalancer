@@ -26,7 +26,6 @@ describe("RebalancingScreen", () => {
         })}
         operational={operational()}
         actionStatus={undefined}
-        csrfToken={"c".repeat(64)}
       />,
     );
 
@@ -113,7 +112,6 @@ describe("RebalancingScreen", () => {
         plan={plan}
         operational={operational()}
         actionStatus={undefined}
-        csrfToken={"c".repeat(64)}
       />,
     );
 
@@ -129,7 +127,6 @@ describe("RebalancingScreen", () => {
     expect(html).toContain("다음 snapshot에서 다시 계산");
     expect(html).toContain("70%");
     expect(html).not.toContain("실거래 실행");
-    expect(html).toContain('name="_csrf"');
   });
 });
 

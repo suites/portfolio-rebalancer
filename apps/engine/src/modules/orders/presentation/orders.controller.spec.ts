@@ -5,13 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OrdersSnapshotSchema } from "@portfolio-rebalancer/contracts";
 
-import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
-import { ENGINE_CONFIG } from "../../../config/engine-config.token";
-import { loadEngineConfig } from "../../../config/engine.config";
 import { OrdersService } from "../application/orders.service";
 import { OrdersController } from "./orders.controller";
 
-const SERVICE_TOKEN = "service-token-that-is-at-least-32-characters";
 const PATH_PLAN_ID = "10000000-0000-4000-8000-000000000001";
 const BODY_PLAN_ID = "10000000-0000-4000-8000-000000000002";
 const PATH_ORDER_ID = "10000000-0000-4000-8000-000000000003";
@@ -26,24 +22,18 @@ describe("OrdersController", () => {
     app = undefined;
   });
 
-  it("orders snapshot을 service token과 no-store 경계로 제공한다", async () => {
+  it("orders snapshot을 사설 no-store 경계로 제공한다", async () => {
     const harness = await createHarness();
     app = harness.app;
 
-    const unauthorized = await harness.fastify.inject({
+    const response = await harness.fastify.inject({
       method: "GET",
       url: "/internal/v1/orders",
-    });
-    const authorized = await harness.fastify.inject({
-      method: "GET",
-      url: "/internal/v1/orders",
-      headers: { authorization: `Bearer ${SERVICE_TOKEN}` },
     });
 
-    expect(unauthorized.statusCode).toBe(401);
-    expect(authorized.statusCode).toBe(200);
-    expect(authorized.headers["cache-control"]).toBe("no-store");
-    expect(OrdersSnapshotSchema.safeParse(authorized.json()).success).toBe(true);
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(OrdersSnapshotSchema.safeParse(response.json()).success).toBe(true);
   });
 
   it.each([
@@ -100,7 +90,6 @@ describe("OrdersController", () => {
       method: "POST",
       url: testCase.path,
       headers: {
-        authorization: `Bearer ${SERVICE_TOKEN}`,
         "content-type": "application/json",
       },
       payload: testCase.payload,
@@ -114,7 +103,7 @@ describe("OrdersController", () => {
     expect(harness.service[testCase.method]).not.toHaveBeenCalled();
   });
 
-  it("Live 승인 route는 service token 외 최근 운영자 재인증 헤더도 요구한다", async () => {
+  it("Live 승인 route는 별도 인증 헤더 없이 local-console 감사 주체를 기록한다", async () => {
     const harness = await createHarness();
     app = harness.app;
     const payload = {
@@ -122,32 +111,19 @@ describe("OrdersController", () => {
       planHash: "a".repeat(64),
       confirmation: "LIVE 주문 계획과 금액을 확인했습니다",
     };
-    const missingOperator = await harness.fastify.inject({
+    const response = await harness.fastify.inject({
       method: "POST",
       url: `/internal/v1/rebalance-plans/${PATH_PLAN_ID}/live-approvals`,
       headers: {
-        authorization: `Bearer ${SERVICE_TOKEN}`,
         "content-type": "application/json",
-      },
-      payload,
-    });
-    const authorized = await harness.fastify.inject({
-      method: "POST",
-      url: `/internal/v1/rebalance-plans/${PATH_PLAN_ID}/live-approvals`,
-      headers: {
-        authorization: `Bearer ${SERVICE_TOKEN}`,
-        "content-type": "application/json",
-        ...operatorHeaders(),
       },
       payload,
     });
 
-    expect(missingOperator.statusCode).toBe(401);
-    expect(authorized.statusCode).toBe(200);
-    expect(harness.service.createLivePlanApproval).toHaveBeenCalledWith(
-      payload,
-      expect.objectContaining({ operatorId: "fred" }),
-    );
+    expect(response.statusCode).toBe(200);
+    expect(harness.service.createLivePlanApproval).toHaveBeenCalledWith(payload, {
+      actor: "local-console",
+    });
   });
 });
 
@@ -168,18 +144,7 @@ async function createHarness() {
   };
   const testingModule = await Test.createTestingModule({
     controllers: [OrdersController],
-    providers: [
-      ServiceTokenGuard,
-      { provide: OrdersService, useValue: service },
-      {
-        provide: ENGINE_CONFIG,
-        useValue: loadEngineConfig({
-          DATABASE_RUNTIME_URL: "postgresql://test_runtime:test@localhost:5432/test",
-          ENGINE_SERVICE_TOKEN: SERVICE_TOKEN,
-          VERCEL: "1",
-        }),
-      },
-    ],
+    providers: [{ provide: OrdersService, useValue: service }],
   }).compile();
   const nestApp = testingModule.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
   await nestApp.init();
@@ -187,17 +152,5 @@ async function createHarness() {
     app: nestApp as INestApplication,
     fastify: nestApp.getHttpAdapter().getInstance(),
     service,
-  };
-}
-
-function operatorHeaders() {
-  const reauthenticatedAt = new Date();
-  return {
-    "x-portfolio-operator-id": "fred",
-    "x-portfolio-operator-session-id": "10000000-0000-4000-8000-000000000099",
-    "x-portfolio-operator-authenticated-at": new Date(
-      reauthenticatedAt.getTime() - 60_000,
-    ).toISOString(),
-    "x-portfolio-operator-reauthenticated-at": reauthenticatedAt.toISOString(),
   };
 }

@@ -158,14 +158,14 @@
 
 - `GET /internal/v1/health`: live 주문 비활성 상태
 - `GET /internal/v1/dashboard`: 저장된 최신 실제 snapshot
-- `POST /internal/v1/portfolio/refresh`: service token, Toss read-only 수집
+- `POST /internal/v1/portfolio/refresh`: 사설 engine 경계, Toss read-only 수집
 - `GET /internal/v1/cron/portfolio`: Vercel Cron secret, 평일 09:00 KST
-- `GET /internal/v1/records`: 최근 실제 수집·snapshot 검사 요약, service token
-- `GET /internal/v1/target-settings`: 현재 보유 후보와 활성 목표 설정, service token
-- `GET /internal/v1/instruments/search`: `LOCAL_VALIDATED` 로컬 카탈로그 검색, service token
-- `POST /internal/v1/instrument-validations`: Toss 정확 심볼·유의사항 검증과 증거 저장, service token
-- `POST /internal/v1/target-settings/drafts`: 최신 snapshot에 묶인 검증된 목표 초안 저장, service token
-- `POST /internal/v1/target-settings/drafts/:version/activate`: 동일 snapshot일 때만 초안 적용, service token
+- `GET /internal/v1/records`: 최근 실제 수집·snapshot 검사 요약, 사설 engine 경계
+- `GET /internal/v1/target-settings`: 현재 보유 후보와 활성 목표 설정, 사설 engine 경계
+- `GET /internal/v1/instruments/search`: `LOCAL_VALIDATED` 로컬 카탈로그 검색, 사설 engine 경계
+- `POST /internal/v1/instrument-validations`: Toss 정확 심볼·유의사항 검증과 증거 저장, 사설 engine 경계
+- `POST /internal/v1/target-settings/drafts`: 최신 snapshot에 묶인 검증된 목표 초안 저장, 사설 engine 경계
+- `POST /internal/v1/target-settings/drafts/:version/activate`: 동일 snapshot일 때만 초안 적용, 사설 engine 경계
 - `GET /api/v1/system/health`: Web BFF 상태
 - `GET /api/v1/brokers`: 실제 engine 연결 상태
 

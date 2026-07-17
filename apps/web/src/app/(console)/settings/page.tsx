@@ -15,11 +15,5 @@ export default async function SettingsPage({
     getEngineTargetSettings(),
     getEngineOperationalConfig(),
   ]);
-  return (
-    <SettingsScreen
-      settings={settings}
-      operational={operational}
-      status={status}
-    />
-  );
+  return <SettingsScreen settings={settings} operational={operational} status={status} />;
 }

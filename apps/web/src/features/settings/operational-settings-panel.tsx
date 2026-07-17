@@ -322,7 +322,9 @@ function SafetyCommandForm({
         <input name="reason" minLength={8} maxLength={500} placeholder={placeholder} required />
       </label>
       {state === "DISENGAGED" || state === "GRANTED" ? (
-        <p className={styles.fieldDescription}>이 동작은 Tailscale 내부 콘솔과 안전 조건이 필요합니다.</p>
+        <p className={styles.fieldDescription}>
+          이 동작은 Tailscale 내부 콘솔과 안전 조건이 필요합니다.
+        </p>
       ) : null}
       <Button type="submit" variant={secondary ? "secondary" : "primary"}>
         {label}
