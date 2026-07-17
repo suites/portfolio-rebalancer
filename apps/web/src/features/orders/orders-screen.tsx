@@ -18,12 +18,10 @@ export function OrdersScreen({
   records,
   orders,
   actionStatus,
-  csrfToken,
 }: {
   readonly records: ConsoleRecordsSnapshotContract;
   readonly orders: OrdersSnapshotContract;
   readonly actionStatus: string | undefined;
-  readonly csrfToken: string;
 }) {
   const feedback = orderFeedback(actionStatus);
   return (
@@ -73,7 +71,7 @@ export function OrdersScreen({
           ) : (
             <div className={styles.orderList}>
               {orders.orders.map((order) => (
-                <OrderCard key={order.orderId} order={order} csrfToken={csrfToken} />
+                <OrderCard key={order.orderId} order={order} />
               ))}
             </div>
           )}
@@ -154,10 +152,8 @@ export function OrdersScreen({
 
 function OrderCard({
   order,
-  csrfToken,
 }: {
   readonly order: StoredOrderReceiptContract;
-  readonly csrfToken: string;
 }) {
   const current = order.timeline.at(-1);
   const canCancel =
@@ -225,7 +221,6 @@ function OrderCard({
         <div className={styles.orderActions}>
           {canReconcile ? (
             <form action={reconcileOrderAction}>
-              <input type="hidden" name="_csrf" value={csrfToken} />
               <input type="hidden" name="orderId" value={order.orderId} />
               <Button type="submit" variant="secondary">
                 브로커 상태 다시 확인
@@ -234,7 +229,6 @@ function OrderCard({
           ) : null}
           {canCancel ? (
             <form className={styles.inlineSafetyForm} action={cancelOrderAction}>
-              <input type="hidden" name="_csrf" value={csrfToken} />
               <input type="hidden" name="orderId" value={order.orderId} />
               <label>
                 취소 사유
@@ -255,12 +249,12 @@ function OrderCard({
                 />
                 미체결 주문 취소를 요청합니다
               </label>
-              <p className={styles.fieldDescription}>취소 전 최근 운영자 재인증이 필요합니다.</p>
+              <p className={styles.fieldDescription}>Tailscale 내부 콘솔과 취소 안전 조건이 필요합니다.</p>
               <Button type="submit">취소 요청 1회 전송</Button>
             </form>
           ) : null}
           {order.currentState === "UNKNOWN_BLOCKED" ? (
-            <UnknownRecoveryForm order={order} csrfToken={csrfToken} />
+            <UnknownRecoveryForm order={order} />
           ) : null}
         </div>
       ) : (
@@ -275,23 +269,20 @@ function OrderCard({
 
 function UnknownRecoveryForm({
   order,
-  csrfToken,
 }: {
   readonly order: StoredOrderReceiptContract;
-  readonly csrfToken: string;
 }) {
   const latest = order.timeline.at(-1);
   return (
     <details className={styles.recoveryPanel}>
       <summary>UNKNOWN_BLOCKED 수동 복구</summary>
       <form className={styles.settingsForm} action={recoverUnknownOrderAction}>
-        <input type="hidden" name="_csrf" value={csrfToken} />
         <input type="hidden" name="orderId" value={order.orderId} />
         <p className={styles.fieldDescription}>
           토스 주문 조회 결과와 아래 값이 정확히 일치할 때만 상태를 추가합니다. 일치하지 않으면
           복구하지 않으며 주문을 재제출하지 않습니다.
         </p>
-        <p className={styles.fieldDescription}>복구 전 최근 운영자 재인증이 필요합니다.</p>
+        <p className={styles.fieldDescription}>Tailscale 내부 콘솔과 복구 안전 조건이 필요합니다.</p>
         <div className={styles.fieldGrid}>
           <label>
             확인된 상태
@@ -472,7 +463,7 @@ function orderFeedback(status: string | undefined): {
     },
     "operator-security-blocked": {
       title: "운영자 보안 검증에서 요청을 차단했습니다.",
-      description: "세션, 동일 출처와 CSRF 토큰을 확인하지 못해 엔진을 호출하지 않았습니다.",
+      description: "Tailscale 내부 콘솔 경계를 확인하지 못해 엔진을 호출하지 않았습니다.",
       tone: "blocked",
     },
   };

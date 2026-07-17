@@ -30,26 +30,19 @@ import {
 } from "@/server/engine-console";
 import { refreshEngineDashboard } from "@/server/engine-dashboard";
 import {
-  OperatorAuthError,
-  requireOperatorMutation,
-  type OperatorAuditContext,
-} from "@/server/operator-auth";
 import { targetSettingsInputFromFormData } from "@/server/target-settings-input";
 
 export async function refreshPortfolioAction(formData: FormData) {
-  await requireActionOperator(formData, "/troubleshooting");
   await refreshEngineDashboard();
   revalidatePath("/", "layout");
   redirect("/troubleshooting");
 }
 
 export async function createShadowPlanAction(formData: FormData) {
-  await requireActionOperator(formData, "/rebalancing");
   return createRebalancePlan("SHADOW");
 }
 
 export async function createRebalancePlanAction(formData: FormData) {
-  await requireActionOperator(formData, "/rebalancing");
   const mode = formData.get("mode");
   if (mode !== "SHADOW" && mode !== "PAPER" && mode !== "LIVE") {
     redirect("/rebalancing?status=plan-mode-invalid");
@@ -58,15 +51,11 @@ export async function createRebalancePlanAction(formData: FormData) {
 }
 
 export async function executePaperPlanAction(formData: FormData) {
-  const operator = await requireActionOperator(formData, "/rebalancing");
   const planId = requiredUuid(formData, "planId");
   if (!planId) redirect("/rebalancing?status=execute-input-invalid");
   let status = "paper-execute-unavailable";
   try {
-    const receipt = await executeEngineRebalancePlan(
-      { planId, mode: "PAPER", approvalIds: [] },
-      operator,
-    );
+    const receipt = await executeEngineRebalancePlan({ planId, mode: "PAPER", approvalIds: [] });
     status = executionReceiptStatus(receipt);
   } catch (error) {
     status = orderActionStatus(error, "paper-execute-unavailable");
@@ -76,7 +65,6 @@ export async function executePaperPlanAction(formData: FormData) {
 }
 
 export async function executeLivePlanAction(formData: FormData) {
-  const operator = await requireActionOperator(formData, "/rebalancing", true);
   const planId = requiredUuid(formData, "planId");
   const planHash = stringField(formData, "planHash");
   const confirmation = stringField(formData, "confirmation");
@@ -89,22 +77,12 @@ export async function executeLivePlanAction(formData: FormData) {
   }
   let status = "live-execute-unavailable";
   try {
-    const approvalReceipt = await createEngineLivePlanApproval(
-      {
-        planId,
-        planHash,
-        confirmation,
-      },
-      operator,
-    );
-    const executionReceipt = await executeEngineRebalancePlan(
-      {
-        planId,
-        mode: "LIVE",
-        approvalIds: approvalReceipt.approvals.map(({ approvalId }) => approvalId),
-      },
-      operator,
-    );
+    const approvalReceipt = await createEngineLivePlanApproval({ planId, planHash, confirmation });
+    const executionReceipt = await executeEngineRebalancePlan({
+      planId,
+      mode: "LIVE",
+      approvalIds: approvalReceipt.approvals.map(({ approvalId }) => approvalId),
+    });
     status = executionReceiptStatus(executionReceipt);
   } catch (error) {
     status = orderActionStatus(error, "live-execute-unavailable");
@@ -149,7 +127,6 @@ export async function saveTargetDraftAction(
   _previousState: SaveTargetDraftActionState,
   formData: FormData,
 ): Promise<SaveTargetDraftActionState> {
-  await requireActionOperator(formData, "/settings");
   let input: TargetSettingsDraftInputContract;
   try {
     input = targetSettingsInputFromFormData(formData);
@@ -177,7 +154,6 @@ export async function searchTargetInstrumentAction(
   _previousState: SearchTargetInstrumentActionState,
   formData: FormData,
 ): Promise<SearchTargetInstrumentActionState> {
-  await requireActionOperator(formData, "/settings");
   const rawQuery = formData.get("instrumentQuery");
   const query = typeof rawQuery === "string" ? rawQuery.trim() : "";
   const lookupMode = formData.get("lookupMode");
@@ -250,7 +226,6 @@ export async function searchTargetInstrumentAction(
 }
 
 export async function activateTargetDraftAction(formData: FormData) {
-  await requireActionOperator(formData, "/settings");
   let status: string | null = "activate-invalid";
   const rawVersion = formData.get("version");
   if (typeof rawVersion === "string" && /^\d+$/.test(rawVersion)) {
@@ -273,7 +248,6 @@ export async function activateTargetDraftAction(formData: FormData) {
 }
 
 export async function saveOperationalConfigDraftAction(formData: FormData) {
-  await requireActionOperator(formData, "/settings");
   let status = "operational-draft-saved";
   try {
     const mode = stringField(formData, "mode");
@@ -334,7 +308,6 @@ export async function saveOperationalConfigDraftAction(formData: FormData) {
 }
 
 export async function activateOperationalConfigDraftAction(formData: FormData) {
-  await requireActionOperator(formData, "/settings");
   const version = integerFieldOrNull(formData, "version", 1, Number.MAX_SAFE_INTEGER);
   const contentHash = stringField(formData, "contentHash");
   const confirmation = stringField(formData, "confirmation");
@@ -365,21 +338,17 @@ export async function activateOperationalConfigDraftAction(formData: FormData) {
 
 export async function setLivePromotionAction(formData: FormData) {
   const state = stringField(formData, "state");
-  const operator = await requireActionOperator(formData, "/settings", state === "GRANTED");
   const reason = stringField(formData, "reason");
   let status = "live-promotion-updated";
   if ((state !== "GRANTED" && state !== "REVOKED") || reason.length < 8) {
     status = "operational-input-invalid";
   } else {
     try {
-      const snapshot = await saveEngineLivePromotion(
-        {
-          state,
-          reason,
-          confirmation: state === "GRANTED" ? "극소액 Live 승격" : "Live 권한 회수",
-        },
-        operator,
-      );
+      const snapshot = await saveEngineLivePromotion({
+        state,
+        reason,
+        confirmation: state === "GRANTED" ? "극소액 Live 승격" : "Live 권한 회수",
+      });
       if (snapshot.livePromotion !== state) status = "operational-unavailable";
     } catch (error) {
       status =
@@ -394,21 +363,17 @@ export async function setLivePromotionAction(formData: FormData) {
 
 export async function setKillSwitchAction(formData: FormData) {
   const state = stringField(formData, "state");
-  const operator = await requireActionOperator(formData, "/settings", state === "DISENGAGED");
   const reason = stringField(formData, "reason");
   let status = state === "ENGAGED" ? "kill-switch-engaged" : "kill-switch-disengaged";
   if ((state !== "ENGAGED" && state !== "DISENGAGED") || reason.length < 8) {
     status = "operational-input-invalid";
   } else {
     try {
-      const snapshot = await setEngineKillSwitch(
-        {
-          state,
-          reason,
-          confirmation: state === "ENGAGED" ? "킬 스위치 작동" : "킬 스위치 해제",
-        },
-        operator,
-      );
+      const snapshot = await setEngineKillSwitch({
+        state,
+        reason,
+        confirmation: state === "ENGAGED" ? "킬 스위치 작동" : "킬 스위치 해제",
+      });
       if (snapshot.killSwitch !== state) status = "operational-unavailable";
     } catch (error) {
       status = orderActionStatus(error, "operational-unavailable");
@@ -419,7 +384,6 @@ export async function setKillSwitchAction(formData: FormData) {
 }
 
 export async function cancelOrderAction(formData: FormData) {
-  const operator = await requireActionOperator(formData, "/orders", true);
   const orderId = requiredUuid(formData, "orderId");
   const reason = stringField(formData, "reason");
   const confirmation = stringField(formData, "confirmation");
@@ -428,7 +392,7 @@ export async function cancelOrderAction(formData: FormData) {
     status = "order-input-invalid";
   } else {
     try {
-      const receipt = await cancelEngineOrder({ orderId, reason, confirmation }, operator);
+      const receipt = await cancelEngineOrder({ orderId, reason, confirmation });
       status = cancelReceiptStatus(receipt);
     } catch (error) {
       status = orderActionStatus(error, "cancel-unavailable");
@@ -439,14 +403,13 @@ export async function cancelOrderAction(formData: FormData) {
 }
 
 export async function reconcileOrderAction(formData: FormData) {
-  const operator = await requireActionOperator(formData, "/orders");
   const orderId = requiredUuid(formData, "orderId");
   let status = "order-reconciled";
   if (!orderId) {
     status = "order-input-invalid";
   } else {
     try {
-      await reconcileEngineOrder(orderId, operator);
+      await reconcileEngineOrder(orderId);
     } catch (error) {
       status = orderActionStatus(error, "reconcile-unavailable");
     }
@@ -456,7 +419,6 @@ export async function reconcileOrderAction(formData: FormData) {
 }
 
 export async function recoverUnknownOrderAction(formData: FormData) {
-  const operator = await requireActionOperator(formData, "/orders", true);
   const orderId = requiredUuid(formData, "orderId");
   const resolvedState = stringField(formData, "resolvedState");
   let status = "order-recovered";
@@ -467,8 +429,7 @@ export async function recoverUnknownOrderAction(formData: FormData) {
     status = "order-input-invalid";
   } else {
     try {
-      await recoverEngineUnknownOrder(
-        {
+      await recoverEngineUnknownOrder({
           orderId,
           resolvedState: resolvedState as
             "PENDING" | "PARTIAL_FILLED" | "FILLED" | "CANCELED" | "REJECTED",
@@ -478,9 +439,7 @@ export async function recoverUnknownOrderAction(formData: FormData) {
           filledQuantity: nonNegativeIntegerField(formData, "filledQuantity"),
           filledGrossMinor: nonNegativeIntegerField(formData, "filledGrossWon"),
           feeMinor: nonNegativeIntegerField(formData, "feeWon"),
-        },
-        operator,
-      );
+      });
     } catch (error) {
       status =
         error instanceof EngineConsoleRequestError
@@ -632,27 +591,6 @@ function cancelReceiptStatus(receipt: CancelOrderReceiptContract): string {
       return "cancel-blocked";
     case "UNKNOWN":
       return "cancel-unknown";
-  }
-}
-
-async function requireActionOperator(
-  formData: FormData,
-  returnTo: "/orders" | "/rebalancing" | "/settings" | "/troubleshooting",
-  recentReauthentication: boolean = false,
-): Promise<OperatorAuditContext> {
-  try {
-    return await requireOperatorMutation(formData, { recentReauthentication });
-  } catch (error) {
-    if (error instanceof OperatorAuthError) {
-      const encodedReturnTo = encodeURIComponent(returnTo);
-      if (error.code === "AUTH_REAUTH_REQUIRED") {
-        redirect(`/auth/reauth?returnTo=${encodedReturnTo}`);
-      }
-      if (error.code === "AUTH_UNAUTHENTICATED" || error.code === "AUTH_NOT_CONFIGURED") {
-        redirect(`/auth/login?returnTo=${encodedReturnTo}`);
-      }
-    }
-    redirect(`${returnTo}?status=operator-security-blocked`);
   }
 }
 

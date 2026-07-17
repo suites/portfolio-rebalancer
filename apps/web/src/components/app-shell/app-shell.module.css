@@ -139,28 +139,6 @@
   background: var(--color-unknown-soft);
 }
 
-.accountCard form {
-  margin-left: auto;
-}
-
-.logoutButton,
-.reauthLink {
-  border: 0;
-  background: transparent;
-  color: var(--color-primary);
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.logoutButton {
-  padding: 0.35rem;
-}
-
-.reauthLink {
-  white-space: nowrap;
-}
-
 .body {
   margin-left: var(--sidebar-width);
 }

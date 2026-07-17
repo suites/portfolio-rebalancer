@@ -7,9 +7,7 @@ import type {
 } from "@portfolio-rebalancer/contracts";
 import { Badge } from "@portfolio-rebalancer/ui";
 
-import { logoutOperatorAction } from "@/app/auth/actions";
 import { formatObservedAt } from "@/features/console/format";
-import type { OperatorPageContext } from "@/server/operator-auth";
 
 import styles from "./app-shell.module.css";
 import { SideNavigation } from "./side-navigation";
@@ -17,12 +15,10 @@ import { SideNavigation } from "./side-navigation";
 export function AppShell({
   snapshot,
   operational,
-  operator,
   children,
 }: {
   readonly snapshot: DashboardSnapshotContract;
   readonly operational: OperationalConfigSnapshotContract;
-  readonly operator: OperatorPageContext;
   readonly children: ReactNode;
 }) {
   const observedAt = formatObservedAt(snapshot.observedAt);
@@ -51,15 +47,9 @@ export function AppShell({
             나
           </span>
           <div>
-            <strong>{operator.operatorId}</strong>
+            <strong>개인 운영 콘솔</strong>
             <span>{snapshot.accountLabel ?? "계좌 확인 필요"}</span>
           </div>
-          <form action={logoutOperatorAction}>
-            <input type="hidden" name="_csrf" value={operator.csrfToken} />
-            <button className={styles.logoutButton} type="submit">
-              로그아웃
-            </button>
-          </form>
         </div>
       </aside>
 
@@ -92,13 +82,6 @@ export function AppShell({
                   ? "킬 스위치 해제"
                   : "킬 스위치 확인 불가"}
             </Badge>
-            <Link
-              className={styles.reauthLink}
-              href="/auth/reauth?returnTo=%2F"
-              aria-label={`운영자 ${operator.operatorId} 재인증`}
-            >
-              {operator.recentlyReauthenticated ? "재인증 유효" : "재인증 필요"}
-            </Link>
           </div>
         </header>
         <main id="main-content" className={styles.main} tabIndex={-1}>

@@ -18,12 +18,10 @@ export function SettingsScreen({
   settings,
   operational,
   status,
-  csrfToken,
 }: {
   readonly settings: TargetSettingsSnapshotContract;
   readonly operational: OperationalConfigSnapshotContract;
   readonly status: string | undefined;
-  readonly csrfToken: string;
 }) {
   const feedback = feedbackFor(
     settings.state === "UNAVAILABLE" || operational.state === "UNAVAILABLE"
@@ -87,7 +85,7 @@ export function SettingsScreen({
               ) : null}
             </div>
             {settings.assets.length > 0 ? (
-              <TargetSettingsEditor settings={settings} csrfToken={csrfToken} />
+              <TargetSettingsEditor settings={settings} />
             ) : (
               <div className={styles.emptyState}>
                 <strong>
@@ -154,7 +152,6 @@ export function SettingsScreen({
                   ))}
                 </ul>
                 <form action={activateTargetDraftAction}>
-                  <input type="hidden" name="_csrf" value={csrfToken} />
                   <input type="hidden" name="version" value={settings.draftVersion.version} />
                   <Button type="submit">검토한 초안 적용</Button>
                 </form>
@@ -169,7 +166,7 @@ export function SettingsScreen({
         </div>
 
         <Surface className={styles.surface}>
-          <OperationalSettingsPanel operational={operational} csrfToken={csrfToken} />
+          <OperationalSettingsPanel operational={operational} />
         </Surface>
       </div>
     </>
@@ -285,7 +282,7 @@ function feedbackFor(
   if (status === "operator-security-blocked")
     return {
       title: "운영자 보안 검증에서 요청을 차단했습니다.",
-      description: "세션, 동일 출처와 CSRF 토큰을 확인하지 못해 설정 엔진을 호출하지 않았습니다.",
+      description: "Tailscale 내부 콘솔 경계를 확인하지 못해 설정 엔진을 호출하지 않았습니다.",
       tone: "blocked",
     };
   return null;

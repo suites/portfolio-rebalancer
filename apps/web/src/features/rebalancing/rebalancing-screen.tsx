@@ -27,13 +27,11 @@ export function RebalancingScreen({
   plan,
   operational,
   actionStatus,
-  csrfToken,
 }: {
   readonly snapshot: DashboardSnapshotContract;
   readonly plan: RebalancePlanSnapshotContract;
   readonly operational: OperationalConfigSnapshotContract;
   readonly actionStatus: string | undefined;
-  readonly csrfToken: string;
 }) {
   const targetFixed =
     snapshot.allocations.length > 0 &&
@@ -157,7 +155,6 @@ export function RebalancingScreen({
           snapshot={snapshot}
           plan={plan}
           operational={operational}
-          csrfToken={csrfToken}
         />
       </div>
     </>
@@ -168,12 +165,10 @@ function PlanSurface({
   snapshot,
   plan,
   operational,
-  csrfToken,
 }: {
   readonly snapshot: DashboardSnapshotContract;
   readonly plan: RebalancePlanSnapshotContract;
   readonly operational: OperationalConfigSnapshotContract;
-  readonly csrfToken: string;
 }) {
   const latest = plan.latest;
   const canCreate =
@@ -210,21 +205,18 @@ function PlanSurface({
 
       <div className={styles.buttonRow}>
         <form action={createRebalancePlanAction}>
-          <input type="hidden" name="_csrf" value={csrfToken} />
           <input type="hidden" name="mode" value="SHADOW" />
           <Button type="submit" disabled={!canCreate}>
             Shadow 계획 만들기
           </Button>
         </form>
         <form action={createRebalancePlanAction}>
-          <input type="hidden" name="_csrf" value={csrfToken} />
           <input type="hidden" name="mode" value="PAPER" />
           <Button type="submit" disabled={!canCreate}>
             Paper 계획 만들기
           </Button>
         </form>
         <form action={createRebalancePlanAction}>
-          <input type="hidden" name="_csrf" value={csrfToken} />
           <input type="hidden" name="mode" value="LIVE" />
           <Button type="submit" disabled={!canCreate}>
             Live 계획만 만들기
@@ -260,7 +252,6 @@ function PlanSurface({
             </p>
           </div>
           <form action={executePaperPlanAction}>
-            <input type="hidden" name="_csrf" value={csrfToken} />
             <input type="hidden" name="planId" value={latest.planId} />
             <Button type="submit">Paper 주문 원장 실행</Button>
           </form>
@@ -285,7 +276,6 @@ function PlanSurface({
           />
           {operational.liveOrdersEnabled ? (
             <form className={styles.settingsForm} action={executeLivePlanAction}>
-              <input type="hidden" name="_csrf" value={csrfToken} />
               <input type="hidden" name="planId" value={latest.planId} />
               <input type="hidden" name="planHash" value={latest.planHash} />
               <label>
@@ -299,8 +289,7 @@ function PlanSurface({
                 />
               </label>
               <p className={styles.fieldDescription}>
-                이 동작은 최근 운영자 재인증이 유효할 때만 진행됩니다. 만료되었으면 재인증 화면으로
-                이동하며 승인이나 주문을 만들지 않습니다.
+                이 동작은 Tailscale 내부 콘솔과 Live 안전 조건을 통과할 때만 진행됩니다.
               </p>
               <Button type="submit">승인 생성 후 Live 첫 주문 1회 전송</Button>
             </form>
@@ -651,7 +640,7 @@ function actionFeedback(status: string): {
       "Live dispatch claim 또는 브로커 결과를 안전하게 기록하지 못해 추가 전송을 차단했습니다.",
     "order-input-invalid": "주문 실행 입력을 확인하지 못했습니다.",
     "operator-security-blocked":
-      "운영자 세션의 요청 출처 또는 CSRF 토큰을 확인하지 못해 엔진을 호출하지 않았습니다.",
+      "Tailscale 내부 콘솔 경계를 확인하지 못해 엔진을 호출하지 않았습니다.",
   };
   return {
     title: "리밸런싱 작업을 완료하지 못했습니다.",

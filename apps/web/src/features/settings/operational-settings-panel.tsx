@@ -53,10 +53,8 @@ const DEFAULT_CONFIG: OperationalConfigContract = {
 
 export function OperationalSettingsPanel({
   operational,
-  csrfToken,
 }: {
   readonly operational: OperationalConfigSnapshotContract;
-  readonly csrfToken: string;
 }) {
   const editable =
     operational.draftVersion?.config ?? operational.activeVersion?.config ?? DEFAULT_CONFIG;
@@ -102,7 +100,6 @@ export function OperationalSettingsPanel({
             ) : null}
           </div>
           <form className={styles.settingsForm} action={saveOperationalConfigDraftAction}>
-            <input type="hidden" name="_csrf" value={csrfToken} />
             <div className={styles.fieldGrid}>
               <label>
                 실행 모드
@@ -209,7 +206,6 @@ export function OperationalSettingsPanel({
                 </div>
               </dl>
               <form className={styles.settingsForm} action={activateOperationalConfigDraftAction}>
-                <input type="hidden" name="_csrf" value={csrfToken} />
                 <input type="hidden" name="version" value={operational.draftVersion.version} />
                 <input
                   type="hidden"
@@ -243,7 +239,6 @@ export function OperationalSettingsPanel({
               state="ENGAGED"
               label="즉시 킬 스위치 작동"
               placeholder="예: 주문 기능을 즉시 중단합니다."
-              csrfToken={csrfToken}
             />
             <SafetyCommandForm
               action={setKillSwitchAction}
@@ -251,7 +246,6 @@ export function OperationalSettingsPanel({
               label="킬 스위치 해제"
               placeholder="예: Paper 검증과 현재 설정을 다시 확인했습니다."
               secondary
-              csrfToken={csrfToken}
             />
           </div>
 
@@ -262,7 +256,6 @@ export function OperationalSettingsPanel({
               state="GRANTED"
               label="현재 설정을 극소액 Live로 승격"
               placeholder="예: 활성 Live 설정과 한도를 최종 확인했습니다."
-              csrfToken={csrfToken}
             />
             <SafetyCommandForm
               action={setLivePromotionAction}
@@ -270,7 +263,6 @@ export function OperationalSettingsPanel({
               label="Live 권한 회수"
               placeholder="예: Live 주문 권한을 안전하게 회수합니다."
               secondary
-              csrfToken={csrfToken}
             />
           </div>
         </Surface>
@@ -315,25 +307,22 @@ function SafetyCommandForm({
   label,
   placeholder,
   secondary = false,
-  csrfToken,
 }: {
   readonly action: (formData: FormData) => void | Promise<void>;
   readonly state: "ENGAGED" | "DISENGAGED" | "GRANTED" | "REVOKED";
   readonly label: string;
   readonly placeholder: string;
   readonly secondary?: boolean;
-  readonly csrfToken: string;
 }) {
   return (
     <form className={styles.inlineSafetyForm} action={action}>
-      <input type="hidden" name="_csrf" value={csrfToken} />
       <input type="hidden" name="state" value={state} />
       <label>
         {label} 사유
         <input name="reason" minLength={8} maxLength={500} placeholder={placeholder} required />
       </label>
       {state === "DISENGAGED" || state === "GRANTED" ? (
-        <p className={styles.fieldDescription}>이 완화 동작은 최근 운영자 재인증이 필요합니다.</p>
+        <p className={styles.fieldDescription}>이 동작은 Tailscale 내부 콘솔과 안전 조건이 필요합니다.</p>
       ) : null}
       <Button type="submit" variant={secondary ? "secondary" : "primary"}>
         {label}

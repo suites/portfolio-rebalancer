@@ -5,7 +5,6 @@ import {
   Controller,
   Get,
   Header,
-  Headers,
   HttpException,
   HttpCode,
   Inject,
@@ -26,7 +25,7 @@ import {
 import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
 import {
   operatorAuditActor,
-  requireOperatorAuditContext,
+  tailscaleOperatorAuditContext,
 } from "../../../common/auth/operator-audit-context";
 import { OperationalConfigService } from "../application/operational-config.service";
 import { OperationalConfigError } from "../domain/operational-config.error";
@@ -110,7 +109,6 @@ export class OperationalConfigController {
   @Header("cache-control", "no-store")
   async saveLivePromotion(
     @Body() body: unknown,
-    @Headers() headers: Record<string, string | string[] | undefined>,
   ) {
     const parsed = LivePromotionCommandSchema.safeParse(body);
     if (!parsed.success) {
@@ -122,11 +120,7 @@ export class OperationalConfigController {
     try {
       return await this.operationalConfig.saveLivePromotion(
         parsed.data,
-        operatorAuditActor(
-          requireOperatorAuditContext(headers, {
-            recentReauthentication: parsed.data.state === "GRANTED",
-          }),
-        ),
+        operatorAuditActor(tailscaleOperatorAuditContext()),
       );
     } catch (error) {
       throwOperationalConfigHttpError(error);

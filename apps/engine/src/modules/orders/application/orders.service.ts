@@ -225,7 +225,7 @@ export class OrdersService {
       if (!operator) {
         throw new OrderExecutionError(
           "ORDER_APPROVAL_INVALID",
-          "최근 재인증한 운영자 증거가 없어 Live 실행을 차단했습니다.",
+          "Live 실행 감사 주체가 없어 안전하게 차단했습니다.",
           "BAD_REQUEST",
         );
       }

@@ -76,7 +76,7 @@ Web GUI의 기준은 다음 계층으로 관리합니다.
 - 총 관리 자산, 사용자 지정 관리 현금과 토스 매수 가능 금액을 서로 다른 값으로 표시
 - 설정에서 관리 현금을 고정 원화 금액으로 포함하거나 평가에서 제외하고 `CASH` 목표를 별도 입력
 - 운영 설정 DRAFT 저장·해시 검토·별도 적용, 현재 계좌 서버 봉인, 킬 스위치와 Live 승격
-- 단일 운영자 로그인, 서명된 HttpOnly 세션, 동일 출처 CSRF와 위험 동작 최근 재인증
+- Tailscale 내부망·Caddy TLS와 Web→Engine 서비스 토큰 접근 경계
 - primitive·semantic·component 토큰과 `Button`, `Badge`, `Surface`, `StatusBanner`, `SummaryCard`, `AllocationBand`
 - 공통 Button·StatusBanner·AllocationBand의 정적 렌더링 계약 테스트
 
@@ -518,7 +518,7 @@ status.unknown
 
 - 기본 배포는 단일 호스트의 localhost 또는 명시적으로 보호된 사설 네트워크로 제한합니다.
 - 토스 client secret, access token과 Discord webhook은 서버에서만 보관하며 HTML, API 응답, 브라우저 저장소와 콘솔 로그에 포함하지 않습니다.
-- 세션 쿠키에는 `HttpOnly`, `Secure`, 적절한 `SameSite` 정책을 적용하고 상태 변경 요청은 CSRF로부터 보호합니다.
+- 접근 경계는 Tailscale 내부망, Caddy TLS와 Web→Engine 서비스 토큰으로 구성합니다.
 - 계획 생성과 주문 제출 API를 분리하고, 페이지 새로고침·뒤로 가기·중복 클릭·네트워크 재시도가 주문 재제출로 이어지지 않게 합니다.
 - 실행 버튼은 제출 직후 비활성화하되 UI 상태만 믿지 않고 서버의 논리 주문 고유성과 상태 검사를 사용합니다.
 - 새 스냅샷, 설정 변경 또는 계획 만료가 발생하면 기존 계획을 실행 불가로 표시합니다.
@@ -526,7 +526,7 @@ status.unknown
 - 사용자 승인, 설정 변경, 복구와 킬 스위치 변경을 감사 로그에 남깁니다.
 - CSP와 최소 권한 원칙을 적용하고 외부 스크립트·분석 도구가 금융 데이터나 식별자를 수집하지 않게 합니다.
 
-현재 `dev`와 `start` 명령은 모두 `127.0.0.1:13000`에 고정합니다. host-run production은 Caddy TLS와 Tailscale DNS-only A record를 통해 `stock.fredly.dev`로 제공하되 공용 인터넷에는 노출하지 않습니다. Tailscale 밖의 공개 배포는 별도 인증·세션·CSRF·CSP 검토 전에는 지원 범위가 아닙니다.
+현재 `dev`와 `start` 명령은 모두 `127.0.0.1:13000`에 고정합니다. host-run production은 Caddy TLS와 Tailscale DNS-only A record를 통해 `stock.fredly.dev`로 제공하되 공용 인터넷에는 노출하지 않습니다. Tailscale 밖의 공개 배포는 지원하지 않습니다.
 
 ## 17. 반응형 정책
 
@@ -564,8 +564,7 @@ Web GUI는 다음 수직 흐름 순서로 구현합니다.
 7. 접근성 E2E와 실거래 확인 흐름
 
 현재는 App Shell, 실제 포트폴리오, 계획 표와 예상 비중, 목표·운영 설정, Paper 실행,
-제한형 Live 확인, 주문 상태 머신, 취소·대사·복구, 킬 스위치, 단일 운영자 세션,
-동일 출처 CSRF와 위험 동작 최근 재인증까지 생산 구현되어 있습니다. 설정 변경 Diff와
+제한형 Live 확인, 주문 상태 머신, 취소·대사·복구, 킬 스위치까지 생산 구현되어 있습니다. 설정 변경 Diff와
 거래 영향 미리보기, 전체 Risk Gate 증거 표시, 전용 실행 영수증·감사 상세,
 doctor/explain, 자동 Phase B saga, CSP, WCAG와 전체 브라우저 E2E는 후속 범위입니다.
 

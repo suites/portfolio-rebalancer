@@ -33,8 +33,6 @@ import {
   type TargetSettingsSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
 
-import type { OperatorAuditContext } from "./operator-auth-core";
-
 const ENGINE_INTERNAL_URL = process.env.ENGINE_INTERNAL_URL ?? "http://127.0.0.1:4100";
 
 export class EngineConsoleRequestError extends Error {
@@ -46,6 +44,9 @@ export class EngineConsoleRequestError extends Error {
     this.name = "EngineConsoleRequestError";
   }
 }
+
+export type OperatorAuditContext = { readonly actor: "tailscale-operator" };
+export const TAILSCALE_OPERATOR: OperatorAuditContext = { actor: "tailscale-operator" };
 
 export const getEngineRecords = cache(async (): Promise<ConsoleRecordsSnapshotContract> => {
   try {
@@ -164,10 +165,9 @@ export async function activateEngineOperationalDraft(
 
 export async function saveEngineLivePromotion(
   input: LivePromotionCommandContract,
-  operator: OperatorAuditContext,
 ): Promise<OperationalConfigSnapshotContract> {
   return OperationalConfigSnapshotSchema.parse(
-    await requestEngine("/internal/v1/live-promotion", "POST", input, operator),
+    await requestEngine("/internal/v1/live-promotion", "POST", input),
   );
 }
 
@@ -177,14 +177,12 @@ export async function createEngineLivePlanApproval(
     readonly planHash: string;
     readonly confirmation: "LIVE 주문 계획과 금액을 확인했습니다";
   },
-  operator: OperatorAuditContext,
 ): Promise<LivePlanApprovalReceiptContract> {
   const receipt = LivePlanApprovalReceiptSchema.parse(
     await requestEngine(
       `/internal/v1/rebalance-plans/${input.planId}/live-approvals`,
       "POST",
       input,
-      operator,
     ),
   );
   if (receipt.planId !== input.planId || receipt.planHash !== input.planHash) {
@@ -199,14 +197,12 @@ export async function executeEngineRebalancePlan(
     readonly mode: "PAPER" | "LIVE";
     readonly approvalIds: readonly string[];
   },
-  operator: OperatorAuditContext,
 ): Promise<ExecuteRebalancePlanReceiptContract> {
   const receipt = ExecuteRebalancePlanReceiptSchema.parse(
     await requestEngine(
       `/internal/v1/rebalance-plans/${input.planId}/execute`,
       "POST",
       input,
-      operator,
     ),
   );
   if (receipt.planId !== input.planId || receipt.mode !== input.mode) {
@@ -217,19 +213,17 @@ export async function executeEngineRebalancePlan(
 
 export async function setEngineKillSwitch(
   input: KillSwitchCommandContract,
-  operator: OperatorAuditContext,
 ): Promise<OrdersSnapshotContract> {
   return OrdersSnapshotSchema.parse(
-    await requestEngine("/internal/v1/kill-switch", "POST", input, operator),
+    await requestEngine("/internal/v1/kill-switch", "POST", input),
   );
 }
 
 export async function cancelEngineOrder(
   input: CancelOrderInputContract,
-  operator: OperatorAuditContext,
 ): Promise<CancelOrderReceiptContract> {
   const receipt = CancelOrderReceiptSchema.parse(
-    await requestEngine(`/internal/v1/orders/${input.orderId}/cancel`, "POST", input, operator),
+    await requestEngine(`/internal/v1/orders/${input.orderId}/cancel`, "POST", input),
   );
   if (receipt.orderId !== input.orderId) {
     throw new EngineConsoleRequestError(502, "ENGINE_RECEIPT_MISMATCH");
@@ -239,10 +233,9 @@ export async function cancelEngineOrder(
 
 export async function reconcileEngineOrder(
   orderId: string,
-  operator: OperatorAuditContext,
 ): Promise<StoredOrderReceiptContract> {
   const receipt = StoredOrderReceiptSchema.parse(
-    await requestEngine(`/internal/v1/orders/${orderId}/reconcile`, "POST", undefined, operator),
+    await requestEngine(`/internal/v1/orders/${orderId}/reconcile`, "POST"),
   );
   if (receipt.orderId !== orderId) {
     throw new EngineConsoleRequestError(502, "ENGINE_RECEIPT_MISMATCH");
@@ -252,10 +245,9 @@ export async function reconcileEngineOrder(
 
 export async function recoverEngineUnknownOrder(
   input: RecoverUnknownOrderInputContract,
-  operator: OperatorAuditContext,
 ): Promise<StoredOrderReceiptContract> {
   const receipt = StoredOrderReceiptSchema.parse(
-    await requestEngine(`/internal/v1/orders/${input.orderId}/recover`, "POST", input, operator),
+    await requestEngine(`/internal/v1/orders/${input.orderId}/recover`, "POST", input),
   );
   if (receipt.orderId !== input.orderId) {
     throw new EngineConsoleRequestError(502, "ENGINE_RECEIPT_MISMATCH");
@@ -267,7 +259,6 @@ async function requestEngine(
   path: string,
   method: "GET" | "POST",
   body?: unknown,
-  operator?: OperatorAuditContext,
 ) {
   const serviceToken = process.env.ENGINE_SERVICE_TOKEN;
   const response = await fetch(new URL(path, ENGINE_INTERNAL_URL), {
@@ -275,14 +266,6 @@ async function requestEngine(
     headers: {
       ...(serviceToken ? { authorization: `Bearer ${serviceToken}` } : {}),
       ...(body === undefined ? {} : { "content-type": "application/json" }),
-      ...(operator
-        ? {
-            "x-portfolio-operator-id": operator.operatorId,
-            "x-portfolio-operator-session-id": operator.sessionId,
-            "x-portfolio-operator-authenticated-at": operator.authenticatedAt,
-            "x-portfolio-operator-reauthenticated-at": operator.reauthenticatedAt,
-          }
-        : {}),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     cache: "no-store",

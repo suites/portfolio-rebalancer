@@ -23,7 +23,7 @@
 - exact 브로커 증거를 요구하는 운영자 복구
 - 취소 요청의 일회성 dispatch와 원 주문 조회 기반 최종 상태 확정
 - 계좌 번호와 `accountSeq` 불일치, 오래된 설정·승격·킬 스위치 상태
-- 브라우저 세션, 동일 출처 CSRF, 최근 재인증과 내부 운영자 감사 헤더
+- Tailscale 내부망, Caddy TLS와 Web→Engine 서비스 토큰 경계
 - JSON 문자열과 이스케이프된 upstream 오류의 계좌·토큰 redaction
 - migration owner와 제한된 runtime 역할의 권한 분리
 

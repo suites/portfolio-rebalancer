@@ -5,7 +5,6 @@ import {
   Controller,
   Get,
   Header,
-  Headers,
   HttpException,
   HttpCode,
   Inject,
@@ -24,7 +23,7 @@ import {
 } from "@portfolio-rebalancer/contracts";
 
 import { ServiceTokenGuard } from "../../../common/auth/guards/service-token.guard";
-import { requireOperatorAuditContext } from "../../../common/auth/operator-audit-context";
+import { tailscaleOperatorAuditContext } from "../../../common/auth/operator-audit-context";
 import { OrdersService } from "../application/orders.service";
 import { OrderExecutionError } from "../domain/order-execution.error";
 
@@ -45,7 +44,6 @@ export class OrdersController {
   async createLivePlanApproval(
     @Param("planId") planId: string,
     @Body() body: unknown,
-    @Headers() headers: Record<string, string | string[] | undefined>,
   ) {
     const parsed = CreateLivePlanApprovalInputSchema.safeParse(body);
     if (!parsed.success || parsed.data.planId !== planId) {
@@ -60,7 +58,7 @@ export class OrdersController {
     try {
       return await this.orders.createLivePlanApproval(
         parsed.data,
-        requireOperatorAuditContext(headers, { recentReauthentication: true }),
+        tailscaleOperatorAuditContext(),
       );
     } catch (error) {
       throwOrderHttpError(error);
@@ -73,7 +71,6 @@ export class OrdersController {
   async execute(
     @Param("planId") planId: string,
     @Body() body: unknown,
-    @Headers() headers: Record<string, string | string[] | undefined>,
   ) {
     const parsed = ExecuteRebalancePlanInputSchema.safeParse(body);
     if (!parsed.success || parsed.data.planId !== planId) {
@@ -89,7 +86,7 @@ export class OrdersController {
       return await this.orders.execute(
         parsed.data,
         parsed.data.mode === "LIVE"
-          ? requireOperatorAuditContext(headers, { recentReauthentication: true })
+          ? tailscaleOperatorAuditContext()
           : undefined,
       );
     } catch (error) {
@@ -102,7 +99,6 @@ export class OrdersController {
   @Header("cache-control", "no-store")
   async setKillSwitch(
     @Body() body: unknown,
-    @Headers() headers: Record<string, string | string[] | undefined>,
   ) {
     const parsed = KillSwitchCommandSchema.safeParse(body);
     if (!parsed.success) {
@@ -114,9 +110,7 @@ export class OrdersController {
     try {
       return await this.orders.setKillSwitch(
         parsed.data,
-        requireOperatorAuditContext(headers, {
-          recentReauthentication: parsed.data.state === "DISENGAGED",
-        }),
+        tailscaleOperatorAuditContext(),
       );
     } catch (error) {
       throwOrderHttpError(error);
@@ -129,7 +123,6 @@ export class OrdersController {
   async cancel(
     @Param("orderId") orderId: string,
     @Body() body: unknown,
-    @Headers() headers: Record<string, string | string[] | undefined>,
   ) {
     const parsed = CancelOrderInputSchema.safeParse(body);
     if (!parsed.success || parsed.data.orderId !== orderId) {
@@ -144,7 +137,7 @@ export class OrdersController {
     try {
       return await this.orders.cancel(
         parsed.data,
-        requireOperatorAuditContext(headers, { recentReauthentication: true }),
+        tailscaleOperatorAuditContext(),
       );
     } catch (error) {
       throwOrderHttpError(error);
@@ -157,7 +150,6 @@ export class OrdersController {
   async recover(
     @Param("orderId") orderId: string,
     @Body() body: unknown,
-    @Headers() headers: Record<string, string | string[] | undefined>,
   ) {
     const parsed = RecoverUnknownOrderInputSchema.safeParse(body);
     if (!parsed.success || parsed.data.orderId !== orderId) {
@@ -172,7 +164,7 @@ export class OrdersController {
     try {
       return await this.orders.recoverUnknown(
         parsed.data,
-        requireOperatorAuditContext(headers, { recentReauthentication: true }),
+        tailscaleOperatorAuditContext(),
       );
     } catch (error) {
       throwOrderHttpError(error);

@@ -242,7 +242,7 @@ Web BFF는 다음 route를 제공합니다.
 
 Web의 Server Action/BFF는 위 내부 API를 호출할 수 있지만 브라우저에 service token,
 계좌 HMAC, 승인 ID나 Toss 비밀정보를 전달하지 않습니다. 모든 응답은 공유 Zod 계약으로
-재검증합니다. 콘솔은 서명된 단일 운영자 세션과 동일 출처 CSRF를 요구합니다. Live
+재검증합니다. 콘솔은 Tailscale 내부망과 Web→Engine 서비스 토큰 경계 안에서만 제공합니다. Live
 승인·실행, Live 승격, 킬 스위치 해제, 취소와 exact 복구는 최근 5분 이내 재인증
 증거를 engine 감사 헤더에 함께 전달하며, engine도 이 시간 경계를 다시 확인합니다.
 
