@@ -166,6 +166,17 @@
   font-size: 0.75rem;
 }
 
+.refreshForm {
+  margin-left: 0.25rem;
+}
+
+.refreshButton {
+  min-height: 34px;
+  padding-inline: 0.875rem;
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+
 .main {
   width: min(calc(100% - 3rem), var(--content-max));
   margin: 0 auto;
@@ -225,6 +236,9 @@
   .safetyBar > div {
     flex-wrap: wrap;
     gap: 0.5rem;
+  }
+  .refreshForm {
+    margin-left: 0;
   }
   .accountMeta {
     display: none;

@@ -62,6 +62,7 @@ import {
   executeLivePlanAction,
   executePaperPlanAction,
   refreshPortfolioFromHomeAction,
+  refreshPortfolioFromShellAction,
   saveTargetDraftAction,
   saveOperationalConfigDraftAction,
   searchTargetInstrumentAction,
@@ -99,6 +100,18 @@ describe("settings server actions", () => {
 
     expect(dashboardMocks.refreshEngineDashboard).toHaveBeenCalledOnce();
     expect(navigationMocks.redirect).toHaveBeenCalledWith("/");
+  });
+
+  it("상단 새로고침은 현재 화면을 벗어나지 않고 전체 정보를 갱신한다", async () => {
+    dashboardMocks.refreshEngineDashboard.mockResolvedValue({
+      state: "READY",
+      brokerConnection: "CONNECTED",
+    });
+
+    await refreshPortfolioFromShellAction(new FormData());
+
+    expect(dashboardMocks.refreshEngineDashboard).toHaveBeenCalledOnce();
+    expect(navigationMocks.redirect).not.toHaveBeenCalled();
   });
 
   it("홈의 최신 자산 수집에 실패하면 문제 해결 화면으로 안내한다", async () => {

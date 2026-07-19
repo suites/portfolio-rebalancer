@@ -43,6 +43,11 @@ export async function refreshPortfolioFromHomeAction(_formData: FormData) {
   redirect(snapshot.brokerConnection === "CONNECTED" ? "/" : "/troubleshooting");
 }
 
+export async function refreshPortfolioFromShellAction(_formData: FormData) {
+  await refreshEngineDashboard();
+  revalidatePath("/", "layout");
+}
+
 export async function createShadowPlanAction(_formData: FormData) {
   return createRebalancePlan("SHADOW");
 }

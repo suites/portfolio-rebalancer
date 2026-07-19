@@ -5,8 +5,9 @@ import type {
   DashboardSnapshotContract,
   OperationalConfigSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
-import { Badge } from "@portfolio-rebalancer/ui";
+import { Badge, Button } from "@portfolio-rebalancer/ui";
 
+import { refreshPortfolioFromShellAction } from "@/app/(console)/actions";
 import { formatObservedAt } from "@/features/console/format";
 
 import styles from "./app-shell.module.css";
@@ -82,6 +83,11 @@ export function AppShell({
                   ? "킬 스위치 해제"
                   : "킬 스위치 확인 불가"}
             </Badge>
+            <form action={refreshPortfolioFromShellAction} className={styles.refreshForm}>
+              <Button type="submit" variant="secondary" className={styles.refreshButton}>
+                정보 새로고침
+              </Button>
+            </form>
           </div>
         </header>
         <main id="main-content" className={styles.main} tabIndex={-1}>
