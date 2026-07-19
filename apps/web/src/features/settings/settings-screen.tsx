@@ -125,10 +125,6 @@ export function SettingsScreen({
                     <dd>{formatObservedAt(settings.draftVersion.createdAt)}</dd>
                   </div>
                   <div>
-                    <dt>목표 합계</dt>
-                    <dd>100%</dd>
-                  </div>
-                  <div>
                     <dt>관리 현금</dt>
                     <dd>{cashPolicyLabel(settings.draftVersion.cashPolicy)}</dd>
                   </div>
@@ -145,7 +141,7 @@ export function SettingsScreen({
                             ? ` · ${allocation.instruments
                                 .map(
                                   (instrument) =>
-                                    `${instrument.symbol} ${formatBasisPoints(
+                                    `${instrument.name} ${formatBasisPoints(
                                       instrument.withinAssetPoints,
                                     )}`,
                                 )

@@ -175,6 +175,57 @@ describe("SettingsScreen", () => {
     expect(html).not.toContain("Live 승격");
     expect(html).not.toContain("킬 스위치");
   });
+
+  it("버전 검토에서는 목표 합계를 숨기고 종목명을 표시한다", () => {
+    const settings = TargetSettingsSnapshotSchema.parse({
+      state: "CONFIGURED",
+      accountLabel: "****1234",
+      snapshotObservedAt: "2026-07-19T11:27:00.000Z",
+      snapshotTargetVersion: 1,
+      activeVersion: null,
+      draftVersion: {
+        version: 1,
+        status: "DRAFT",
+        createdAt: "2026-07-19T11:27:00.000Z",
+        cashPolicy: { mode: "EXCLUDED", version: "CASH_V1" },
+        allocations: [
+          {
+            assetKey: "CORE",
+            label: "핵심 공격자산",
+            targetBasisPoints: 10_000,
+            lowerBasisPoints: 9_500,
+            upperBasisPoints: 10_000,
+            bandPolicy: { mode: "AUTO", version: "MIXED_V1" },
+            compositionPolicy: { mode: "EQUAL", version: "EQUAL_V1" },
+            instruments: [
+              {
+                instrumentKey: "KR:069500",
+                validationId: null,
+                marketCountry: "KR",
+                listingMarket: "KOSPI",
+                symbol: "069500",
+                name: "KODEX 200",
+                englishName: null,
+                currency: "KRW",
+                withinAssetPoints: 10_000,
+              },
+            ],
+          },
+        ],
+      },
+      requiresCollection: false,
+      assets: [],
+      holdings: [],
+    });
+
+    const html = renderToStaticMarkup(
+      <SettingsScreen settings={settings} operational={operational()} status={undefined} />,
+    );
+
+    expect(html).not.toContain("목표 합계");
+    expect(html).toContain("KODEX 200 100%");
+    expect(html).not.toContain("069500 100%");
+  });
 });
 
 function operational() {
