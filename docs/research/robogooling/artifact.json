@@ -21,7 +21,12 @@
           "x": { "field": "period", "type": "nominal", "label": "기준 시점" },
           "y": { "field": "members", "type": "quantitative", "label": "누적 가입자 수" },
           "tooltip": [
-            { "field": "members", "type": "quantitative", "label": "누적 가입자", "format": "number" },
+            {
+              "field": "members",
+              "type": "quantitative",
+              "label": "누적 가입자",
+              "format": "number"
+            },
             { "field": "source_label", "type": "nominal", "label": "공개 출처" }
           ]
         }
@@ -29,13 +34,41 @@
     ],
     "tables": [],
     "sources": [
-      { "id": "official_pop_robo", "label": "삼성증권 POP Robo 공식 안내", "path": "https://www.samsungpop.com/mbw/assetMng/popRobo.pop" },
-      { "id": "official_gooling_notice", "label": "삼성증권 굴링 서비스 공식 유의사항", "path": "https://www.samsungpop.com/ux/kor/customer/guide/eventguide/eventViewContent.do?MenuSeqNo=2785&menuNo=01010900" },
-      { "id": "robogooling_2023", "label": "로보굴링 2023년 서비스 소개", "path": "https://www.edaily.co.kr/News/Read?mediaCodeNo=257&newsId=02204166635545616" },
-      { "id": "robogooling_2024", "label": "로보굴링 2024년 서비스 소개", "path": "https://www.mt.co.kr/stock/2024/03/12/2024031209201399681" },
-      { "id": "robogooling_ops_2024", "label": "로보굴링 2024년 운용 및 사후관리 소개", "path": "https://www.mt.co.kr/stock/2024/06/26/2024062611084599670" },
-      { "id": "robogooling_2025", "label": "굴링 서비스 2025년 이용 현황", "path": "https://www.yna.co.kr/view/AKR20250226047400008" },
-      { "id": "compiled_adoption", "label": "로보굴링 공개 가입자 수 정리", "path": "docs/research/robogooling/source-notes.md" },
+      {
+        "id": "official_pop_robo",
+        "label": "삼성증권 POP Robo 공식 안내",
+        "path": "https://www.samsungpop.com/mbw/assetMng/popRobo.pop"
+      },
+      {
+        "id": "official_gooling_notice",
+        "label": "삼성증권 굴링 서비스 공식 유의사항",
+        "path": "https://www.samsungpop.com/ux/kor/customer/guide/eventguide/eventViewContent.do?MenuSeqNo=2785&menuNo=01010900"
+      },
+      {
+        "id": "robogooling_2023",
+        "label": "로보굴링 2023년 서비스 소개",
+        "path": "https://www.edaily.co.kr/News/Read?mediaCodeNo=257&newsId=02204166635545616"
+      },
+      {
+        "id": "robogooling_2024",
+        "label": "로보굴링 2024년 서비스 소개",
+        "path": "https://www.mt.co.kr/stock/2024/03/12/2024031209201399681"
+      },
+      {
+        "id": "robogooling_ops_2024",
+        "label": "로보굴링 2024년 운용 및 사후관리 소개",
+        "path": "https://www.mt.co.kr/stock/2024/06/26/2024062611084599670"
+      },
+      {
+        "id": "robogooling_2025",
+        "label": "굴링 서비스 2025년 이용 현황",
+        "path": "https://www.yna.co.kr/view/AKR20250226047400008"
+      },
+      {
+        "id": "compiled_adoption",
+        "label": "로보굴링 공개 가입자 수 정리",
+        "path": "docs/research/robogooling/source-notes.md"
+      },
       { "id": "repo_readme", "label": "Portfolio Rebalancer README", "path": "README.md" },
       { "id": "repo_spec", "label": "Portfolio Rebalancer 시스템 명세", "path": "docs/SPEC.md" },
       { "id": "repo_todo", "label": "Portfolio Rebalancer 구현 계획", "path": "docs/TODO.md" }
@@ -141,15 +174,99 @@
     "accessIssues": []
   },
   "sources": [
-    { "id": "official_pop_robo", "query": { "engine": "web", "description": "삼성증권이 설명하는 로보어드바이저의 추천·매수·리밸런싱 및 가입 절차", "url": "https://www.samsungpop.com/mbw/assetMng/popRobo.pop", "executed_at": "2026-07-19T12:00:00+09:00" } },
-    { "id": "official_gooling_notice", "query": { "engine": "web", "description": "로보굴링의 목표·기간·금액·기대수익률 입력과 공식 유의사항", "url": "https://www.samsungpop.com/ux/kor/customer/guide/eventguide/eventViewContent.do?MenuSeqNo=2785&menuNo=01010900", "executed_at": "2026-07-19T12:00:00+09:00" } },
-    { "id": "robogooling_2023", "query": { "engine": "web", "description": "2023년 로보굴링 포트폴리오 구성·수정·사후관리 소개", "url": "https://www.edaily.co.kr/News/Read?mediaCodeNo=257&newsId=02204166635545616", "executed_at": "2026-07-19T12:00:00+09:00" } },
-    { "id": "robogooling_2024", "query": { "engine": "web", "description": "2024년 로보굴링 개인화·구성상품·적립식 이용 소개", "url": "https://www.mt.co.kr/stock/2024/03/12/2024031209201399681", "executed_at": "2026-07-19T12:00:00+09:00" } },
-    { "id": "robogooling_ops_2024", "query": { "engine": "web", "description": "2024년 로보굴링 월간 운용보고와 리밸런싱 알림 소개", "url": "https://www.mt.co.kr/stock/2024/06/26/2024062611084599670", "executed_at": "2026-07-19T12:00:00+09:00" } },
-    { "id": "robogooling_2025", "query": { "engine": "web", "description": "2025년 굴링 서비스 이용자와 사후관리 현황", "url": "https://www.yna.co.kr/view/AKR20250226047400008", "executed_at": "2026-07-19T12:00:00+09:00" } },
-    { "id": "compiled_adoption", "query": { "engine": "sqlite", "sql": "SELECT period, members, source_label FROM (VALUES ('2023년 2월 말', 11000, '이데일리 2023-03-21'), ('2024년 3월', 30000, '머니투데이 2024-03-12'), ('2024년 5월 말', 38000, '머니투데이 2024-06-26')) AS adoption(period, members, source_label)", "description": "동일한 로보굴링 누적 가입자 기준의 세 공개 시점을 수작업으로 정규화한 데이터", "language": "sql", "metric_definitions": { "members": "각 기준 시점까지 로보굴링에 누적 가입한 것으로 삼성증권이 발표하고 언론이 인용한 인원수" }, "filters": { "included": "로보굴링 단일 서비스 누적 가입자", "excluded": "로보굴링·연금굴링·주식굴링 합산 수치와 수익률" } } },
-    { "id": "repo_readme", "query": { "engine": "filesystem", "description": "현재 구현 범위와 사용자 운용 흐름", "language": "markdown" } },
-    { "id": "repo_spec", "query": { "engine": "filesystem", "description": "자동화·주문·위험 차단의 시스템 계약", "language": "markdown" } },
-    { "id": "repo_todo", "query": { "engine": "filesystem", "description": "사용성·알림·복구·운영의 미완료 항목", "language": "markdown" } }
+    {
+      "id": "official_pop_robo",
+      "query": {
+        "engine": "web",
+        "description": "삼성증권이 설명하는 로보어드바이저의 추천·매수·리밸런싱 및 가입 절차",
+        "url": "https://www.samsungpop.com/mbw/assetMng/popRobo.pop",
+        "executed_at": "2026-07-19T12:00:00+09:00"
+      }
+    },
+    {
+      "id": "official_gooling_notice",
+      "query": {
+        "engine": "web",
+        "description": "로보굴링의 목표·기간·금액·기대수익률 입력과 공식 유의사항",
+        "url": "https://www.samsungpop.com/ux/kor/customer/guide/eventguide/eventViewContent.do?MenuSeqNo=2785&menuNo=01010900",
+        "executed_at": "2026-07-19T12:00:00+09:00"
+      }
+    },
+    {
+      "id": "robogooling_2023",
+      "query": {
+        "engine": "web",
+        "description": "2023년 로보굴링 포트폴리오 구성·수정·사후관리 소개",
+        "url": "https://www.edaily.co.kr/News/Read?mediaCodeNo=257&newsId=02204166635545616",
+        "executed_at": "2026-07-19T12:00:00+09:00"
+      }
+    },
+    {
+      "id": "robogooling_2024",
+      "query": {
+        "engine": "web",
+        "description": "2024년 로보굴링 개인화·구성상품·적립식 이용 소개",
+        "url": "https://www.mt.co.kr/stock/2024/03/12/2024031209201399681",
+        "executed_at": "2026-07-19T12:00:00+09:00"
+      }
+    },
+    {
+      "id": "robogooling_ops_2024",
+      "query": {
+        "engine": "web",
+        "description": "2024년 로보굴링 월간 운용보고와 리밸런싱 알림 소개",
+        "url": "https://www.mt.co.kr/stock/2024/06/26/2024062611084599670",
+        "executed_at": "2026-07-19T12:00:00+09:00"
+      }
+    },
+    {
+      "id": "robogooling_2025",
+      "query": {
+        "engine": "web",
+        "description": "2025년 굴링 서비스 이용자와 사후관리 현황",
+        "url": "https://www.yna.co.kr/view/AKR20250226047400008",
+        "executed_at": "2026-07-19T12:00:00+09:00"
+      }
+    },
+    {
+      "id": "compiled_adoption",
+      "query": {
+        "engine": "sqlite",
+        "sql": "SELECT period, members, source_label FROM (VALUES ('2023년 2월 말', 11000, '이데일리 2023-03-21'), ('2024년 3월', 30000, '머니투데이 2024-03-12'), ('2024년 5월 말', 38000, '머니투데이 2024-06-26')) AS adoption(period, members, source_label)",
+        "description": "동일한 로보굴링 누적 가입자 기준의 세 공개 시점을 수작업으로 정규화한 데이터",
+        "language": "sql",
+        "metric_definitions": {
+          "members": "각 기준 시점까지 로보굴링에 누적 가입한 것으로 삼성증권이 발표하고 언론이 인용한 인원수"
+        },
+        "filters": {
+          "included": "로보굴링 단일 서비스 누적 가입자",
+          "excluded": "로보굴링·연금굴링·주식굴링 합산 수치와 수익률"
+        }
+      }
+    },
+    {
+      "id": "repo_readme",
+      "query": {
+        "engine": "filesystem",
+        "description": "현재 구현 범위와 사용자 운용 흐름",
+        "language": "markdown"
+      }
+    },
+    {
+      "id": "repo_spec",
+      "query": {
+        "engine": "filesystem",
+        "description": "자동화·주문·위험 차단의 시스템 계약",
+        "language": "markdown"
+      }
+    },
+    {
+      "id": "repo_todo",
+      "query": {
+        "engine": "filesystem",
+        "description": "사용성·알림·복구·운영의 미완료 항목",
+        "language": "markdown"
+      }
+    }
   ]
 }
