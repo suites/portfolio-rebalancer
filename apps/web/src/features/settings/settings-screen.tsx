@@ -12,6 +12,7 @@ import { ConsolePageHeader } from "@/features/console/page-header";
 import styles from "@/features/console/console.module.css";
 
 import { TargetSettingsEditor } from "./target-settings-editor";
+import { GuidedPortfolioBuilder } from "./guided-portfolio-builder";
 import { OperationalSettingsPanel } from "./operational-settings-panel";
 
 export function SettingsScreen({
@@ -32,8 +33,8 @@ export function SettingsScreen({
     <>
       <ConsolePageHeader
         eyebrow="설정"
-        title="목표 비중 설정"
-        description="관리 현금의 기준과 자산별 목표 비중을 정하면 허용 범위는 서버가 자동 계산합니다."
+        title="포트폴리오 만들기"
+        description="투자성향을 고르면 승인된 종목과 목표 비중을 자동으로 구성합니다. 추천안을 확인하고 승인만 하세요."
       />
       <div className={styles.pageStack}>
         {feedback ? (
@@ -73,29 +74,37 @@ export function SettingsScreen({
           </Surface>
         </section>
 
-        <div className={styles.grid2}>
-          <Surface className={styles.surface} aria-labelledby="target-form-title">
-            <div className={styles.sectionHeader}>
-              <div>
-                <h2 id="target-form-title">목표 초안</h2>
-                <p>목표 합계를 100%로 맞춰 주세요. 허용 범위는 목표의 25%, 최대 ±5%p입니다.</p>
-              </div>
-              {settings.draftVersion ? (
-                <Badge tone="attention">초안 v{settings.draftVersion.version}</Badge>
-              ) : null}
+        <Surface className={styles.surface} aria-labelledby="target-form-title">
+          <div className={styles.sectionHeader}>
+            <div>
+              <h2 id="target-form-title">추천 포트폴리오</h2>
+              <p>추천안 저장, 적용, 주문 실행은 서로 분리되어 있습니다.</p>
             </div>
-            {settings.assets.length > 0 ? (
-              <TargetSettingsEditor settings={settings} />
-            ) : (
-              <div className={styles.emptyState}>
-                <strong>
-                  {settings.state === "UNAVAILABLE"
-                    ? "설정 정보를 불러올 수 없습니다."
-                    : "설정할 보유자산이 없습니다."}
-                </strong>
-                <p>문제 해결에서 계좌 정보를 먼저 확인해 주세요.</p>
-              </div>
-            )}
+            {settings.draftVersion ? (
+              <Badge tone="attention">초안 v{settings.draftVersion.version}</Badge>
+            ) : null}
+          </div>
+          {settings.assets.length > 0 ? (
+            <GuidedPortfolioBuilder settings={settings} />
+          ) : (
+            <div className={styles.emptyState}>
+              <strong>
+                {settings.state === "UNAVAILABLE"
+                  ? "설정 정보를 불러올 수 없습니다."
+                  : "추천에 사용할 보유자산이 없습니다."}
+              </strong>
+              <p>문제 해결에서 계좌 정보를 먼저 확인해 주세요.</p>
+            </div>
+          )}
+        </Surface>
+
+        <div className={styles.grid2}>
+          <Surface className={styles.surface}>
+            <details className={styles.advancedSettings}>
+              <summary>직접 종목과 비중 조정하기</summary>
+              <p>종목 검색, 관리 현금, 자산군과 세부 비중을 직접 바꾸려는 경우에만 여세요.</p>
+              {settings.assets.length > 0 ? <TargetSettingsEditor settings={settings} /> : null}
+            </details>
           </Surface>
 
           <Surface className={styles.surface} aria-labelledby="version-title">
@@ -166,7 +175,11 @@ export function SettingsScreen({
         </div>
 
         <Surface className={styles.surface}>
-          <OperationalSettingsPanel operational={operational} />
+          <details className={styles.advancedSettings}>
+            <summary>실행 안전 고급 설정</summary>
+            <p>Paper 기본값, 거래 한도, 킬 스위치와 Live 승격을 관리할 때만 여세요.</p>
+            <OperationalSettingsPanel operational={operational} />
+          </details>
         </Surface>
       </div>
     </>

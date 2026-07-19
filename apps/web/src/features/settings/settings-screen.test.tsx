@@ -60,7 +60,7 @@ describe("SettingsScreen", () => {
     expect(html).not.toContain("목표 초안을 저장하지 못했습니다.");
   });
 
-  it("기본 설정에서는 목표만 입력하고 하한·상한은 자동 정책으로 안내한다", () => {
+  it("기본 설정에서는 투자성향 추천안을 먼저 보여주고 상세 입력은 고급 설정에 둔다", () => {
     const settings = TargetSettingsSnapshotSchema.parse({
       state: "NOT_CONFIGURED",
       accountLabel: "****1234",
@@ -103,6 +103,7 @@ describe("SettingsScreen", () => {
           currentBasisPointHundredths: 1_000_000,
         },
       ],
+      guidedRecommendations: guidedRecommendations(),
     });
 
     const html = renderToStaticMarkup(
@@ -112,7 +113,13 @@ describe("SettingsScreen", () => {
     expect(html).toContain('name="targetPercent"');
     expect(html).not.toContain('name="lowerPercent"');
     expect(html).not.toContain('name="upperPercent"');
-    expect(html).toContain("목표의 25%, 최대 ±5%p");
+    expect(html).toContain("포트폴리오 만들기");
+    expect(html).toContain("투자성향만 고르면");
+    expect(html).toContain("균형형 추천안");
+    expect(html).toContain("추천 종목</dt><dd>4개");
+    expect(html).toContain("이 추천안으로 초안 만들기");
+    expect(html).toContain("직접 종목과 비중 조정하기");
+    expect(html).toContain("실행 안전 고급 설정");
     expect(html).toContain('name="cashMode"');
     expect(html).toContain('name="managedCashWon"');
     expect(html).toContain('name="instrumentClass"');
@@ -181,6 +188,61 @@ function operational() {
     livePromotion: "UNKNOWN",
     liveOrdersEnabled: false,
   });
+}
+
+function guidedRecommendations() {
+  const instruments = [
+    {
+      instrumentKey: "KR:114260",
+      name: "KODEX 국고채3년",
+      assetClass: "SAFE" as const,
+      role: "가격 변동을 낮추는 국내 국고채",
+    },
+    {
+      instrumentKey: "KR:069500",
+      name: "KODEX 200",
+      assetClass: "CORE" as const,
+      role: "한국 대표 기업에 분산 투자",
+    },
+    {
+      instrumentKey: "KR:379800",
+      name: "KODEX 미국S&P500",
+      assetClass: "CORE" as const,
+      role: "미국 대형주 전반에 분산 투자",
+    },
+    {
+      instrumentKey: "KR:379810",
+      name: "KODEX 미국나스닥100",
+      assetClass: "CORE" as const,
+      role: "미국 성장기업에 분산 투자",
+    },
+  ];
+  const retiringHoldings = [
+    {
+      instrumentKey: "KR:005930",
+      label: "삼성전자",
+      description: "KR · KRW · 1주",
+      currentBasisPointHundredths: 1_000_000,
+    },
+  ];
+  const memberships = [
+    ...instruments.map(({ instrumentKey, assetClass }) => ({ instrumentKey, assetClass })),
+    { instrumentKey: "KR:005930", assetClass: "SATELLITE" as const },
+  ];
+  return [
+    ["STABLE", "안정형", 60, 40],
+    ["BALANCED", "균형형", 35, 65],
+    ["GROWTH", "성장형", 15, 85],
+  ].map(([profile, title, safePercent, corePercent]) => ({
+    profile,
+    title,
+    description: `${title} 설명`,
+    safePercent,
+    corePercent,
+    instruments,
+    memberships,
+    retiringHoldings,
+  }));
 }
 
 function operationalWithDraft(contentHash: string) {

@@ -15,6 +15,7 @@ export async function getTargetSettings(
     return TargetSettingsSnapshotSchema.parse({
       state: "NO_SNAPSHOT",
       accountLabel: null,
+      totalManagedAssetsMinor: null,
       snapshotObservedAt: null,
       snapshotTargetVersion: null,
       activeVersion: null,
@@ -22,6 +23,7 @@ export async function getTargetSettings(
       requiresCollection: false,
       assets: [],
       holdings: [],
+      guidedRecommendations: guidedPortfolioRecommendations([]),
     });
   }
 
@@ -34,9 +36,17 @@ export async function getTargetSettings(
       holding.marketValueKrwMinor,
     ]),
   );
+  const holdings = snapshot.holdings.map((holding) => ({
+    instrumentKey: `${holding.marketCountry}:${holding.symbol}`,
+    label: holding.name,
+    description: `${holding.marketCountry} · ${holding.currency} · ${holding.quantity}주`,
+    currentBasisPointHundredths:
+      total === 0n ? 0 : Number((holding.marketValueKrwMinor * 1_000_000n) / total),
+  }));
   return TargetSettingsSnapshotSchema.parse({
     state: activeVersion ? "CONFIGURED" : "NOT_CONFIGURED",
     accountLabel: snapshot.account.maskedNumber,
+    totalManagedAssetsMinor: snapshot.totalValueMinor.toString(),
     snapshotObservedAt: snapshot.observedAt.toISOString(),
     snapshotTargetVersion: snapshot.targetConfigVersion?.version ?? null,
     activeVersion: activeVersion ? presentVersion(activeVersion) : null,
@@ -69,13 +79,8 @@ export async function getTargetSettings(
         currentBasisPointHundredths: total === 0n ? 0 : Number((valueMinor * 1_000_000n) / total),
       };
     }),
-    holdings: snapshot.holdings.map((holding) => ({
-      instrumentKey: `${holding.marketCountry}:${holding.symbol}`,
-      label: holding.name,
-      description: `${holding.marketCountry} · ${holding.currency} · ${holding.quantity}주`,
-      currentBasisPointHundredths:
-        total === 0n ? 0 : Number((holding.marketValueKrwMinor * 1_000_000n) / total),
-    })),
+    holdings,
+    guidedRecommendations: guidedPortfolioRecommendations(holdings),
   });
 }
 
@@ -183,4 +188,81 @@ function targetClassAssets() {
       description: "리밸런싱에 포함할 관리 현금",
     },
   ];
+}
+
+const approvedGuidedUniverse = [
+  {
+    instrumentKey: "KR:114260",
+    name: "KODEX 국고채3년",
+    assetClass: "SAFE" as const,
+    role: "가격 변동을 낮추는 국내 국고채",
+  },
+  {
+    instrumentKey: "KR:069500",
+    name: "KODEX 200",
+    assetClass: "CORE" as const,
+    role: "한국 대표 기업에 분산 투자",
+  },
+  {
+    instrumentKey: "KR:379800",
+    name: "KODEX 미국S&P500",
+    assetClass: "CORE" as const,
+    role: "미국 대형주 전반에 분산 투자",
+  },
+  {
+    instrumentKey: "KR:379810",
+    name: "KODEX 미국나스닥100",
+    assetClass: "CORE" as const,
+    role: "미국 성장기업에 분산 투자",
+  },
+];
+
+function guidedPortfolioRecommendations(
+  holdings: readonly {
+    readonly instrumentKey: string;
+    readonly label: string;
+    readonly description: string;
+    readonly currentBasisPointHundredths: number;
+  }[],
+) {
+  const modelKeys = new Set(approvedGuidedUniverse.map(({ instrumentKey }) => instrumentKey));
+  const retiringHoldings = holdings.filter(({ instrumentKey }) => !modelKeys.has(instrumentKey));
+  const memberships = [
+    ...approvedGuidedUniverse.map(({ instrumentKey, assetClass }) => ({
+      instrumentKey,
+      assetClass,
+    })),
+    ...retiringHoldings.map(({ instrumentKey }) => ({
+      instrumentKey,
+      assetClass: "SATELLITE" as const,
+    })),
+  ];
+  return [
+    {
+      profile: "STABLE" as const,
+      title: "안정형",
+      description: "손실 변동을 줄이는 것을 우선하고 국고채 비중을 높입니다.",
+      safePercent: 60,
+      corePercent: 40,
+    },
+    {
+      profile: "BALANCED" as const,
+      title: "균형형",
+      description: "안정성과 장기 성장을 함께 고려하는 기본 추천입니다.",
+      safePercent: 35,
+      corePercent: 65,
+    },
+    {
+      profile: "GROWTH" as const,
+      title: "성장형",
+      description: "장기 가격 변동을 감수하고 주식형 자산 비중을 높입니다.",
+      safePercent: 15,
+      corePercent: 85,
+    },
+  ].map((profile) => ({
+    ...profile,
+    instruments: approvedGuidedUniverse,
+    memberships,
+    retiringHoldings,
+  }));
 }

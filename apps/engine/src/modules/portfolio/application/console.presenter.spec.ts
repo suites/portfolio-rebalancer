@@ -100,6 +100,24 @@ describe("getTargetSettings", () => {
         label: "Apple",
       }),
     ]);
+    expect(result.guidedRecommendations).toHaveLength(3);
+    const balanced = result.guidedRecommendations.find(({ profile }) => profile === "BALANCED");
+    expect(balanced?.safePercent).toBe(35);
+    expect(balanced?.corePercent).toBe(65);
+    expect(balanced?.instruments).toContainEqual(
+      expect.objectContaining({ instrumentKey: "KR:114260", assetClass: "SAFE" }),
+    );
+    expect(balanced?.retiringHoldings.map(({ instrumentKey }) => instrumentKey)).toEqual([
+      "US:AAPL",
+    ]);
+    expect(balanced?.memberships).toContainEqual({
+      instrumentKey: "US:AAPL",
+      assetClass: "SATELLITE",
+    });
+    for (const recommendation of result.guidedRecommendations) {
+      expect(recommendation.instruments.length).toBeLessThanOrEqual(7);
+      expect(recommendation.safePercent + recommendation.corePercent).toBe(100);
+    }
     expect(result.requiresCollection).toBe(true);
   });
 });

@@ -273,9 +273,35 @@ export const TargetSettingsHoldingSchema = z.object({
   currentBasisPointHundredths: z.number().int().min(0).max(1_000_000),
 });
 
+export const GuidedPortfolioRecommendationSchema = z.object({
+  profile: z.enum(["STABLE", "BALANCED", "GROWTH"]),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  safePercent: z.number().int().min(0).max(100),
+  corePercent: z.number().int().min(0).max(100),
+  instruments: z
+    .array(
+      z.object({
+        instrumentKey,
+        name: z.string().min(1),
+        assetClass: z.enum(["SAFE", "CORE"]),
+        role: z.string().min(1),
+      }),
+    )
+    .max(7),
+  memberships: z.array(
+    z.object({
+      instrumentKey,
+      assetClass: z.enum(["SAFE", "CORE", "SATELLITE"]),
+    }),
+  ),
+  retiringHoldings: z.array(TargetSettingsHoldingSchema),
+});
+
 export const TargetSettingsSnapshotSchema = z.object({
   state: z.enum(["NO_SNAPSHOT", "NOT_CONFIGURED", "CONFIGURED", "UNAVAILABLE"]),
   accountLabel: z.string().min(1).nullable(),
+  totalManagedAssetsMinor: minorUnitString.nullable().default(null),
   snapshotObservedAt: z.iso.datetime({ offset: true }).nullable(),
   snapshotTargetVersion: z.number().int().positive().nullable(),
   activeVersion: TargetSettingsVersionSchema.nullable(),
@@ -283,6 +309,7 @@ export const TargetSettingsSnapshotSchema = z.object({
   requiresCollection: z.boolean(),
   assets: z.array(TargetSettingsAssetSchema),
   holdings: z.array(TargetSettingsHoldingSchema),
+  guidedRecommendations: z.array(GuidedPortfolioRecommendationSchema).default([]),
 });
 
 export const ConsoleCheckSchema = z.object({
@@ -310,4 +337,7 @@ export const ConsoleRecordsSnapshotSchema = z.object({
 export type TargetSettingsDraftInputContract = z.infer<typeof TargetSettingsDraftInputSchema>;
 export type TargetStoredCashPolicyContract = z.infer<typeof TargetStoredCashPolicySchema>;
 export type TargetSettingsSnapshotContract = z.infer<typeof TargetSettingsSnapshotSchema>;
+export type GuidedPortfolioRecommendationContract = z.infer<
+  typeof GuidedPortfolioRecommendationSchema
+>;
 export type ConsoleRecordsSnapshotContract = z.infer<typeof ConsoleRecordsSnapshotSchema>;
