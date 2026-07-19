@@ -37,6 +37,12 @@ export async function refreshPortfolioAction(_formData: FormData) {
   redirect("/troubleshooting");
 }
 
+export async function refreshPortfolioFromHomeAction(_formData: FormData) {
+  const snapshot = await refreshEngineDashboard();
+  revalidatePath("/", "layout");
+  redirect(snapshot.brokerConnection === "CONNECTED" ? "/" : "/troubleshooting");
+}
+
 export async function createShadowPlanAction(_formData: FormData) {
   return createRebalancePlan("SHADOW");
 }

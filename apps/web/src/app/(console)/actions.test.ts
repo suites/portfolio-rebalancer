@@ -21,10 +21,13 @@ const navigationMocks = vi.hoisted(() => ({
     throw new Error("REDIRECT");
   }),
 }));
+const dashboardMocks = vi.hoisted(() => ({
+  refreshEngineDashboard: vi.fn(),
+}));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => navigationMocks);
-vi.mock("@/server/engine-dashboard", () => ({ refreshEngineDashboard: vi.fn() }));
+vi.mock("@/server/engine-dashboard", () => dashboardMocks);
 vi.mock("@/server/engine-console", () => ({
   activateEngineTargetDraft: vi.fn(),
   activateEngineOperationalDraft: engineMocks.activateEngineOperationalDraft,
@@ -58,6 +61,7 @@ import {
   createShadowPlanAction,
   executeLivePlanAction,
   executePaperPlanAction,
+  refreshPortfolioFromHomeAction,
   saveTargetDraftAction,
   saveOperationalConfigDraftAction,
   searchTargetInstrumentAction,
@@ -83,6 +87,29 @@ const initialSaveState: SaveTargetDraftActionState = {
 describe("settings server actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("홈의 최신 자산 수집을 마치면 홈으로 돌아간다", async () => {
+    dashboardMocks.refreshEngineDashboard.mockResolvedValue({
+      state: "READY",
+      brokerConnection: "CONNECTED",
+    });
+
+    await expect(refreshPortfolioFromHomeAction(new FormData())).rejects.toThrow("REDIRECT");
+
+    expect(dashboardMocks.refreshEngineDashboard).toHaveBeenCalledOnce();
+    expect(navigationMocks.redirect).toHaveBeenCalledWith("/");
+  });
+
+  it("홈의 최신 자산 수집에 실패하면 문제 해결 화면으로 안내한다", async () => {
+    dashboardMocks.refreshEngineDashboard.mockResolvedValue({
+      state: "BLOCKED",
+      brokerConnection: "FAILED",
+    });
+
+    await expect(refreshPortfolioFromHomeAction(new FormData())).rejects.toThrow("REDIRECT");
+
+    expect(navigationMocks.redirect).toHaveBeenCalledWith("/troubleshooting");
   });
 
   it("같은 영문 입력도 사용자가 선택한 로컬 이름 검색 intent를 따른다", async () => {

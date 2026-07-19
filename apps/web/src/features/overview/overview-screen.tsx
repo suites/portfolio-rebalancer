@@ -19,6 +19,7 @@ import {
   formatObservedAt,
   formatWon,
 } from "@/features/console/format";
+import { refreshPortfolioFromHomeAction } from "@/app/(console)/actions";
 
 import styles from "./overview.module.css";
 
@@ -46,14 +47,21 @@ export function OverviewScreen({ snapshot }: OverviewScreenProps) {
             오늘의 자산 상태예요.
           </h1>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          aria-pressed={amountsHidden}
-          onClick={() => setAmountsHidden((hidden) => !hidden)}
-        >
-          {amountsHidden ? "금액 보기" : "금액 숨기기"}
-        </Button>
+        <div className={styles.headerActions}>
+          <form action={refreshPortfolioFromHomeAction}>
+            <Button type="submit" variant="secondary">
+              최신 자산 가져오기
+            </Button>
+          </form>
+          <Button
+            type="button"
+            variant="secondary"
+            aria-pressed={amountsHidden}
+            onClick={() => setAmountsHidden((hidden) => !hidden)}
+          >
+            {amountsHidden ? "금액 보기" : "금액 숨기기"}
+          </Button>
+        </div>
       </div>
 
       <StatusBanner
