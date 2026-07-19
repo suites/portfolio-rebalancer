@@ -306,7 +306,7 @@ function reasonFor(code: DashboardBlockReasonContract["code"]): DashboardBlockRe
         ...common,
         code,
         problem: "활성 목표 설정이 최신 계좌 스냅샷에 아직 고정되지 않았습니다.",
-        nextAction: "문제 해결에서 토스 데이터 재점검을 실행하세요.",
+        nextAction: "상단의 정보 새로고침으로 토스 데이터를 다시 수집하세요.",
       };
     case "MANAGED_CASH_MISSING":
       return {

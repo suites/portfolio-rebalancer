@@ -97,7 +97,7 @@ export function PortfolioScreen({ snapshot }: { readonly snapshot: DashboardSnap
               ) : (
                 <div className={styles.emptyState}>
                   <strong>표시할 보유자산이 없습니다.</strong>
-                  <p>계좌 선택과 최신 정보 상태를 문제 해결에서 확인하세요.</p>
+                  <p>상단의 정보 새로고침으로 계좌와 최신 정보 상태를 확인하세요.</p>
                 </div>
               )}
             </div>

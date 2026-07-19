@@ -92,7 +92,7 @@ export function SettingsScreen({
                   ? "설정 정보를 불러올 수 없습니다."
                   : "추천에 사용할 보유자산이 없습니다."}
               </strong>
-              <p>문제 해결에서 계좌 정보를 먼저 확인해 주세요.</p>
+              <p>상단의 정보 새로고침으로 계좌 정보를 먼저 확인해 주세요.</p>
             </div>
           )}
         </Surface>
@@ -205,7 +205,7 @@ function feedbackFor(
   if (status === "unavailable")
     return {
       title: "설정 정보를 불러올 수 없습니다.",
-      description: "잠시 후 다시 시도하거나 문제 해결에서 연결 상태를 확인하세요.",
+      description: "잠시 후 다시 시도하거나 상단의 정보 새로고침으로 연결 상태를 확인하세요.",
       tone: "blocked",
     };
   if (status === "operational-draft-saved")
@@ -243,7 +243,7 @@ function feedbackFor(
   if (status === "operational-account-missing")
     return {
       title: "현재 계좌를 운영 설정에 연결하지 못했습니다.",
-      description: "문제 해결에서 계좌 정보를 새로 수집한 뒤 다시 저장하세요.",
+      description: "상단의 정보 새로고침으로 계좌 정보를 새로 수집한 뒤 다시 저장하세요.",
       tone: "blocked",
     };
   if (status === "operational-content-reused")

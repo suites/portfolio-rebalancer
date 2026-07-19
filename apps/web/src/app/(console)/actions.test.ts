@@ -115,7 +115,7 @@ describe("settings server actions", () => {
     expect(navigationMocks.redirect).not.toHaveBeenCalled();
   });
 
-  it("홈의 최신 자산 수집에 실패하면 문제 해결 화면으로 안내한다", async () => {
+  it("홈의 최신 자산 수집에 실패해도 차단 상태를 보여줄 홈으로 돌아간다", async () => {
     dashboardMocks.refreshEngineDashboard.mockResolvedValue({
       state: "BLOCKED",
       brokerConnection: "FAILED",
@@ -123,7 +123,7 @@ describe("settings server actions", () => {
 
     await expect(refreshPortfolioFromHomeAction(new FormData())).rejects.toThrow("REDIRECT");
 
-    expect(navigationMocks.redirect).toHaveBeenCalledWith("/troubleshooting");
+    expect(navigationMocks.redirect).toHaveBeenCalledWith("/");
   });
 
   it("같은 영문 입력도 사용자가 선택한 로컬 이름 검색 intent를 따른다", async () => {

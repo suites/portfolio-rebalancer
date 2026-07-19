@@ -31,16 +31,10 @@ import {
 import { refreshEngineDashboard } from "@/server/engine-dashboard";
 import { targetSettingsInputFromFormData } from "@/server/target-settings-input";
 
-export async function refreshPortfolioAction(_formData: FormData) {
+export async function refreshPortfolioFromHomeAction(_formData: FormData) {
   await refreshEngineDashboard();
   revalidatePath("/", "layout");
-  redirect("/troubleshooting");
-}
-
-export async function refreshPortfolioFromHomeAction(_formData: FormData) {
-  const snapshot = await refreshEngineDashboard();
-  revalidatePath("/", "layout");
-  redirect(snapshot.brokerConnection === "CONNECTED" ? "/" : "/troubleshooting");
+  redirect("/");
 }
 
 export async function refreshPortfolioFromShellAction(_formData: FormData) {

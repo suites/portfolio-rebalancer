@@ -272,8 +272,8 @@ function getActionCopy(snapshot: DashboardSnapshotContract): {
   );
   return {
     title: "안전 검사를 통과하지 못했어요",
-    description: "문제·보호 조치·다음 행동을 실제 상태에서 확인하세요.",
-    href: settingsRequired ? "/settings" : "/troubleshooting",
-    linkLabel: settingsRequired ? "목표 설정 열기" : "차단 원인 해결하기",
+    description: "새 주문은 차단되었습니다. 최신 정보를 다시 가져온 뒤 상태를 확인하세요.",
+    href: settingsRequired ? "/settings" : "/portfolio",
+    linkLabel: settingsRequired ? "목표 설정 열기" : "포트폴리오 상태 보기",
   };
 }

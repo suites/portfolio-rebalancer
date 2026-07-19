@@ -224,10 +224,10 @@ function PlanSurface({
             snapshot.blockReason?.code === "TARGET_CONFIG_MISSING" ||
             snapshot.blockReason?.code === "MANAGED_CASH_MISSING"
               ? "/settings"
-              : "/troubleshooting"
+              : "/"
           }
         >
-          {canCreate ? "점검 상태 확인" : "먼저 해결할 항목 보기"}
+          {canCreate ? "점검 상태 확인" : "홈에서 상태 확인"}
         </Link>
       </div>
       <p className={styles.fieldDescription}>

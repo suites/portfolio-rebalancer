@@ -27,7 +27,7 @@ const scenarios = {
     title: "가격 데이터가 오래되어 실행할 수 없어요",
     description:
       "새로운 주문은 차단했습니다. 데이터를 다시 확인한 뒤 모든 위험 검사를 통과하면 계획을 새로 만들 수 있어요.",
-    action: "문제 해결하기",
+    action: "최신 정보 가져오기",
   },
   complete: {
     safety: ["normal", "시스템 정상"],
