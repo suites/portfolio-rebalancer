@@ -18,8 +18,10 @@ type RiskProfile = GuidedPortfolioRecommendationContract["profile"];
 
 export function GuidedPortfolioBuilder({
   settings,
+  liveTradingEnabled,
 }: {
   readonly settings: TargetSettingsSnapshotContract;
+  readonly liveTradingEnabled: boolean;
 }) {
   const [profile, setProfile] = useState<RiskProfile>("BALANCED");
   const [saveState, saveAction] = useActionState(saveTargetDraftAction, initialSaveState);
@@ -36,8 +38,8 @@ export function GuidedPortfolioBuilder({
           <Badge tone="info">추천 엔진 · Paper 우선</Badge>
           <h3>투자성향만 고르면 포트폴리오를 만들어 드려요</h3>
           <p>
-            승인된 ETF 중 4개를 선택하고 비중까지 계산했습니다. 저장은 검토용 초안만 만들며, 주문은
-            발생하지 않습니다.
+            승인된 ETF 중 4개를 선택하고 비중까지 계산했습니다. 적용하면 최신 자산을 다시 확인해
+            예상 주문까지 바로 보여드립니다.
           </p>
         </div>
         <dl className={styles.guidedAssetSummary}>
@@ -118,14 +120,15 @@ export function GuidedPortfolioBuilder({
               기존 보유종목 {recommendation.retiringHoldings.length}개는 목표 0%로 정리
             </strong>
             <p>
-              추천안에 없는 기존 종목은 즉시 매도하지 않습니다. 초안 적용 후 별도 리밸런싱 계획에서
-              예상 주문을 다시 확인하고 승인해야 합니다.
+              추천안에 없는 기존 종목은 즉시 매도하지 않습니다. 적용 후 예상 주문을 확인하고 최종
+              실행해야 실제 매매가 진행됩니다.
             </p>
           </div>
         ) : null}
       </section>
 
       <form action={saveAction} className={styles.guidedApproval}>
+        <input type="hidden" name="executionMode" value={liveTradingEnabled ? "LIVE" : "PAPER"} />
         <input type="hidden" name="cashMode" value="EXCLUDED" />
         <input type="hidden" name="managedCashWon" value="0" />
         {[
@@ -147,10 +150,8 @@ export function GuidedPortfolioBuilder({
           </span>
         ))}
         <div>
-          <strong>확인 후 초안만 저장합니다</strong>
-          <p>
-            추천 종목은 저장 시 토스증권에서 다시 검증하며, 실패하면 아무 설정도 바뀌지 않습니다.
-          </p>
+          <strong>선택한 포트폴리오를 적용하고 예상 주문을 계산합니다</strong>
+          <p>실제 주문은 다음 화면에서 매수·매도 내역을 확인하고 실행할 때만 전송됩니다.</p>
         </div>
         <GuidedSubmitButton />
       </form>
@@ -167,7 +168,7 @@ function GuidedSubmitButton() {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" disabled={pending} aria-busy={pending}>
-      {pending ? "추천안 검증 중" : "이 추천안으로 초안 만들기"}
+      {pending ? "포트폴리오 적용 중" : "이 포트폴리오 적용하기"}
     </Button>
   );
 }

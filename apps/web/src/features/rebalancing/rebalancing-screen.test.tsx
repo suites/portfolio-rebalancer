@@ -30,12 +30,13 @@ describe("RebalancingScreen", () => {
     );
 
     expect(html).toContain("관리 현금");
-    expect(html).toContain("Shadow 계획 만들기");
-    expect(html).toContain("Paper 계획 만들기");
-    expect(html).toContain("Live 계획만 만들기");
+    expect(html).toContain("예상 주문 다시 계산");
+    expect(html).not.toContain("Shadow 계획 만들기");
+    expect(html).not.toContain("Paper 계획 만들기");
+    expect(html).not.toContain("Live 계획만 만들기");
     expect(html).toContain("disabled");
     expect(html).toContain('href="/settings"');
-    expect(html).toContain("어떤 모드에서도 실제 주문을 제출하지 않습니다");
+    expect(html).toContain("계산만으로 실제 주문은 발생하지 않습니다");
   });
 
   it("저장된 주문 후보와 예상 비중을 금융 계산 없이 표시한다", () => {

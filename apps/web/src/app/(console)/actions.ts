@@ -143,15 +143,34 @@ export async function saveTargetDraftAction(
   }
 
   try {
-    await createEngineTargetDraft(input);
+    const settings = await createEngineTargetDraft(input);
+    const version = settings.draftVersion?.version;
+    if (!version) {
+      return { status: "error", message: "저장한 포트폴리오를 확인하지 못했습니다." };
+    }
+    await activateEngineTargetDraft(version);
   } catch (error) {
     return {
       status: "error",
       message: targetDraftErrorMessage(error),
     };
   }
+
+  const snapshot = await refreshEngineDashboard();
+  if (snapshot.state !== "READY" || snapshot.blockReason !== null) {
+    revalidatePath("/", "layout");
+    redirect("/rebalancing?status=portfolio-applied-plan-blocked");
+  }
+
+  const mode = formData.get("executionMode") === "LIVE" ? "LIVE" : "PAPER";
+  try {
+    await createEngineRebalancePlan(mode);
+  } catch {
+    revalidatePath("/", "layout");
+    redirect("/rebalancing?status=portfolio-applied-plan-unavailable");
+  }
   revalidatePath("/", "layout");
-  redirect("/settings");
+  redirect("/rebalancing?status=portfolio-applied");
 }
 
 export async function searchTargetInstrumentAction(
@@ -521,7 +540,7 @@ function targetDraftErrorMessage(error: unknown): string {
     return "설정 서버에 연결할 수 없습니다. 입력값은 유지되었으니 잠시 후 다시 시도하세요.";
   }
   if (error.code === "DRAFT_STALE") {
-    return "계좌 정보가 바뀌었습니다. 최신 계좌 정보를 확인한 뒤 초안을 다시 저장하세요.";
+    return "계좌 정보가 바뀌었습니다. 최신 정보를 확인한 뒤 포트폴리오를 다시 적용하세요.";
   }
   if (error.code === "CLASS_POLICY_REQUIRED") {
     return "미보유 종목이 포함된 자산군은 내부 비중을 균등 배분으로 선택해야 합니다.";

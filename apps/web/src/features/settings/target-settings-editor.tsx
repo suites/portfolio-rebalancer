@@ -441,7 +441,7 @@ export function TargetSettingsEditor({
                   ? `저장된 허용 범위 ${formatBasisPoints(
                       configured.lowerBasisPoints,
                     )}–${formatBasisPoints(configured.upperBasisPoints)}`
-                  : "초안 저장 시 MIXED_V1 정책으로 하한·상한을 계산합니다."}
+                  : "적용 시 MIXED_V1 정책으로 하한·상한을 계산합니다."}
               </p>
             </fieldset>
           );
@@ -453,7 +453,7 @@ export function TargetSettingsEditor({
           </p>
         ) : null}
         <div className={styles.formFooter}>
-          <p>저장하면 초안만 생성되며 주문이나 적용은 실행하지 않습니다.</p>
+          <p>적용 후 최신 자산을 확인하고 예상 주문 화면으로 이동합니다.</p>
           <SaveSubmitButton />
         </div>
       </form>
@@ -486,7 +486,7 @@ function SaveSubmitButton() {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" disabled={pending} aria-busy={pending}>
-      {pending ? "저장 중…" : "목표 초안 저장"}
+      {pending ? "적용 중…" : "이 포트폴리오 적용하기"}
     </Button>
   );
 }

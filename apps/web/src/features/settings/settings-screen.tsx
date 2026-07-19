@@ -1,13 +1,9 @@
-import Link from "next/link";
-
 import type {
   OperationalConfigSnapshotContract,
   TargetSettingsSnapshotContract,
 } from "@portfolio-rebalancer/contracts";
-import { Badge, Button, Surface } from "@portfolio-rebalancer/ui";
+import { Surface } from "@portfolio-rebalancer/ui";
 
-import { activateTargetDraftAction } from "@/app/(console)/actions";
-import { formatBasisPoints, formatObservedAt, formatWon } from "@/features/console/format";
 import { ConsolePageHeader } from "@/features/console/page-header";
 import styles from "@/features/console/console.module.css";
 
@@ -42,18 +38,6 @@ export function SettingsScreen({
             <p>{feedback.description}</p>
           </div>
         ) : null}
-        {settings.requiresCollection ? (
-          <div className={styles.callout} data-tone="attention">
-            <strong>새 목표를 적용하려면 계좌 정보를 다시 확인해야 합니다.</strong>
-            <p>
-              <Link className={styles.safeLink} href="/troubleshooting">
-                문제 해결
-              </Link>
-              에서 최신 정보로 다시 점검해 주세요.
-            </p>
-          </div>
-        ) : null}
-
         <section className={styles.grid3} aria-label="설정 상태">
           <Surface className={styles.surface}>
             <h2>현재 계좌</h2>
@@ -77,14 +61,14 @@ export function SettingsScreen({
           <div className={styles.sectionHeader}>
             <div>
               <h2 id="target-form-title">추천 포트폴리오</h2>
-              <p>추천안 저장, 적용, 주문 실행은 서로 분리되어 있습니다.</p>
+              <p>적용하면 최신 자산 기준의 예상 주문을 바로 확인할 수 있습니다.</p>
             </div>
-            {settings.draftVersion ? (
-              <Badge tone="attention">초안 v{settings.draftVersion.version}</Badge>
-            ) : null}
           </div>
           {settings.assets.length > 0 ? (
-            <GuidedPortfolioBuilder settings={settings} />
+            <GuidedPortfolioBuilder
+              settings={settings}
+              liveTradingEnabled={operational.liveOrdersEnabled}
+            />
           ) : (
             <div className={styles.emptyState}>
               <strong>
@@ -97,88 +81,16 @@ export function SettingsScreen({
           )}
         </Surface>
 
-        <div className={styles.grid2}>
-          <Surface className={styles.surface}>
-            <details className={styles.advancedSettings}>
-              <summary>직접 종목과 비중 조정하기</summary>
-              <p>종목 검색, 관리 현금, 자산군과 세부 비중을 직접 바꾸려는 경우에만 여세요.</p>
-              {settings.assets.length > 0 ? <TargetSettingsEditor settings={settings} /> : null}
-            </details>
-          </Surface>
-
-          <Surface className={styles.surface} aria-labelledby="version-title">
-            <div className={styles.sectionHeader}>
-              <div>
-                <h2 id="version-title">버전 검토</h2>
-                <p>저장한 목표를 확인한 뒤 적용하세요.</p>
-              </div>
-            </div>
-            {settings.draftVersion ? (
-              <>
-                <dl className={styles.diagnosticList}>
-                  <div>
-                    <dt>초안 버전</dt>
-                    <dd>{settings.draftVersion.version}</dd>
-                  </div>
-                  <div>
-                    <dt>생성 시각</dt>
-                    <dd>{formatObservedAt(settings.draftVersion.createdAt)}</dd>
-                  </div>
-                  <div>
-                    <dt>관리 현금</dt>
-                    <dd>{cashPolicyLabel(settings.draftVersion.cashPolicy)}</dd>
-                  </div>
-                </dl>
-                <ul className={styles.statusList}>
-                  {settings.draftVersion.allocations.map((allocation) => (
-                    <li key={allocation.assetKey}>
-                      <div>
-                        <strong>{allocation.label}</strong>
-                        <span>
-                          {formatBasisPoints(allocation.lowerBasisPoints)}–
-                          {formatBasisPoints(allocation.upperBasisPoints)}
-                          {allocation.instruments.length > 0
-                            ? ` · ${allocation.instruments
-                                .map(
-                                  (instrument) =>
-                                    `${instrument.name} ${formatBasisPoints(
-                                      instrument.withinAssetPoints,
-                                    )}`,
-                                )
-                                .join(", ")}`
-                            : ""}
-                        </span>
-                      </div>
-                      <Badge tone="info">
-                        목표 {formatBasisPoints(allocation.targetBasisPoints)}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-                <form action={activateTargetDraftAction}>
-                  <input type="hidden" name="version" value={settings.draftVersion.version} />
-                  <Button type="submit">검토한 초안 적용</Button>
-                </form>
-              </>
-            ) : (
-              <div className={styles.emptyState}>
-                <strong>적용 대기 중인 초안이 없습니다.</strong>
-                <p>목표 비중을 입력해 초안을 저장하세요.</p>
-              </div>
-            )}
-          </Surface>
-        </div>
+        <Surface className={styles.surface}>
+          <details className={styles.advancedSettings}>
+            <summary>직접 종목과 비중 조정하기</summary>
+            <p>종목 검색, 관리 현금, 자산군과 세부 비중을 직접 바꾸려는 경우에만 여세요.</p>
+            {settings.assets.length > 0 ? <TargetSettingsEditor settings={settings} /> : null}
+          </details>
+        </Surface>
       </div>
     </>
   );
-}
-
-function cashPolicyLabel(
-  policy: NonNullable<TargetSettingsSnapshotContract["draftVersion"]>["cashPolicy"],
-): string {
-  if (policy.mode === "UNSET") return "미설정";
-  if (policy.mode === "EXCLUDED") return "평가에서 제외";
-  return `${formatWon(policy.amountMinor)} 고정`;
 }
 
 function feedbackFor(
@@ -186,20 +98,20 @@ function feedbackFor(
 ): { title: string; description: string; tone?: "attention" | "blocked" } | null {
   if (status === "invalid")
     return {
-      title: "목표 초안을 저장하지 못했습니다.",
+      title: "포트폴리오를 적용하지 못했습니다.",
       description: "모든 보유자산의 목표 합계가 정확히 100%인지 확인하세요.",
       tone: "blocked",
     };
   if (status === "activate-invalid")
     return {
-      title: "초안을 적용하지 못했습니다.",
-      description: "적용할 초안 버전을 다시 확인하세요.",
+      title: "포트폴리오를 적용하지 못했습니다.",
+      description: "적용할 포트폴리오를 다시 확인하세요.",
       tone: "blocked",
     };
   if (status === "draft-stale")
     return {
-      title: "계좌 정보가 바뀌어 초안을 적용하지 않았습니다.",
-      description: "현재 보유자산을 기준으로 목표 초안을 다시 저장하세요.",
+      title: "계좌 정보가 바뀌어 포트폴리오를 적용하지 않았습니다.",
+      description: "현재 보유자산을 기준으로 포트폴리오를 다시 적용하세요.",
       tone: "blocked",
     };
   if (status === "unavailable")

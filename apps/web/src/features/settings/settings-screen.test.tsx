@@ -117,7 +117,8 @@ describe("SettingsScreen", () => {
     expect(html).toContain("투자성향만 고르면");
     expect(html).toContain("균형형 추천안");
     expect(html).toContain("추천 종목</dt><dd>4개");
-    expect(html).toContain("이 추천안으로 초안 만들기");
+    expect(html).toContain("이 포트폴리오 적용하기");
+    expect(html).toContain('name="executionMode" value="PAPER"');
     expect(html).toContain("직접 종목과 비중 조정하기");
     expect(html).not.toContain("실행 안전 고급 설정");
     expect(html).toContain('name="cashMode"');
@@ -176,7 +177,7 @@ describe("SettingsScreen", () => {
     expect(html).not.toContain("킬 스위치");
   });
 
-  it("버전 검토에서는 목표 합계를 숨기고 종목명을 표시한다", () => {
+  it("내부 초안과 버전 검토 단계를 사용자 화면에 노출하지 않는다", () => {
     const settings = TargetSettingsSnapshotSchema.parse({
       state: "CONFIGURED",
       accountLabel: "****1234",
@@ -223,8 +224,9 @@ describe("SettingsScreen", () => {
     );
 
     expect(html).not.toContain("목표 합계");
-    expect(html).toContain("KODEX 200 100%");
-    expect(html).not.toContain("069500 100%");
+    expect(html).not.toContain("버전 검토");
+    expect(html).not.toContain("초안 버전");
+    expect(html).not.toContain("검토한 초안 적용");
   });
 });
 

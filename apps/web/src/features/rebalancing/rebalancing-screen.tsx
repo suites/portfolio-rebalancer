@@ -173,13 +173,13 @@ function PlanSurface({
     <Surface className={styles.surface} aria-labelledby="plan-title">
       <div className={styles.sectionHeader}>
         <div>
-          <h2 id="plan-title">저장된 주문 제안</h2>
+          <h2 id="plan-title">예상 주문 확인</h2>
           <p>
             {latest
-              ? `저장된 계획 · ${formatObservedAt(latest.completedAt)}`
+              ? `최신 자산 기준 · ${formatObservedAt(latest.completedAt)}`
               : plan.state === "UNAVAILABLE"
                 ? "계획 저장소에 연결할 수 없습니다."
-                : "아직 저장된 리밸런싱 계획이 없습니다."}
+                : "포트폴리오를 적용하면 예상 주문을 자동으로 계산합니다."}
           </p>
         </div>
         <Badge tone={planTone(latest)}>
@@ -201,21 +201,13 @@ function PlanSurface({
 
       <div className={styles.buttonRow}>
         <form action={createRebalancePlanAction}>
-          <input type="hidden" name="mode" value="SHADOW" />
+          <input
+            type="hidden"
+            name="mode"
+            value={operational.liveOrdersEnabled ? "LIVE" : "PAPER"}
+          />
           <Button type="submit" disabled={!canCreate}>
-            Shadow 계획 만들기
-          </Button>
-        </form>
-        <form action={createRebalancePlanAction}>
-          <input type="hidden" name="mode" value="PAPER" />
-          <Button type="submit" disabled={!canCreate}>
-            Paper 계획 만들기
-          </Button>
-        </form>
-        <form action={createRebalancePlanAction}>
-          <input type="hidden" name="mode" value="LIVE" />
-          <Button type="submit" disabled={!canCreate}>
-            Live 계획만 만들기
+            예상 주문 다시 계산
           </Button>
         </form>
         <Link
@@ -231,9 +223,8 @@ function PlanSurface({
         </Link>
       </div>
       <p className={styles.fieldDescription}>
-        이 단계는 어떤 모드에서도 실제 주문을 제출하지 않습니다. Paper와 Live도 먼저 저장된 계획만
-        만들며, 실행은 별도의 위험 점검·주문 원장·최종 확인을 통과해야 합니다. 같은
-        snapshot·설정·모드의 중복 클릭은 기존 계획을 반환합니다.
+        계산만으로 실제 주문은 발생하지 않습니다. 아래 매수·매도 내역을 확인하고 실행해야 주문이
+        진행됩니다.
       </p>
 
       {latest?.mode === "PAPER" &&
@@ -241,7 +232,7 @@ function PlanSurface({
       latest.executableOrders.length > 0 ? (
         <div className={styles.executionPanel}>
           <div>
-            <h3>Paper 실행</h3>
+            <h3>모의 주문 최종 확인</h3>
             <p>
               현재 호가·호가잔량·수수료 증거로 주문 원장과 체결을 재생합니다. 토스 주문 API는
               호출하지 않습니다.
@@ -249,7 +240,7 @@ function PlanSurface({
           </div>
           <form action={executePaperPlanAction}>
             <input type="hidden" name="planId" value={latest.planId} />
-            <Button type="submit">Paper 주문 원장 실행</Button>
+            <Button type="submit">모의 주문 실행</Button>
           </form>
         </div>
       ) : null}
@@ -259,7 +250,7 @@ function PlanSurface({
       latest.executableOrders.length > 0 ? (
         <div className={styles.liveExecutionPanel}>
           <div>
-            <h3>Live 최종 확인</h3>
+            <h3>실제 주문 최종 확인</h3>
             <p>
               한 번의 실행에서 매도 우선 첫 주문 한 건만 전송합니다. 체결을 확인하고 새 계좌
               snapshot과 계획을 만든 뒤 다음 주문을 검토해야 합니다.
@@ -291,14 +282,8 @@ function PlanSurface({
             </form>
           ) : (
             <div className={styles.blockedState}>
-              <strong>Live 주문은 현재 차단되어 있습니다.</strong>
-              <p>
-                설정에서 ACTIVE LIVE 구성, 현재 계좌 고정, 킬 스위치 해제와 별도 Live 승격을 모두
-                완료하세요.
-              </p>
-              <Link className={styles.safeLink} href="/settings">
-                실행 안전 설정 열기
-              </Link>
+              <strong>실거래가 OFF입니다.</strong>
+              <p>상단 실거래 스위치를 ON으로 바꾼 뒤 예상 주문을 다시 계산하세요.</p>
             </div>
           )}
         </div>
@@ -591,6 +576,23 @@ function actionFeedback(status: string): {
   readonly description: string;
   readonly tone?: "attention" | "blocked";
 } {
+  if (status === "portfolio-applied")
+    return {
+      title: "선택한 포트폴리오를 적용했습니다.",
+      description: "아래 예상 매수·매도 주문을 확인한 뒤 실행하세요.",
+    };
+  if (status === "portfolio-applied-plan-blocked")
+    return {
+      title: "포트폴리오는 적용했지만 예상 주문을 계산하지 못했습니다.",
+      description: "최신 계좌 정보와 가격을 확인한 뒤 예상 주문을 다시 계산하세요.",
+      tone: "blocked",
+    };
+  if (status === "portfolio-applied-plan-unavailable")
+    return {
+      title: "포트폴리오는 적용했지만 주문 계산 연결에 실패했습니다.",
+      description: "잠시 후 예상 주문 다시 계산을 눌러 주세요.",
+      tone: "blocked",
+    };
   if (status === "paper-executed")
     return {
       title: "Paper 주문 원장을 실행했습니다.",

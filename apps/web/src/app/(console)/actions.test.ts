@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const engineMocks = vi.hoisted(() => ({
+  activateEngineTargetDraft: vi.fn(),
   activateEngineOperationalDraft: vi.fn(),
   cancelEngineOrder: vi.fn(),
   createEngineRebalancePlan: vi.fn(),
@@ -29,7 +30,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => navigationMocks);
 vi.mock("@/server/engine-dashboard", () => dashboardMocks);
 vi.mock("@/server/engine-console", () => ({
-  activateEngineTargetDraft: vi.fn(),
+  activateEngineTargetDraft: engineMocks.activateEngineTargetDraft,
   activateEngineOperationalDraft: engineMocks.activateEngineOperationalDraft,
   cancelEngineOrder: engineMocks.cancelEngineOrder,
   createEngineRebalancePlan: engineMocks.createEngineRebalancePlan,
@@ -201,6 +202,24 @@ describe("settings server actions", () => {
     expect(result.status).toBe("error");
     expect(result.message).toContain("입력값은 유지");
     expect(engineMocks.createEngineTargetDraft).toHaveBeenCalledOnce();
+  });
+
+  it("포트폴리오 적용은 저장·활성화·최신 수집·예상 주문 계산을 이어서 수행한다", async () => {
+    engineMocks.createEngineTargetDraft.mockResolvedValue({ draftVersion: { version: 4 } });
+    engineMocks.activateEngineTargetDraft.mockResolvedValue({});
+    dashboardMocks.refreshEngineDashboard.mockResolvedValue({ state: "READY", blockReason: null });
+    engineMocks.createEngineRebalancePlan.mockResolvedValue({ state: "READY", latest: null });
+    const formData = targetDraftFormData();
+    formData.set("executionMode", "PAPER");
+
+    await expect(saveTargetDraftAction(initialSaveState, formData)).rejects.toThrow("REDIRECT");
+
+    expect(engineMocks.activateEngineTargetDraft).toHaveBeenCalledWith(4);
+    expect(dashboardMocks.refreshEngineDashboard).toHaveBeenCalledOnce();
+    expect(engineMocks.createEngineRebalancePlan).toHaveBeenCalledWith("PAPER");
+    expect(navigationMocks.redirect).toHaveBeenLastCalledWith(
+      "/rebalancing?status=portfolio-applied",
+    );
   });
 
   it("Shadow 계획 생성 성공은 리밸런싱 화면으로 돌아간다", async () => {
