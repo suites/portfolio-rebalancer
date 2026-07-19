@@ -68,6 +68,7 @@ import {
   searchTargetInstrumentAction,
   setKillSwitchAction,
   setLivePromotionAction,
+  setLiveTradingFromShellAction,
   type SaveTargetDraftActionState,
   type SearchTargetInstrumentActionState,
 } from "./actions";
@@ -359,6 +360,38 @@ describe("settings server actions", () => {
         confirmation: state === "GRANTED" ? "극소액 Live 승격" : "Live 권한 회수",
       });
     }
+  });
+
+  it("상단 실거래 스위치는 서버 안전 조건이 충족된 결과만 ON으로 인정한다", async () => {
+    const formData = new FormData();
+    formData.set("desired", "ON");
+    engineMocks.saveEngineLivePromotion.mockResolvedValue({
+      livePromotion: "GRANTED",
+      liveOrdersEnabled: false,
+    });
+
+    const blocked = await setLiveTradingFromShellAction(
+      { status: "idle", message: null },
+      formData,
+    );
+
+    expect(blocked.status).toBe("error");
+    expect(blocked.message).toContain("안전 조건");
+    expect(engineMocks.saveEngineLivePromotion).toHaveBeenLastCalledWith({
+      state: "GRANTED",
+      reason: "상단 실거래 스위치에서 활성화를 명시적으로 요청했습니다.",
+      confirmation: "극소액 Live 승격",
+    });
+
+    engineMocks.saveEngineLivePromotion.mockResolvedValue({
+      livePromotion: "GRANTED",
+      liveOrdersEnabled: true,
+    });
+    const enabled = await setLiveTradingFromShellAction(
+      { status: "idle", message: null },
+      formData,
+    );
+    expect(enabled).toEqual({ status: "success", message: "실거래를 켰습니다." });
   });
 
   it("운영 설정 UI는 계좌번호나 HMAC 없이 현재 계좌 scope만 엔진에 전달한다", async () => {

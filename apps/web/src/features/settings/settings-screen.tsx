@@ -13,7 +13,6 @@ import styles from "@/features/console/console.module.css";
 
 import { TargetSettingsEditor } from "./target-settings-editor";
 import { GuidedPortfolioBuilder } from "./guided-portfolio-builder";
-import { OperationalSettingsPanel } from "./operational-settings-panel";
 
 export function SettingsScreen({
   settings,
@@ -173,14 +172,6 @@ export function SettingsScreen({
             )}
           </Surface>
         </div>
-
-        <Surface className={styles.surface}>
-          <details className={styles.advancedSettings}>
-            <summary>실행 안전 고급 설정</summary>
-            <p>Paper 기본값, 거래 한도, 킬 스위치와 Live 승격을 관리할 때만 여세요.</p>
-            <OperationalSettingsPanel operational={operational} />
-          </details>
-        </Surface>
       </div>
     </>
   );

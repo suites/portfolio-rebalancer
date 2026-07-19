@@ -371,6 +371,55 @@ export async function setLivePromotionAction(formData: FormData) {
   redirect(`/settings?status=${status}`);
 }
 
+export type SetLiveTradingActionState = {
+  readonly status: "idle" | "success" | "error";
+  readonly message: string | null;
+};
+
+export async function setLiveTradingFromShellAction(
+  _previousState: SetLiveTradingActionState,
+  formData: FormData,
+): Promise<SetLiveTradingActionState> {
+  const desired = stringField(formData, "desired");
+  if (desired !== "ON" && desired !== "OFF") {
+    return { status: "error", message: "실거래 전환 요청을 확인할 수 없습니다." };
+  }
+
+  const state = desired === "ON" ? "GRANTED" : "REVOKED";
+  try {
+    const snapshot = await saveEngineLivePromotion({
+      state,
+      reason:
+        desired === "ON"
+          ? "상단 실거래 스위치에서 활성화를 명시적으로 요청했습니다."
+          : "상단 실거래 스위치에서 비활성화를 명시적으로 요청했습니다.",
+      confirmation: desired === "ON" ? "극소액 Live 승격" : "Live 권한 회수",
+    });
+    revalidatePath("/", "layout");
+    if (desired === "ON" && !snapshot.liveOrdersEnabled) {
+      return {
+        status: "error",
+        message: "안전 조건을 모두 충족하지 않아 실거래를 켜지 않았습니다.",
+      };
+    }
+    if (desired === "OFF" && snapshot.livePromotion !== "REVOKED") {
+      return { status: "error", message: "실거래 권한 회수를 확인하지 못했습니다." };
+    }
+    return {
+      status: "success",
+      message: desired === "ON" ? "실거래를 켰습니다." : "실거래를 껐습니다.",
+    };
+  } catch {
+    return {
+      status: "error",
+      message:
+        desired === "ON"
+          ? "안전 조건을 모두 충족하지 않아 실거래를 켜지 않았습니다."
+          : "실거래를 끄지 못했습니다. 실행 안전 설정에서 상태를 확인하세요.",
+    };
+  }
+}
+
 export async function setKillSwitchAction(formData: FormData) {
   const state = stringField(formData, "state");
   const reason = stringField(formData, "reason");

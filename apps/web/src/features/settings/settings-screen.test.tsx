@@ -119,7 +119,7 @@ describe("SettingsScreen", () => {
     expect(html).toContain("추천 종목</dt><dd>4개");
     expect(html).toContain("이 추천안으로 초안 만들기");
     expect(html).toContain("직접 종목과 비중 조정하기");
-    expect(html).toContain("실행 안전 고급 설정");
+    expect(html).not.toContain("실행 안전 고급 설정");
     expect(html).toContain('name="cashMode"');
     expect(html).toContain('name="managedCashWon"');
     expect(html).toContain('name="instrumentClass"');
@@ -139,11 +139,11 @@ describe("SettingsScreen", () => {
     expect(html).toContain("균형형 예시");
     expect(html).toContain("성장형 예시");
     expect(html).toContain("개인 맞춤 추천");
-    expect(html).toContain("실행 안전 설정");
-    expect(html).toContain("현재 수집된 계좌만 봉인");
-    expect(html).toContain('name="liveEnabled"');
-    expect(html).toContain("킬 스위치");
-    expect(html).toContain("Live 승격");
+    expect(html).not.toContain("실행 안전 설정");
+    expect(html).not.toContain("현재 수집된 계좌만 봉인");
+    expect(html).not.toContain('name="liveEnabled"');
+    expect(html).not.toContain("킬 스위치");
+    expect(html).not.toContain("Live 승격");
 
     const firstFormStart = html.indexOf("<form");
     const firstFormEnd = html.indexOf("</form>", firstFormStart);
@@ -151,7 +151,7 @@ describe("SettingsScreen", () => {
     expect(firstFormEnd).toBeLessThan(secondFormStart);
   });
 
-  it("운영 설정 초안의 SHA-256과 적용 확인 문구를 화면에 표시한다", () => {
+  it("운영 설정 상세 조작은 포트폴리오 화면에 노출하지 않는다", () => {
     const settings = TargetSettingsSnapshotSchema.parse({
       state: "NO_SNAPSHOT",
       accountLabel: null,
@@ -163,19 +163,17 @@ describe("SettingsScreen", () => {
       assets: [],
       holdings: [],
     });
-    const hash = "a".repeat(64);
-
     const html = renderToStaticMarkup(
       <SettingsScreen
         settings={settings}
-        operational={operationalWithDraft(hash)}
+        operational={operationalWithDraft("a".repeat(64))}
         status={undefined}
       />,
     );
 
-    expect(html).toContain(hash);
-    expect(html).toContain('name="confirmation"');
-    expect(html).toContain('pattern="운영 설정을 적용합니다"');
+    expect(html).not.toContain("운영 설정을 적용합니다");
+    expect(html).not.toContain("Live 승격");
+    expect(html).not.toContain("킬 스위치");
   });
 });
 

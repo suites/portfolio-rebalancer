@@ -11,6 +11,7 @@ import { refreshPortfolioFromShellAction } from "@/app/(console)/actions";
 import { formatObservedAt } from "@/features/console/format";
 
 import styles from "./app-shell.module.css";
+import { LiveTradingToggle } from "./live-trading-toggle";
 import { SideNavigation } from "./side-navigation";
 
 export function AppShell({
@@ -23,7 +24,6 @@ export function AppShell({
   readonly children: ReactNode;
 }) {
   const observedAt = formatObservedAt(snapshot.observedAt);
-  const system = getSystemStatus(snapshot.conclusion);
   return (
     <div className={styles.shell}>
       <a className={styles.skipLink} href="#main-content">
@@ -70,19 +70,7 @@ export function AppShell({
             <span className={styles.observedMeta}>데이터 {observedAt}</span>
           </div>
           <div>
-            <Badge tone={system.tone} showDot>
-              {system.label}
-            </Badge>
-            <Badge tone={operational.liveOrdersEnabled ? "attention" : "blocked"} showDot>
-              {operational.liveOrdersEnabled ? "실주문 조건 충족" : "실주문 차단"}
-            </Badge>
-            <Badge tone={operational.killSwitch === "ENGAGED" ? "blocked" : "info"}>
-              {operational.killSwitch === "ENGAGED"
-                ? "킬 스위치 작동"
-                : operational.killSwitch === "DISENGAGED"
-                  ? "킬 스위치 해제"
-                  : "킬 스위치 확인 불가"}
-            </Badge>
+            <LiveTradingToggle enabled={operational.liveOrdersEnabled} />
             <form action={refreshPortfolioFromShellAction} className={styles.refreshForm}>
               <Button type="submit" variant="secondary" className={styles.refreshButton}>
                 정보 새로고침
@@ -96,13 +84,4 @@ export function AppShell({
       </div>
     </div>
   );
-}
-
-function getSystemStatus(conclusion: DashboardSnapshotContract["conclusion"]): {
-  tone: "normal" | "attention" | "blocked";
-  label: string;
-} {
-  if (conclusion === "NO_ACTION") return { tone: "normal", label: "시스템 정상" };
-  if (conclusion === "REBALANCE_REQUIRED") return { tone: "attention", label: "검토 필요" };
-  return { tone: "blocked", label: "거래 차단" };
 }

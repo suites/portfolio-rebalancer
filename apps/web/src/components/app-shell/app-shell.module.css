@@ -177,6 +177,78 @@
   font-size: 0.75rem;
 }
 
+.liveToggleGroup {
+  position: relative;
+}
+
+.liveToggle {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.65rem 0.25rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.liveToggle i {
+  width: 32px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--color-unknown-soft);
+}
+
+.liveToggle b {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  transition: transform 160ms ease-out;
+}
+
+.liveToggle[data-enabled="true"] {
+  border-color: var(--color-blocked);
+  background: var(--color-blocked-soft);
+  color: var(--color-blocked);
+}
+
+.liveToggle[data-enabled="true"] i,
+.liveToggle[data-enabled="true"] b {
+  background: var(--color-blocked);
+}
+
+.liveToggle[data-enabled="true"] b {
+  transform: translateX(14px);
+  background: white;
+}
+
+.liveToggle:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.liveToggleError {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  width: max-content;
+  max-width: 22rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--color-blocked);
+  border-radius: var(--radius-sm);
+  background: var(--color-blocked-soft);
+  color: var(--color-blocked);
+  font-size: 0.6875rem;
+}
+
 .main {
   width: min(calc(100% - 3rem), var(--content-max));
   margin: 0 auto;
